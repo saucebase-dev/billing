@@ -16,7 +16,7 @@ use Modules\Billing\Models\Product;
 */
 
 // Landing Page Navigation
-Navigation::addIf(Product::displayable()->count(), 'Pricing', '/#pricing', function (Section $section) {
+Navigation::addWhen(fn () => Product::displayable()->exists(), 'Pricing', '/#pricing', function (Section $section) {
     $section->attributes([
         'group' => 'landing',
         'slug' => 'pricing',
@@ -26,7 +26,7 @@ Navigation::addIf(Product::displayable()->count(), 'Pricing', '/#pricing', funct
 });
 
 // User menu - Upgrade
-Navigation::addIf(! Auth::user()?->isSubscriber(), 'Upgrade', '/#pricing', function (Section $section) {
+Navigation::addWhen(fn () => ! Auth::user()?->isSubscriber(), 'Upgrade', '/#pricing', function (Section $section) {
     $section->attributes([
         'group' => 'user',
         'slug' => 'upgrade',

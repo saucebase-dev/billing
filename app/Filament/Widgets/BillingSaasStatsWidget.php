@@ -62,7 +62,7 @@ class BillingSaasStatsWidget extends BaseWidget
 
                 $divisor = match ($price->interval) {
                     'month' => $price->interval_count ?? 1,
-                    'year'  => ($price->interval_count ?? 1) * 12,
+                    'year' => ($price->interval_count ?? 1) * 12,
                     default => 1,
                 };
 

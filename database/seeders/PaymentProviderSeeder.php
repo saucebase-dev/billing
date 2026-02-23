@@ -9,7 +9,7 @@ class PaymentProviderSeeder extends Seeder
 {
     public function run(): void
     {
-        PaymentProvider::create([
+        PaymentProvider::firstOrCreate([
             'name' => 'Stripe',
             'slug' => 'stripe',
             'config' => null,
