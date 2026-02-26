@@ -50,7 +50,7 @@ function handleCheckout() {
     <CheckoutLayout :title="$t('Checkout')">
         <div class="grid gap-8 lg:grid-cols-2">
             <!-- Order Summary (mobile: first, desktop: second via order) -->
-            <div class="order-first lg:order-last">
+            <div data-testid="order-summary" class="order-first lg:order-last">
                 <div
                     class="rounded-xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900"
                 >
@@ -63,7 +63,7 @@ function handleCheckout() {
                     <div
                         class="mt-4 border-b border-gray-200 pb-4 dark:border-gray-800"
                     >
-                        <h3 class="font-medium text-gray-900 dark:text-white">
+                        <h3 data-testid="checkout-product-name" class="font-medium text-gray-900 dark:text-white">
                             {{ product.name }}
                         </h3>
                         <p
@@ -153,11 +153,13 @@ function handleCheckout() {
                     </h2>
 
                     <form
+                        data-testid="checkout-form"
                         @submit.prevent="handleCheckout"
                         class="mt-4 space-y-4"
                     >
                         <InputField
                             name="name"
+                            data-testid="checkout-name"
                             type="text"
                             :label="$t('Name')"
                             :placeholder="$t('Enter your name')"
@@ -168,6 +170,7 @@ function handleCheckout() {
 
                         <InputField
                             name="email"
+                            data-testid="checkout-email"
                             type="email"
                             :label="$t('Email')"
                             :placeholder="$t('Enter your email')"
@@ -237,6 +240,7 @@ function handleCheckout() {
 
                         <Button
                             type="submit"
+                            data-testid="checkout-submit"
                             class="mt-6 w-full"
                             :disabled="form.processing"
                         >

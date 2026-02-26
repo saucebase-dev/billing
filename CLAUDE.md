@@ -101,6 +101,14 @@ php artisan test --testsuite=Modules --filter=Billing  # PHPUnit
 npx playwright test --project=@Billing                  # E2E
 ```
 
+## Debugging Billing Issues
+
+Before diving into code, verify the external dependencies are running:
+
+- **Stripe CLI listener** — webhooks won't fire locally without it. Run `stripe listen --forward-to localhost/billing/webhooks/stripe` and confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener.
+- **Stripe keys** — confirm `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are set and match the environment (test vs. live). A mismatched key causes silent 401s from Stripe with no local exception.
+- **Queue worker** — if listeners appear registered but notifications or role sync don't happen, check whether jobs are being queued but not processed (`php artisan queue:work`).
+
 ## Gotchas
 
 - `CheckoutSession` uses `uuid` as the route key (not `id`) — always resolve via UUID in URLs
