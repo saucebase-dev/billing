@@ -46,6 +46,7 @@ watch(priceKey, () => {
 
 <template>
     <div
+        :data-testid="`product-card-${product.slug}`"
         class="relative flex h-full flex-col rounded-3xl p-8 shadow-lg"
         :class="
             product.metadata?.badge || product.is_highlighted
@@ -150,6 +151,7 @@ watch(priceKey, () => {
         </a>
         <button
             v-else
+            data-testid="get-started-button"
             class="mt-8 w-full cursor-pointer rounded-full px-4 py-3 font-semibold shadow-lg transition-all duration-200 hover:scale-105 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
             :class="
                 product.metadata?.badge || product.is_highlighted

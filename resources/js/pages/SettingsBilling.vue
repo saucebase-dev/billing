@@ -117,7 +117,7 @@ function resumeSubscription() {
         </template>
 
         <!-- Has subscription -->
-        <Card v-if="subscription" class="max-w-3xl">
+        <Card v-if="subscription" data-testid="subscription-section" class="max-w-3xl">
             <CardHeader>
                 <CardTitle>{{ $t('Billing & Subscription') }}</CardTitle>
                 <CardDescription>
@@ -139,6 +139,7 @@ function resumeSubscription() {
                                 {{ $t('Current Plan') }}
                             </h3>
                             <p
+                                data-testid="plan-name"
                                 class="mt-1 text-lg font-semibold text-gray-900 dark:text-white"
                             >
                                 {{
@@ -409,6 +410,7 @@ function resumeSubscription() {
                             }}
                         </p>
                         <Button
+                            data-testid="resume-button"
                             size="sm"
                             class="mt-3"
                             :disabled="isResuming"
@@ -443,6 +445,7 @@ function resumeSubscription() {
                             }}
                         </p>
                         <Button
+                            data-testid="cancel-button"
                             variant="destructive"
                             size="sm"
                             class="mt-3"
@@ -458,6 +461,7 @@ function resumeSubscription() {
         <!-- No subscription -->
         <div
             v-else
+            data-testid="no-subscription"
             class="flex max-w-3xl flex-col items-center justify-center rounded-lg border-2 border-dashed border-gray-300 p-12 text-center dark:border-gray-700"
         >
             <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
@@ -474,7 +478,7 @@ function resumeSubscription() {
         </div>
 
         <!-- Cancel Confirmation Dialog -->
-        <Dialog v-model:open="isCancelDialogOpen">
+        <Dialog data-testid="cancel-dialog" v-model:open="isCancelDialogOpen">
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{{ $t('Cancel subscription') }}</DialogTitle>
@@ -488,12 +492,14 @@ function resumeSubscription() {
                 </DialogHeader>
                 <DialogFooter>
                     <Button
+                        data-testid="cancel-dialog-close"
                         variant="outline"
                         @click="isCancelDialogOpen = false"
                     >
                         {{ $t('Keep plan') }}
                     </Button>
                     <Button
+                        data-testid="cancel-dialog-confirm"
                         variant="destructive"
                         :disabled="isCancelling"
                         @click="cancelSubscription"
