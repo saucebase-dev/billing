@@ -1,4 +1,4 @@
-import { test, expect } from '@e2e/fixtures/index';
+import { test, expect } from '@e2e/fixtures';
 import { SettingsBillingPage } from '../../pages/SettingsBillingPage';
 
 test.describe.parallel('Settings Billing Basics', () => {
