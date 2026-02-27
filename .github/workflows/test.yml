@@ -71,6 +71,7 @@ jobs:
                   echo "DB_DATABASE=$(pwd)/database/database.sqlite" >> .env
                   echo "LOG_CHANNEL=stderr" >> .env
                   echo "TELESCOPE_ENABLED=false" >> .env
+                  echo "MAIL_MAILER=log" >> .env
 
             - name: Set permissions
               working-directory: saucebase
