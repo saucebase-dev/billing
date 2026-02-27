@@ -1,4 +1,4 @@
-import { test, expect } from '@e2e/fixtures/index.ts';
+import { test, expect } from '@e2e/fixtures/index';
 import { CheckoutPage } from '../../pages/CheckoutPage';
 
 test.describe.parallel('Checkout Basics', () => {
