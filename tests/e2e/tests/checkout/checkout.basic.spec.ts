@@ -1,16 +1,5 @@
-import { test, expect } from '../../../../../Auth/tests/e2e/fixtures';
-import { LoginPage } from '../../../../../Auth/tests/e2e/pages/LoginPage';
+import { test, expect } from '@e2e/fixtures/index.ts';
 import { CheckoutPage } from '../../pages/CheckoutPage';
-
-async function loginAs(
-    page: import('@playwright/test').Page,
-    user: { email: string; password: string },
-) {
-    const loginPage = new LoginPage(page);
-    await loginPage.goto();
-    await loginPage.login(user.email, user.password);
-    await page.waitForURL('/dashboard');
-}
 
 test.describe.parallel('Checkout Basics', () => {
     test('redirects guest accessing checkout URL to register', async ({
@@ -22,9 +11,10 @@ test.describe.parallel('Checkout Basics', () => {
 
     test('renders checkout page with product details after login', async ({
         page,
+        loginAs,
         credentials,
     }) => {
-        await loginAs(page, credentials.admin);
+        await loginAs(credentials.admin);
 
         await page.goto('/');
         await page
@@ -40,8 +30,8 @@ test.describe.parallel('Checkout Basics', () => {
         await checkoutPage.expectProductName('Pro');
     });
 
-    test('displays all billing form fields', async ({ page, credentials }) => {
-        await loginAs(page, credentials.admin);
+    test('displays all billing form fields', async ({ page, loginAs, credentials }) => {
+        await loginAs(credentials.admin);
 
         await page.goto('/');
         await page
@@ -55,8 +45,8 @@ test.describe.parallel('Checkout Basics', () => {
         await checkoutPage.expectFormVisible();
     });
 
-    test('submits form and initiates Stripe redirect', async ({ page, credentials }) => {
-        await loginAs(page, credentials.admin);
+    test('submits form and initiates Stripe redirect', async ({ page, loginAs, credentials }) => {
+        await loginAs(credentials.admin);
 
         await page.goto('/');
         await page

@@ -1,16 +1,5 @@
-import { test, expect } from '../../../../../Auth/tests/e2e/fixtures';
-import { LoginPage } from '../../../../../Auth/tests/e2e/pages/LoginPage';
+import { test, expect } from '@e2e/fixtures/index.ts';
 import { SettingsBillingPage } from '../../pages/SettingsBillingPage';
-
-async function loginAs(
-    page: import('@playwright/test').Page,
-    user: { email: string; password: string },
-) {
-    const loginPage = new LoginPage(page);
-    await loginPage.goto();
-    await loginPage.login(user.email, user.password);
-    await page.waitForURL('/dashboard');
-}
 
 test.describe.parallel('Settings Billing Basics', () => {
     test('redirects unauthenticated user to login', async ({ page }) => {
@@ -20,17 +9,18 @@ test.describe.parallel('Settings Billing Basics', () => {
 
     test('shows empty state for user without active subscription', async ({
         page,
+        loginAs,
         credentials,
     }) => {
-        await loginAs(page, credentials.user);
+        await loginAs(credentials.user);
 
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
         await billingPage.expectNoSubscription();
     });
 
-    test('shows active subscription details', async ({ page, credentials }) => {
-        await loginAs(page, credentials.subscriber);
+    test('shows active subscription details', async ({ page, loginAs, credentials }) => {
+        await loginAs(credentials.subscriber);
 
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
@@ -38,8 +28,8 @@ test.describe.parallel('Settings Billing Basics', () => {
         await expect(billingPage.cancelButton).toBeVisible();
     });
 
-    test('opens and closes cancel dialog', async ({ page, credentials }) => {
-        await loginAs(page, credentials.subscriber);
+    test('opens and closes cancel dialog', async ({ page, loginAs, credentials }) => {
+        await loginAs(credentials.subscriber);
 
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
@@ -49,8 +39,8 @@ test.describe.parallel('Settings Billing Basics', () => {
         await expect(billingPage.cancelDialogConfirm).not.toBeVisible();
     });
 
-    test('shows resume button for pending cancellation', async ({ page, credentials }) => {
-        await loginAs(page, credentials.cancelled);
+    test('shows resume button for pending cancellation', async ({ page, loginAs, credentials }) => {
+        await loginAs(credentials.cancelled);
 
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
