@@ -11,7 +11,7 @@ permissions:
 
 jobs:
     test:
-        uses: sauce-base/saucebase/.github/workflows/test-module.yml@main
+        uses: saucebase-dev/saucebase/.github/workflows/test-module.yml@main
         with:
             module: Billing
             dependencies: saucebase/auth
