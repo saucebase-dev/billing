@@ -97,7 +97,7 @@ BILLING_LOG_CHANNEL=stack
 ## Testing
 
 ```bash
-php artisan test --testsuite=Modules --filter='Modules.Billing'  # PHPUnit
+php artisan test --testsuite=Modules --filter='^Modules\\Billing\\Tests'  # PHPUnit
 npx playwright test --project="@Billing*"                  # E2E
 ```
 
