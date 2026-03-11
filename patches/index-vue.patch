@@ -2,7 +2,7 @@
 +++ b/resources/js/pages/Index.vue
 @@ -8,7 +8,14 @@
  import HeroSection from '@/pages/sections/HeroSection.vue';
- import Testimonial from './sections/Testimonial.vue';
+ import Testimonial from '@/pages/sections/Testimonial.vue';
 
  import { Head } from '@inertiajs/vue3';
 +
