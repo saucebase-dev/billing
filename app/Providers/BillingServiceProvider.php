@@ -4,7 +4,6 @@ namespace Modules\Billing\Providers;
 
 use App\Providers\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
-use Illuminate\Support\Facades\Gate;
 use Modules\Billing\Console\ExpireCheckoutSessionsCommand;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Services\BillingService;
@@ -42,9 +41,6 @@ class BillingServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         $this->loadViewsFrom(module_path($this->name, 'resources/views'), $this->nameLower);
-
-        // Register policies
-        $this->registerPolicies();
     }
 
     /**
@@ -61,13 +57,5 @@ class BillingServiceProvider extends ModuleServiceProvider
     protected function configureSchedules(Schedule $schedule): void
     {
         $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
-    }
-
-    protected function registerPolicies(): void
-    {
-        Gate::policy(
-            \Modules\Billing\Models\Subscription::class,
-            \Modules\Billing\Policies\SubscriptionPolicy::class
-        );
     }
 }
