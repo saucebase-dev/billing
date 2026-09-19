@@ -1,1 +1,1 @@
-export * from './vue/app';
+export * from './react/app';
