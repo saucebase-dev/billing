@@ -23,7 +23,8 @@
         },
         "saucebase": {
             "frameworks": [
-                "vue"
+                "vue",
+                "react"
             ]
         }
     },

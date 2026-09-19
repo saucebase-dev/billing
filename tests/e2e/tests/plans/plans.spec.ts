@@ -64,6 +64,8 @@ test.describe.parallel('Pricing page', () => {
             )
             .click();
 
-        await expect(page).toHaveURL(/\/auth\/register/);
+        // The click posts and the server redirects; under a full parallel run
+        // that round trip outlasts the default assertion timeout.
+        await expect(page).toHaveURL(/\/auth\/register/, { timeout: 15_000 });
     });
 });
