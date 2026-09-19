@@ -14,6 +14,7 @@ use Modules\Billing\Enums\InvoiceStatus;
  * @property int $customer_id
  * @property int|null $subscription_id
  * @property int|null $payment_id
+ * @property string $provider
  * @property string|null $provider_invoice_id
  * @property string|null $number
  * @property Currency $currency
@@ -38,6 +39,7 @@ class Invoice extends Model
         'customer_id',
         'subscription_id',
         'payment_id',
+        'provider',
         'provider_invoice_id',
         'number',
         'currency',

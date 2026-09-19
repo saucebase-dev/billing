@@ -1,9 +1,9 @@
 <?php
 
-use App\Facades\Navigation;
-use App\Navigation\Section;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Models\Product;
+use Saucebase\Core\Facades\Navigation;
+use Saucebase\Core\Navigation\Section;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,18 +16,18 @@ use Modules\Billing\Models\Product;
 */
 
 // Landing Page Navigation
-// Navigation::addWhen(
-//     fn () => Product::displayable()?->exists(),
-//     'Pricing',
-//     route('billing.plans'),
-//     function (Section $section) {
-//         $section->attributes([
-//             'group' => 'landing',
-//             'slug' => 'pricing',
-//             'order' => 1,
-//         ]);
-//     }
-// );
+Navigation::addWhen(
+    fn () => Product::displayable()->exists(),
+    'Pricing',
+    fn () => route('billing.plans'),
+    function (Section $section) {
+        $section->attributes([
+            'group' => 'landing',
+            'slug' => 'pricing',
+            'order' => 1,
+        ]);
+    }
+);
 
 // User menu - Upgrade
 Navigation::addWhen(
@@ -44,4 +44,3 @@ Navigation::addWhen(
         ]);
     }
 );
-

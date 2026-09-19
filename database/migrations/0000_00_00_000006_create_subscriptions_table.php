@@ -19,10 +19,14 @@ return new class extends Migration
 
             // Foreign keys
             $table->foreignIdFor(Customer::class)->constrained()->cascadeOnDelete();
-            $table->foreignIdFor(Price::class)->constrained()->cascadeOnDelete();
+            // Restricted, not cascaded: products cascade to prices, and the admin
+            // can force-delete a product, so cascading here would take paid
+            // subscriptions with it. Refusing is the only safe answer.
+            $table->foreignIdFor(Price::class)->constrained()->restrictOnDelete();
             $table->foreignIdFor(PaymentMethod::class)->nullable()->constrained()->nullOnDelete();
 
             // Provider identifiers
+            $table->string('provider');
             $table->string('provider_subscription_id')->nullable();
 
             // Status
@@ -40,6 +44,9 @@ return new class extends Migration
             $table->timestamp('cancelled_at')->nullable();
             $table->timestamp('ends_at')->nullable();
 
+            // When the provider event last applied to this row happened, to drop older ones
+            $table->timestamp('last_event_at')->nullable();
+
             // Configuration
             $table->json('metadata')->nullable();
 
@@ -47,7 +54,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_subscription_id');
+            $table->unique(['provider', 'provider_subscription_id']);
             $table->index('status');
             $table->index('current_period_ends_at');
             $table->index('ends_at');

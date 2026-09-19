@@ -226,6 +226,7 @@ class WebhookIdempotencyTest extends TestCase
 
         // Pre-create a subscription with the same provider ID (simulating race)
         Subscription::create([
+            'provider' => 'stripe',
             'customer_id' => $session->customer_id,
             'price_id' => $session->price_id,
             'provider_subscription_id' => 'sub_test_foc',

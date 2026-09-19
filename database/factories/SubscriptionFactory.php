@@ -27,6 +27,7 @@ class SubscriptionFactory extends Factory
             'customer_id' => Customer::factory(),
             'price_id' => Price::factory(),
             'payment_method_id' => PaymentMethod::factory(),
+            'provider' => 'stripe',
             'provider_subscription_id' => 'sub_'.fake()->regexify('[A-Za-z0-9]{24}'),
             'status' => SubscriptionStatus::Active,
             'trial_starts_at' => null,

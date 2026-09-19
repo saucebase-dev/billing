@@ -50,8 +50,8 @@ watch(priceKey, () => {
         class="relative flex h-full flex-col rounded-3xl p-8 shadow-lg"
         :class="
             product.metadata?.badge || product.is_highlighted
-                ? 'ring-primary bg-white/70 shadow-lg ring-3 lg:scale-[1.05] dark:bg-gray-900/70'
-                : 'bg-white/70 dark:bg-gray-900/60 dark:ring-white/10'
+                ? 'ring-primary bg-card/70 shadow-lg ring-3 lg:scale-[1.05]'
+                : 'bg-card/70 ring-border ring-1'
         "
     >
         <span
@@ -68,7 +68,7 @@ watch(priceKey, () => {
                 :class="
                     product.metadata?.badge || product.is_highlighted
                         ? 'text-secondary dark:text-secondary-light'
-                        : 'text-gray-900 dark:text-white'
+                        : 'text-foreground'
                 "
             >
                 {{ product.name }}
@@ -78,7 +78,7 @@ watch(priceKey, () => {
         <!-- Description -->
         <p
             v-if="product.description"
-            class="mt-2 text-sm text-gray-600 dark:text-gray-300"
+            class="text-foreground/70 mt-2 text-sm"
             v-html="product.description"
         ></p>
 
@@ -91,7 +91,7 @@ watch(priceKey, () => {
             >
                 <span
                     v-if="price?.metadata?.original_price"
-                    class="text-2xl text-gray-400 line-through dark:text-gray-600"
+                    class="text-foreground/50 text-2xl line-through"
                 >
                     {{
                         formatPrice(
@@ -115,18 +115,15 @@ watch(priceKey, () => {
             >
                 <template v-if="price">
                     <span
-                        class="text-5xl font-semibold tracking-tight text-gray-900 dark:text-white"
+                        class="text-foreground text-5xl font-semibold tracking-tight"
                     >
                         {{ formatPrice(price.amount, price.currency) }}
                     </span>
-                    <span class="text-base text-gray-500 dark:text-gray-400">
+                    <span class="text-foreground/70 text-base">
                         {{ getIntervalDisplay(price.interval) }}
                     </span>
                 </template>
-                <span
-                    v-else
-                    class="text-2xl font-semibold text-gray-900 dark:text-white"
-                >
+                <span v-else class="text-foreground text-2xl font-semibold">
                     {{ $t('Contact us') }}
                 </span>
             </div>
@@ -135,7 +132,7 @@ watch(priceKey, () => {
         <!-- Tagline from metadata -->
         <p
             v-if="product.metadata?.tagline"
-            class="mt-2 text-sm text-gray-500 italic dark:text-gray-400"
+            class="text-foreground/70 mt-2 text-sm italic"
         >
             {{ product.metadata.tagline }}
         </p>
@@ -148,7 +145,7 @@ watch(priceKey, () => {
             :class="
                 product.metadata?.badge || product.is_highlighted
                     ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
-                    : 'text-gray-900 ring-1 ring-gray-200 ring-inset hover:ring-gray-300 dark:bg-white/10 dark:text-white dark:ring-white/10 dark:hover:bg-white/20'
+                    : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset'
             "
         >
             {{ product.metadata?.cta_label || $t('Get started') }}
@@ -160,7 +157,7 @@ watch(priceKey, () => {
             :class="
                 product.metadata?.badge || product.is_highlighted
                     ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
-                    : 'text-gray-900 ring-1 ring-gray-200 ring-inset hover:ring-gray-300 dark:bg-white/10 dark:text-white dark:ring-white/10 dark:hover:bg-white/20'
+                    : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset'
             "
             @click="handleGetStarted"
         >
@@ -169,7 +166,7 @@ watch(priceKey, () => {
 
         <!-- After CTA text from metadata -->
         <div
-            class="mt-2 text-center text-sm text-gray-500 dark:text-gray-400/90"
+            class="text-foreground/70 mt-2 text-center text-sm"
             v-if="product.metadata?.after_cta"
         >
             {{ $t(product.metadata.after_cta) }}
@@ -178,7 +175,7 @@ watch(priceKey, () => {
         <!-- Features -->
         <ul
             v-if="product.features?.length"
-            class="mt-6 flex-1 space-y-1 text-sm text-gray-600 dark:text-gray-300"
+            class="text-foreground/70 mt-6 flex-1 space-y-1 text-sm"
         >
             <li
                 v-for="(feature, index) in product.features"

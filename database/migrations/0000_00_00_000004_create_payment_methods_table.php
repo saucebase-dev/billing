@@ -19,6 +19,7 @@ return new class extends Migration
             $table->foreignIdFor(Customer::class)->constrained()->cascadeOnDelete();
 
             // Provider identifiers
+            $table->string('provider');
             $table->string('provider_payment_method_id')->nullable();
 
             // Type
@@ -37,7 +38,9 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_payment_method_id');
+            // ensurePaymentMethod() looks this pair up without a lock, so two
+            // concurrent webhooks could both miss and both insert.
+            $table->unique(['provider', 'provider_payment_method_id']);
             $table->index('is_default');
         });
     }

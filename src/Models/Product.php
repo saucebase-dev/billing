@@ -4,7 +4,6 @@ namespace Modules\Billing\Models;
 
 use Carbon\Carbon;
 use Cviebrock\EloquentSluggable\Sluggable;
-use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -17,6 +16,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $slug
  * @property string $name
  * @property string|null $description
+ * @property string|null $provider
+ * @property string|null $provider_product_id
  * @property int $display_order
  * @property bool $is_visible
  * @property bool $is_highlighted
@@ -38,7 +39,10 @@ class Product extends Model
     protected static function booted(): void
     {
         static::addGlobalScope('ordered', function ($query) {
-            $query->orderBy('display_order', 'asc');
+            // Insertion order breaks the tie: rows sharing a display_order would
+            // otherwise come back in whatever order the database felt like, and
+            // a pricing page that reshuffles between requests reads as a bug.
+            $query->orderBy('display_order', 'asc')->orderBy('id', 'asc');
         });
     }
 
@@ -47,6 +51,8 @@ class Product extends Model
         'slug',
         'name',
         'description',
+        'provider',
+        'provider_product_id',
         'display_order',
         'is_visible',
         'is_highlighted',
@@ -92,28 +98,25 @@ class Product extends Model
     /**
      * Scope a query to only include active products.
      */
-    #[Scope]
-    protected function active(Builder $query): void
+    public function scopeActive(Builder $query): Builder
     {
-        $query->where('is_active', true);
+        return $query->where('is_active', true);
     }
 
     /**
      * Scope a query to only include visible products.
      */
-    #[Scope]
-    protected function visible(Builder $query): void
+    public function scopeVisible(Builder $query): Builder
     {
-        $query->where('is_visible', true);
+        return $query->where('is_visible', true);
     }
 
     /**
      * Scope a query to only include displayable products with active prices.
      */
-    #[Scope]
-    protected function displayable(Builder $query): void
+    public function scopeDisplayable(Builder $query): Builder
     {
-        $query->where('is_active', true)
+        return $query->where('is_active', true)
             ->where('is_visible', true)
             ->with(['prices' => fn ($query) => $query->where('is_active', true)]);
     }

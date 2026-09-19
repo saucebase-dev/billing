@@ -16,9 +16,13 @@ return new class extends Migration
             $table->id();
 
             // Foreign keys
-            $table->foreignIdFor(User::class)->constrained()->cascadeOnDelete();
+            // Billing history outlives the account. Deleting a user detaches the
+            // customer rather than deleting it, so the subscriptions, payments and
+            // invoices hanging off it survive for reconciliation and audit.
+            $table->foreignIdFor(User::class)->nullable()->constrained()->nullOnDelete();
 
             // Provider identifiers
+            $table->string('provider');
             $table->string('provider_customer_id')->nullable();
 
             // Billing info
@@ -36,7 +40,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_customer_id');
+            $table->index(['provider', 'provider_customer_id']);
             $table->unique('user_id');
         });
     }

@@ -49,8 +49,10 @@ class BillingSaasStatsWidget extends BaseWidget
 
     private function mrrStat(): Stat
     {
+        // One currency only: amounts in different currencies do not add up.
         $mrr = (int) Subscription::query()
             ->where('status', SubscriptionStatus::Active)
+            ->whereHas('price', fn ($query) => $query->where('currency', Currency::default()))
             ->with('price')
             ->get()
             ->sum(function (Subscription $subscription): float {
@@ -88,11 +90,12 @@ class BillingSaasStatsWidget extends BaseWidget
     private function totalRevenueStat(): Stat
     {
         $total = (int) Payment::where('status', PaymentStatus::Succeeded)
+            ->where('currency', Currency::default())
             ->whereBetween('created_at', [$this->startDate, $this->endDate])
             ->sum('amount');
 
         return Stat::make(__('Total Revenue'), Currency::default()->formatAmount($total))
-            ->description(__('Succeeded payments in period'))
+            ->description(__('Succeeded :currency payments in period', ['currency' => Currency::default()->value]))
             ->descriptionIcon('heroicon-m-banknotes')
             ->color('warning');
     }

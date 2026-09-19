@@ -23,6 +23,7 @@ return new class extends Migration
             $table->foreignIdFor(Payment::class)->nullable()->constrained()->nullOnDelete();
 
             // Provider identifiers
+            $table->string('provider');
             $table->string('provider_invoice_id')->nullable();
 
             // Invoice details
@@ -51,7 +52,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_invoice_id');
+            $table->unique(['provider', 'provider_invoice_id']);
             $table->index('number');
             $table->index('status');
             $table->index('due_at');

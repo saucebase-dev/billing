@@ -13,7 +13,11 @@ class SyncSubscriberRole
 {
     public function handle(SubscriptionCreated|SubscriptionUpdated|SubscriptionCancelled $event): void
     {
-        $subscription = $event->subscription;
+        $this->sync($event->subscription);
+    }
+
+    public function sync(Subscription $subscription): void
+    {
         $user = $subscription->customer?->user;
 
         if (! $user) {

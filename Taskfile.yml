@@ -24,6 +24,10 @@ tasks:
         desc: Seed the Billing module database
         cmd: '{{.APP}} php artisan modules:seed --module=billing'
 
+    db:seed:demo:
+        desc: Seed the Billing module with sample customers, subscriptions and payments
+        cmd: '{{.APP}} php artisan modules:seed --module=billing --demo'
+
     # ── Code Generation ────────────────────────────────────────────
 
     types:generate:

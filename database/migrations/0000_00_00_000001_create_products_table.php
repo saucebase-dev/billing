@@ -20,6 +20,10 @@ return new class extends Migration
             $table->string('name');
             $table->text('description')->nullable();
 
+            // Set when the product came from a payment provider's catalog
+            $table->string('provider')->nullable();
+            $table->string('provider_product_id')->nullable();
+
             // Display & Marketing
             $table->integer('display_order')->default(0);
             $table->boolean('is_visible')->default(true);
@@ -38,6 +42,7 @@ return new class extends Migration
 
             // Indexes
             $table->index('is_active');
+            $table->unique(['provider', 'provider_product_id']);
             $table->index('deleted_at');
         });
     }

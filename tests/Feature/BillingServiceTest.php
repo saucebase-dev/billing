@@ -3,6 +3,7 @@
 namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Modules\Billing\Data\CheckoutResultData;
@@ -29,6 +30,7 @@ use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
+use Modules\Billing\Models\WebhookEvent;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -64,6 +66,7 @@ class BillingServiceTest extends TestCase
         );
 
         $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
@@ -80,16 +83,7 @@ class BillingServiceTest extends TestCase
             'expires_at' => now()->addHours(24),
         ]);
 
-        $this->gateway->method('createCustomer')->willReturnCallback(
-            fn (CustomerData $data) => Customer::create([
-                'user_id' => $data->user->id,
-                'provider_customer_id' => 'cus_guest_123',
-                'email' => $data->email,
-                'name' => $data->name,
-                'phone' => $data->phone,
-                'address' => $data->address?->toArray(),
-            ]),
-        );
+        $this->gateway->method('createCustomer')->willReturn('cus_test_123');
         $this->gateway->method('createCheckoutSession')->willReturn(
             new CheckoutResultData(sessionId: 'cs_guest_123', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
@@ -114,7 +108,7 @@ class BillingServiceTest extends TestCase
 
         $this->assertDatabaseHas('customers', [
             'user_id' => $user->id,
-            'provider_customer_id' => 'cus_guest_123',
+            'provider_customer_id' => 'cus_test_123',
             'name' => 'Billing Name',
             'email' => 'billing@example.com',
             'phone' => '+1234567890',
@@ -222,8 +216,10 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('retrieveSubscription')->willReturn([
             'id' => 'sub_test_period',
-            'current_period_start' => $periodStart,
-            'current_period_end' => $periodEnd,
+            'items' => ['data' => [[
+                'current_period_start' => $periodStart,
+                'current_period_end' => $periodEnd,
+            ]]],
         ]);
 
         $session = CheckoutSession::factory()->create([
@@ -336,24 +332,26 @@ class BillingServiceTest extends TestCase
         Event::assertDispatched(PaymentSucceeded::class);
     }
 
-    public function test_webhook_payment_succeeded_skips_event_when_subscription_not_yet_created(): void
+    /**
+     * The invoice can arrive before the checkout that creates its subscription.
+     * Failing leaves the event without a receipt, so the provider's retry is
+     * processed once the subscription exists rather than skipped as a duplicate.
+     */
+    public function test_an_invoice_that_arrives_before_its_subscription_is_processed_on_retry(): void
     {
         Event::fake([PaymentSucceeded::class]);
 
-        $customer = Customer::factory()->create([
-            'provider_customer_id' => 'cus_test_orphan',
-        ]);
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_test_early']);
 
-        // Invoice webhook arrives before checkout.session.completed — no Subscription exists yet
         $webhook = new WebhookData(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
-            providerEventId: 'evt_test_orphan',
+            providerEventId: 'evt_test_early',
             payload: [
-                'id' => 'in_test_orphan',
-                'customer' => 'cus_test_orphan',
-                'subscription' => 'sub_not_yet_created',
-                'payment_intent' => 'pi_test_orphan',
+                'id' => 'in_test_early',
+                'customer' => 'cus_test_early',
+                'subscription' => 'sub_test_early',
+                'payment_intent' => 'pi_test_early',
                 'currency' => 'eur',
                 'amount_paid' => 2900,
             ],
@@ -361,121 +359,245 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        try {
+            $this->billingService->handleWebhook('stripe', request());
+            $this->fail('Expected the handler to fail while the subscription is missing.');
+        } catch (\RuntimeException) {
+        }
 
-        // Payment is saved for auditing
-        $this->assertDatabaseHas('payments', [
-            'customer_id' => $customer->id,
-            'provider_payment_id' => 'pi_test_orphan',
-            'subscription_id' => null,
-        ]);
-
-        // Event is NOT dispatched — will fire from onCheckoutCompleted later
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseHas('webhook_events', ['provider_event_id' => 'evt_test_early', 'processed_at' => null]);
         Event::assertNotDispatched(PaymentSucceeded::class);
-    }
 
-    public function test_checkout_completed_links_orphaned_payment_to_subscription(): void
-    {
-        Event::fake([CheckoutCompleted::class, SubscriptionCreated::class, PaymentSucceeded::class]);
-
-        $session = CheckoutSession::factory()->create([
-            'provider_session_id' => 'cs_test_orphan_link',
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'provider_subscription_id' => 'sub_test_early',
         ]);
-
-        // Simulate an orphaned payment created by an earlier invoice webhook
-        // (price_id is null because createPaymentFromWebhook sets price_id = $subscription?->price_id,
-        // which resolves to null when the subscription doesn't exist yet)
-        $orphanedPayment = Payment::create([
-            'customer_id' => $session->customer_id,
-            'subscription_id' => null,
-            'price_id' => null,
-            'provider_payment_id' => 'pi_orphan_link',
-            'currency' => Currency::EUR,
-            'amount' => 2900,
-            'status' => PaymentStatus::Succeeded,
-        ]);
-
-        $webhook = new WebhookData(
-            type: WebhookEventType::CheckoutCompleted,
-            provider: 'stripe',
-            providerEventId: 'evt_test_orphan_link',
-            payload: [
-                'id' => 'cs_test_orphan_link',
-                'subscription' => 'sub_test_orphan_link',
-                'currency' => 'eur',
-                'amount_total' => 2900,
-            ],
-        );
-
-        $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
         $this->billingService->handleWebhook('stripe', request());
 
-        $subscription = Subscription::where('provider_subscription_id', 'sub_test_orphan_link')->first();
-        $this->assertNotNull($subscription);
+        $this->assertDatabaseHas('payments', [
+            'subscription_id' => $subscription->id,
+            'provider_payment_id' => 'pi_test_early',
+            'status' => PaymentStatus::Succeeded->value,
+        ]);
+        $this->assertNotNull(WebhookEvent::where('provider_event_id', 'evt_test_early')->value('processed_at'));
+        Event::assertDispatched(PaymentSucceeded::class, 1);
+    }
 
-        // Orphaned payment is linked to the subscription
-        $orphanedPayment->refresh();
-        $this->assertEquals($subscription->id, $orphanedPayment->subscription_id);
-        $this->assertEquals($session->price_id, $orphanedPayment->price_id);
+    /**
+     * A subscription belonging to a customer this app has no row for can never
+     * be found, so failing would have the provider retry the event forever.
+     */
+    public function test_a_subscription_event_for_an_unknown_customer_is_acknowledged(): void
+    {
+        Event::fake([SubscriptionUpdated::class]);
 
-        // No duplicate payment created
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::SubscriptionUpdated,
+            provider: 'stripe',
+            providerEventId: 'evt_test_stranger',
+            payload: [
+                'id' => 'sub_test_stranger',
+                'customer' => 'cus_test_stranger',
+                'status' => 'active',
+            ],
+        ));
+
+        $this->billingService->handleWebhook('stripe', request());
+
+        $this->assertNotNull(WebhookEvent::where('provider_event_id', 'evt_test_stranger')->value('processed_at'));
+        Event::assertNotDispatched(SubscriptionUpdated::class);
+    }
+
+    /**
+     * The customer is known, so the subscription is still on its way: failing
+     * keeps the event unreceipted and the provider retries it.
+     */
+    public function test_a_subscription_event_that_beats_its_subscription_is_retried(): void
+    {
+        Customer::factory()->create(['provider_customer_id' => 'cus_test_early_sub']);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::SubscriptionUpdated,
+            provider: 'stripe',
+            providerEventId: 'evt_test_early_sub',
+            payload: [
+                'id' => 'sub_test_early_sub',
+                'customer' => 'cus_test_early_sub',
+                'status' => 'active',
+            ],
+        ));
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            $this->billingService->handleWebhook('stripe', request());
+        } finally {
+            $this->assertDatabaseHas('webhook_events', [
+                'provider_event_id' => 'evt_test_early_sub',
+                'processed_at' => null,
+            ]);
+        }
+    }
+
+    public function test_a_failed_payment_that_later_succeeds_updates_the_same_record(): void
+    {
+        Event::fake([PaymentFailed::class, PaymentSucceeded::class]);
+
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_test_retry']);
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'provider_subscription_id' => 'sub_test_retry',
+            'status' => SubscriptionStatus::Active,
+        ]);
+
+        $invoice = [
+            'id' => 'in_test_retry',
+            'customer' => 'cus_test_retry',
+            'subscription' => 'sub_test_retry',
+            'payment_intent' => 'pi_test_retry',
+            'currency' => 'eur',
+            'amount_due' => 2900,
+            'amount_paid' => 2900,
+        ];
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            new WebhookData(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_retry_1', payload: $invoice),
+            new WebhookData(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_retry_2', payload: $invoice),
+        );
+
+        $this->billingService->handleWebhook('stripe', request());
+        $this->assertEquals(SubscriptionStatus::PastDue, $subscription->fresh()->status);
+
+        $this->billingService->handleWebhook('stripe', request());
+
         $this->assertDatabaseCount('payments', 1);
-
-        Event::assertDispatched(PaymentSucceeded::class);
-        Event::assertDispatched(SubscriptionCreated::class);
+        $this->assertDatabaseHas('payments', [
+            'provider_payment_id' => 'pi_test_retry',
+            'status' => PaymentStatus::Succeeded->value,
+        ]);
+        $this->assertEquals(SubscriptionStatus::Active, $subscription->fresh()->status);
+        Event::assertDispatched(PaymentSucceeded::class, 1);
     }
 
-    public function test_checkout_completed_does_not_link_one_time_payment_as_orphan(): void
+    public function test_a_late_failure_does_not_undo_a_payment_that_succeeded(): void
+    {
+        Event::fake([PaymentFailed::class, PaymentSucceeded::class]);
+
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_test_late_fail']);
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'provider_subscription_id' => 'sub_test_late_fail',
+            'status' => SubscriptionStatus::Active,
+        ]);
+
+        $invoice = [
+            'id' => 'in_test_late_fail',
+            'customer' => 'cus_test_late_fail',
+            'subscription' => 'sub_test_late_fail',
+            'payment_intent' => 'pi_test_late_fail',
+            'currency' => 'eur',
+            'amount_due' => 2900,
+            'amount_paid' => 2900,
+        ];
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            new WebhookData(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_late_1', payload: $invoice),
+            new WebhookData(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_late_2', payload: $invoice),
+        );
+
+        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handleWebhook('stripe', request());
+
+        $this->assertDatabaseHas('payments', ['provider_payment_id' => 'pi_test_late_fail', 'status' => PaymentStatus::Succeeded->value]);
+        $this->assertEquals(SubscriptionStatus::Active, $subscription->fresh()->status);
+        Event::assertDispatched(PaymentSucceeded::class, 1);
+        Event::assertNotDispatched(PaymentFailed::class);
+    }
+
+    /** The first hand-off is the one the buyer can pay; a second must not replace it. */
+    public function test_reopening_a_checkout_reuses_the_provider_session(): void
+    {
+        $user = User::factory()->create();
+        $price = Price::factory()->create();
+        $session = CheckoutSession::create([
+            'price_id' => $price->id,
+            'status' => CheckoutSessionStatus::Pending,
+            'expires_at' => now()->addHours(24),
+        ]);
+
+        $this->gateway->method('createCustomer')->willReturn('cus_test_reuse');
+        $this->gateway->expects($this->once())->method('createCheckoutSession')->willReturn(
+            new CheckoutResultData(sessionId: 'cs_first', url: 'https://stripe.com/first', provider: 'stripe'),
+        );
+
+        $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel');
+        $again = $this->billingService->processCheckout($session->fresh(), $user, 'https://example.com/success', 'https://example.com/other', coupon: 'SAVE10');
+
+        $this->assertSame('cs_first', $again->sessionId);
+        $this->assertSame('https://stripe.com/first', $again->url);
+    }
+
+    /**
+     * A delayed payment method completes the checkout before the money arrives.
+     * Nothing is granted until the provider's follow-up says it has.
+     */
+    public function test_an_unpaid_checkout_is_fulfilled_only_when_the_payment_settles(): void
     {
         Event::fake([CheckoutCompleted::class, SubscriptionCreated::class, PaymentSucceeded::class]);
 
-        $session = CheckoutSession::factory()->create([
-            'provider_session_id' => 'cs_test_no_steal',
-        ]);
+        $session = CheckoutSession::factory()->create(['provider_session_id' => 'cs_test_delayed']);
 
-        // One-time payment created earlier (has price_id set — not an orphaned invoice payment)
-        $oneTimePayment = Payment::create([
-            'customer_id' => $session->customer_id,
-            'subscription_id' => null,
-            'price_id' => Price::factory()->create()->id,
-            'provider_payment_id' => 'pi_one_time',
-            'currency' => Currency::USD,
-            'amount' => 9900,
-            'status' => PaymentStatus::Succeeded,
-        ]);
+        $payload = [
+            'id' => 'cs_test_delayed',
+            'subscription' => 'sub_test_delayed',
+            'currency' => 'eur',
+            'amount_total' => 2900,
+        ];
 
-        $webhook = new WebhookData(
-            type: WebhookEventType::CheckoutCompleted,
-            provider: 'stripe',
-            providerEventId: 'evt_test_no_steal',
-            payload: [
-                'id' => 'cs_test_no_steal',
-                'subscription' => 'sub_test_no_steal',
-                'currency' => 'eur',
-                'amount_total' => 2900,
-            ],
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            new WebhookData(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_1', payload: $payload + ['payment_status' => 'unpaid']),
+            new WebhookData(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_2', payload: $payload + ['payment_status' => 'paid']),
         );
-
-        $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
         $this->billingService->handleWebhook('stripe', request());
 
-        $subscription = Subscription::where('provider_subscription_id', 'sub_test_no_steal')->first();
-        $this->assertNotNull($subscription);
+        $this->assertEquals(CheckoutSessionStatus::Pending, $session->fresh()->status);
+        $this->assertDatabaseCount('subscriptions', 0);
+        Event::assertNotDispatched(SubscriptionCreated::class);
 
-        // One-time payment is NOT touched
-        $oneTimePayment->refresh();
-        $this->assertNull($oneTimePayment->subscription_id);
-        $this->assertEquals(9900, $oneTimePayment->amount);
+        $this->billingService->handleWebhook('stripe', request());
 
-        // A new subscription payment was created separately
-        $subPayment = Payment::where('subscription_id', $subscription->id)->first();
-        $this->assertNotNull($subPayment);
-        $this->assertEquals(2900, $subPayment->amount);
+        $this->assertEquals(CheckoutSessionStatus::Completed, $session->fresh()->status);
+        $this->assertDatabaseCount('subscriptions', 1);
+        Event::assertDispatched(SubscriptionCreated::class, 1);
+    }
 
-        // Total: 2 payments (one-time + subscription)
-        $this->assertDatabaseCount('payments', 2);
+    /** A trial or a fully discounted price owes nothing, and that is not a missing payment. */
+    public function test_a_checkout_that_requires_no_payment_is_fulfilled(): void
+    {
+        Event::fake([CheckoutCompleted::class, SubscriptionCreated::class, PaymentSucceeded::class]);
+
+        $session = CheckoutSession::factory()->create(['provider_session_id' => 'cs_test_trial']);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::CheckoutCompleted,
+            provider: 'stripe',
+            providerEventId: 'evt_trial',
+            payload: [
+                'id' => 'cs_test_trial',
+                'subscription' => 'sub_test_trial',
+                'payment_status' => 'no_payment_required',
+                'currency' => 'eur',
+                'amount_total' => 0,
+            ],
+        ));
+
+        $this->billingService->handleWebhook('stripe', request());
+
+        $this->assertEquals(CheckoutSessionStatus::Completed, $session->fresh()->status);
+        Event::assertDispatched(SubscriptionCreated::class);
     }
 
     public function test_webhook_payment_succeeded_merges_into_checkout_created_payment(): void
@@ -650,45 +772,6 @@ class BillingServiceTest extends TestCase
         Event::assertDispatched(SubscriptionUpdated::class);
     }
 
-    public function test_webhook_subscription_updated_throws_when_subscription_not_found(): void
-    {
-        $webhook = new WebhookData(
-            type: WebhookEventType::SubscriptionUpdated,
-            provider: 'stripe',
-            providerEventId: 'evt_test_not_found',
-            payload: [
-                'id' => 'sub_nonexistent',
-                'status' => 'active',
-            ],
-        );
-
-        $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Subscription not found: sub_nonexistent');
-
-        $this->billingService->handleWebhook('stripe', request());
-    }
-
-    public function test_webhook_subscription_deleted_throws_when_subscription_not_found(): void
-    {
-        $webhook = new WebhookData(
-            type: WebhookEventType::SubscriptionDeleted,
-            provider: 'stripe',
-            providerEventId: 'evt_test_not_found',
-            payload: [
-                'id' => 'sub_nonexistent',
-            ],
-        );
-
-        $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
-
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Subscription not found: sub_nonexistent');
-
-        $this->billingService->handleWebhook('stripe', request());
-    }
-
     #[DataProvider('stripeStatusMappingProvider')]
     public function test_webhook_subscription_updated_maps_stripe_statuses(string $stripeStatus, SubscriptionStatus $expectedStatus): void
     {
@@ -734,6 +817,74 @@ class BillingServiceTest extends TestCase
             'incomplete' => ['incomplete', SubscriptionStatus::Pending],
             'paused' => ['paused', SubscriptionStatus::Pending],
         ];
+    }
+
+    public function test_a_cancelled_subscription_ignores_a_late_active_update(): void
+    {
+        Event::fake([SubscriptionUpdated::class]);
+
+        $subscription = Subscription::factory()->create([
+            'provider_subscription_id' => 'sub_test_late',
+            'status' => SubscriptionStatus::Cancelled,
+        ]);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::SubscriptionUpdated,
+            provider: 'stripe',
+            providerEventId: 'evt_late',
+            payload: ['id' => 'sub_test_late', 'status' => 'active'],
+        ));
+
+        $this->billingService->handleWebhook('stripe', request());
+
+        $this->assertEquals(SubscriptionStatus::Cancelled, $subscription->fresh()->status);
+        Event::assertNotDispatched(SubscriptionUpdated::class);
+    }
+
+    /** Stripe delivers out of order; a stale event must not undo a newer one. */
+    public function test_an_older_subscription_event_does_not_overwrite_a_newer_one(): void
+    {
+        Event::fake([SubscriptionUpdated::class]);
+
+        $subscription = Subscription::factory()->create([
+            'provider_subscription_id' => 'sub_test_order',
+            'status' => SubscriptionStatus::PastDue,
+            'last_event_at' => now(),
+        ]);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::SubscriptionUpdated,
+            provider: 'stripe',
+            providerEventId: 'evt_order_old',
+            payload: ['id' => 'sub_test_order', 'status' => 'active'],
+            occurredAt: CarbonImmutable::now()->subMinute(),
+        ));
+
+        $this->billingService->handleWebhook('stripe', request());
+
+        $this->assertEquals(SubscriptionStatus::PastDue, $subscription->fresh()->status);
+        Event::assertNotDispatched(SubscriptionUpdated::class);
+    }
+
+    /** Two providers can hand out the same ID; only this provider's row may match. */
+    public function test_provider_ids_are_scoped_to_their_provider(): void
+    {
+        Customer::factory()->create(['provider_customer_id' => 'cus_scoped']);
+        Subscription::factory()->create([
+            'provider' => 'other',
+            'provider_subscription_id' => 'sub_shared',
+        ]);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+            type: WebhookEventType::SubscriptionUpdated,
+            provider: 'stripe',
+            providerEventId: 'evt_scoped',
+            payload: ['id' => 'sub_shared', 'customer' => 'cus_scoped', 'status' => 'canceled'],
+        ));
+
+        $this->expectException(\RuntimeException::class);
+
+        $this->billingService->handleWebhook('stripe', request());
     }
 
     public function test_webhook_subscription_deleted_cancels_subscription(): void
@@ -1185,6 +1336,7 @@ class BillingServiceTest extends TestCase
     {
         $user = User::factory()->create();
         $existingCustomer = Customer::create([
+            'provider' => 'stripe',
             'user_id' => $user->id,
             'provider_customer_id' => 'cus_existing',
             'name' => 'Old Name',
@@ -1219,6 +1371,7 @@ class BillingServiceTest extends TestCase
         $customer = Customer::factory()->create(['provider_customer_id' => 'cus_pm_default']);
 
         PaymentMethod::create([
+            'provider' => 'stripe',
             'customer_id' => $customer->id,
             'provider_payment_method_id' => 'pm_test_123',
             'type' => PaymentMethodType::Card,
@@ -1257,6 +1410,7 @@ class BillingServiceTest extends TestCase
         $customer = Customer::factory()->create(['provider_customer_id' => 'cus_pm_swap']);
 
         $oldPm = PaymentMethod::create([
+            'provider' => 'stripe',
             'customer_id' => $customer->id,
             'provider_payment_method_id' => 'pm_old_default',
             'type' => PaymentMethodType::Card,

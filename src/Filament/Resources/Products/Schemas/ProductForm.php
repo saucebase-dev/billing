@@ -2,6 +2,7 @@
 
 namespace Modules\Billing\Filament\Resources\Products\Schemas;
 
+use Filament\Actions\Action;
 use Filament\Forms\Components\KeyValue;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\RichEditor;
@@ -11,12 +12,27 @@ use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
-use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\Currency;
+use Modules\Billing\Models\Product;
 
 class ProductForm
 {
+    /**
+     * The provider owns what it charges and what is on sale; the app owns how it
+     * is shown. Fields on the provider's side are read here and changed there.
+     */
+    private static function managedByGateway(?Product $record): bool
+    {
+        return $record?->provider_product_id !== null;
+    }
+
+    private static function priceManagedByGateway(Get $get): bool
+    {
+        return filled($get('provider_price_id'));
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -31,6 +47,9 @@ class ProductForm
                                     ->label(__('Name'))
                                     ->required()
                                     ->maxLength(255)
+                                    ->disabled(fn (?Product $record) => self::managedByGateway($record))
+                                    ->dehydrated(fn (?Product $record) => ! self::managedByGateway($record))
+                                    ->helperText(fn (?Product $record) => self::managedByGateway($record) ? __('Managed at the payment provider; sync to update.') : null)
                                     ->columnSpanFull(),
 
                                 TextInput::make('sku')
@@ -59,7 +78,11 @@ class ProductForm
                             ->schema([
                                 Toggle::make('is_active')
                                     ->label(__('Active'))
-                                    ->helperText(__('When disabled, the product cannot be purchased or used in the system'))
+                                    ->helperText(fn (?Product $record) => self::managedByGateway($record)
+                                        ? __('Managed at the payment provider: archive it there and sync.')
+                                        : __('When disabled, the product cannot be purchased or used in the system'))
+                                    ->disabled(fn (?Product $record) => self::managedByGateway($record))
+                                    ->dehydrated(fn (?Product $record) => ! self::managedByGateway($record))
                                     ->onColor('success')
                                     ->default(true),
 
@@ -99,12 +122,17 @@ class ProductForm
                                 Repeater::make('prices')
                                     ->relationship()
                                     ->label(__('Prices'))
+                                    ->deleteAction(fn (Action $action) => $action->hidden(
+                                        fn (array $arguments, Repeater $component) => filled($component->getItemState($arguments['item'])['provider_price_id'] ?? null),
+                                    ))
                                     ->schema([
                                         Grid::make(3)->schema([
                                             TextInput::make('amount')
                                                 ->label(__('Amount (cents)'))
                                                 ->numeric()
                                                 ->required()
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->minValue(0)
                                                 ->helperText(__('Enter price in cents (e.g., 900 = $9.00)')),
 
@@ -112,12 +140,8 @@ class ProductForm
                                                 ->label(__('Currency'))
                                                 ->options(Currency::class)
                                                 ->default(Currency::default())
-                                                ->required(),
-
-                                            Select::make('billing_scheme')
-                                                ->label(__('Billing Scheme'))
-                                                ->options(BillingScheme::class)
-                                                ->default(BillingScheme::FlatRate)
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->required(),
                                         ]),
 
@@ -130,24 +154,34 @@ class ProductForm
                                                     'month' => __('Monthly'),
                                                     'year' => __('Yearly'),
                                                 ])
-                                                ->placeholder(__('One-time (no interval)')),
+                                                ->placeholder(__('One-time (no interval)'))
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get)),
 
                                             TextInput::make('interval_count')
                                                 ->label(__('Interval Count'))
                                                 ->numeric()
                                                 ->minValue(1)
                                                 ->default(1)
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->helperText(__('e.g., 3 for quarterly')),
 
                                             Toggle::make('is_active')
                                                 ->label(__('Active'))
                                                 ->default(true)
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->onColor('success'),
                                         ]),
 
                                         TextInput::make('provider_price_id')
                                             ->label(__('Provider Price ID'))
-                                            ->helperText(__('Stripe price ID (e.g., price_xxx)'))
+                                            ->helperText(fn (Get $get) => self::priceManagedByGateway($get)
+                                                ? __('Managed at the payment provider; amount, currency and interval are synced from there.')
+                                                : __('Leave empty for a price the provider does not know about.'))
+                                            ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
+                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                             ->maxLength(255)
                                             ->columnSpanFull(),
 

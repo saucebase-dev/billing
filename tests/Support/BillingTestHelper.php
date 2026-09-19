@@ -6,11 +6,14 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Modules\Billing\Data\WebhookData;
+use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Enums\Currency;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
 
@@ -22,11 +25,25 @@ class BillingTestHelper
             return;
         }
 
-        $price = Price::where('provider_price_id', 'price_1SyadREx2sHJcHgwCt0ReZEJ')->first();
+        // Owned by the suite rather than taken from the demo seeder: `modules:seed`
+        // installs no products, and e2e expectations name this plan.
+        $product = Product::firstOrCreate(
+            ['slug' => 'pro'],
+            ['sku' => 'pro', 'name' => 'Pro', 'description' => 'End-to-end test plan', 'display_order' => 1, 'is_visible' => true, 'is_highlighted' => true, 'is_active' => true],
+        );
 
-        if (! $price) {
-            return;
-        }
+        $price = Price::firstOrCreate(
+            ['provider_price_id' => 'price_e2e_pro_monthly'],
+            [
+                'product_id' => $product->id,
+                'currency' => Currency::default(),
+                'amount' => 2900,
+                'billing_scheme' => BillingScheme::FlatRate,
+                'interval' => 'month',
+                'interval_count' => 1,
+                'is_active' => true,
+            ],
+        );
 
         // --- Active subscriber ---
         $subscriber = User::firstOrCreate(
@@ -38,11 +55,11 @@ class BillingTestHelper
 
         $subscriberCustomer = Customer::firstOrCreate(
             ['user_id' => $subscriber->id],
-            ['email' => $subscriber->email, 'name' => $subscriber->name, 'provider_customer_id' => 'cus_test_subscriber'],
+            ['email' => $subscriber->email, 'name' => $subscriber->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_test_subscriber'],
         );
 
         CheckoutSession::firstOrCreate(
-            ['provider_session_id' => 'cs_test_active'],
+            ['provider' => 'stripe', 'provider_session_id' => 'cs_test_active'],
             ['price_id' => $price->id, 'customer_id' => $subscriberCustomer->id, 'status' => CheckoutSessionStatus::Pending],
         );
 
@@ -63,11 +80,11 @@ class BillingTestHelper
 
         $cancelledCustomer = Customer::firstOrCreate(
             ['user_id' => $cancelled->id],
-            ['email' => $cancelled->email, 'name' => $cancelled->name, 'provider_customer_id' => 'cus_test_cancelled'],
+            ['email' => $cancelled->email, 'name' => $cancelled->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_test_cancelled'],
         );
 
         CheckoutSession::firstOrCreate(
-            ['provider_session_id' => 'cs_test_cancelled'],
+            ['provider' => 'stripe', 'provider_session_id' => 'cs_test_cancelled'],
             ['price_id' => $price->id, 'customer_id' => $cancelledCustomer->id, 'status' => CheckoutSessionStatus::Pending],
         );
 

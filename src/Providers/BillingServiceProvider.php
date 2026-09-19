@@ -2,19 +2,14 @@
 
 namespace Modules\Billing\Providers;
 
-use App\Providers\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
-use Modules\Billing\Console\ExpireCheckoutSessionsCommand;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Saucebase\Core\Providers\ModuleServiceProvider;
 
 class BillingServiceProvider extends ModuleServiceProvider
 {
-    protected array $commands = [
-        ExpireCheckoutSessionsCommand::class,
-    ];
-
     public function register(): void
     {
         parent::register();
@@ -33,6 +28,11 @@ class BillingServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         $this->loadViewsFrom(module_path('billing', 'resources/views'), 'billing');
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
+            $schedule->command('billing:sync-catalog')->daily();
+        });
     }
 
     /**
@@ -43,10 +43,5 @@ class BillingServiceProvider extends ModuleServiceProvider
         parent::registerConfig();
 
         $this->mergeConfigFrom(module_path('billing', 'config/services.php'), 'services');
-    }
-
-    protected function configureSchedules(Schedule $schedule): void
-    {
-        $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
     }
 }

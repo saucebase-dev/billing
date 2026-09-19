@@ -22,6 +22,7 @@ class CustomerFactory extends Factory
     {
         return [
             'user_id' => User::factory(),
+            'provider' => 'stripe',
             'provider_customer_id' => 'cus_'.fake()->regexify('[A-Za-z0-9]{14}'),
             'email' => fake()->safeEmail(),
             'name' => fake()->name(),

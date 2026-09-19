@@ -13,11 +13,13 @@ return new class extends Migration
     {
         Schema::create('webhook_events', function (Blueprint $table) {
             $table->id();
-            $table->string('provider_event_id')->unique();
             $table->string('provider');
+            $table->string('provider_event_id');
             $table->string('type')->nullable();
             $table->timestamp('processed_at')->nullable();
             $table->timestamps();
+
+            $table->unique(['provider', 'provider_event_id']);
         });
     }
 

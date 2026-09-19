@@ -22,7 +22,10 @@ return new class extends Migration
             $table->foreignIdFor(Price::class)->constrained()->cascadeOnDelete();
 
             // Provider identifiers
+            // Unknown until the hand-off, which is what picks the provider.
+            $table->string('provider')->nullable();
             $table->string('provider_session_id')->nullable();
+            $table->string('provider_url', 2048)->nullable();
 
             // URLs
             $table->string('success_url')->nullable();
@@ -41,7 +44,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_session_id');
+            $table->index(['provider', 'provider_session_id']);
             $table->index('status');
             $table->index('expires_at');
         });

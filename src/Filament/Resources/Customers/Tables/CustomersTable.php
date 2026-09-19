@@ -15,6 +15,7 @@ class CustomersTable
             ->columns([
                 TextColumn::make('user.name')
                     ->label(__('User'))
+                    ->placeholder(__('Account deleted'))
                     ->searchable()
                     ->sortable(),
 

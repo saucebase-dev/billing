@@ -28,14 +28,9 @@ class WebhookController
             ]);
 
             return response()->noContent($e->getStatusCode());
-        } catch (\RuntimeException $e) {
-            Log::warning('Webhook processing error (non-retryable)', [
-                'provider' => $provider,
-                'error' => $e->getMessage(),
-            ]);
-
-            return response()->noContent(200);
         } catch (\Throwable $e) {
+            // A 5xx is what makes the provider try again, which is the recovery
+            // for events that arrive before the ones they depend on.
             Log::error('Webhook processing failed', [
                 'provider' => $provider,
                 'error' => $e->getMessage(),

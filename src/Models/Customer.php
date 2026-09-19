@@ -11,7 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property int $id
- * @property int $user_id
+ * @property int|null $user_id
+ * @property string $provider
  * @property string|null $provider_customer_id
  * @property string|null $email
  * @property string|null $name
@@ -27,6 +28,7 @@ class Customer extends Model
 
     protected $fillable = [
         'user_id',
+        'provider',
         'provider_customer_id',
         'email',
         'name',

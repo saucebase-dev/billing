@@ -2,12 +2,12 @@
 
 namespace Modules\Billing\Settings;
 
-use App\Settings\SettingsSection;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\InvoiceStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
+use Saucebase\Core\Settings\SettingsSection;
 
 /**
  * Subscription, payment method and invoices for the signed-in user.

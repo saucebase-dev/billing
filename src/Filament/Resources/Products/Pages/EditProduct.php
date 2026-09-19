@@ -7,6 +7,7 @@ use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
+use Modules\Billing\Filament\Actions\PushProductAction;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 
 class EditProduct extends EditRecord
@@ -16,6 +17,7 @@ class EditProduct extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            PushProductAction::make(),
             ViewAction::make(),
             DeleteAction::make()
                 ->requiresConfirmation()

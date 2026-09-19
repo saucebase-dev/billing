@@ -3,10 +3,11 @@
 namespace Modules\Billing\Listeners;
 
 use Modules\Billing\Enums\SubscriptionStatus;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Notifications\SubscriptionUpdatedNotification;
 
-class SendSubscriptionUpdatedNotification
+class SendSubscriptionUpdatedNotification implements ShouldQueue
 {
     public function handle(SubscriptionUpdated $event): void
     {
@@ -19,6 +20,6 @@ class SendSubscriptionUpdatedNotification
             return;
         }
 
-        $subscription->customer->user->notify(new SubscriptionUpdatedNotification($subscription));
+        $subscription->customer->user?->notify(new SubscriptionUpdatedNotification($subscription));
     }
 }

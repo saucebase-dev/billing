@@ -14,7 +14,9 @@ use Modules\Billing\Enums\CheckoutSessionStatus;
  * @property string $uuid
  * @property int|null $customer_id
  * @property int $price_id
+ * @property string|null $provider
  * @property string|null $provider_session_id
+ * @property string|null $provider_url
  * @property string|null $success_url
  * @property string|null $cancel_url
  * @property CheckoutSessionStatus $status
@@ -31,7 +33,9 @@ class CheckoutSession extends Model
         'uuid',
         'customer_id',
         'price_id',
+        'provider',
         'provider_session_id',
+        'provider_url',
         'success_url',
         'cancel_url',
         'status',

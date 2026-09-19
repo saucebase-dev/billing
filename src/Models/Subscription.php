@@ -14,6 +14,7 @@ use Modules\Billing\Enums\SubscriptionStatus;
  * @property int $customer_id
  * @property int $price_id
  * @property int|null $payment_method_id
+ * @property string $provider
  * @property string|null $provider_subscription_id
  * @property SubscriptionStatus $status
  * @property Carbon|null $trial_starts_at
@@ -22,6 +23,7 @@ use Modules\Billing\Enums\SubscriptionStatus;
  * @property Carbon|null $current_period_ends_at
  * @property Carbon|null $cancelled_at
  * @property Carbon|null $ends_at
+ * @property Carbon|null $last_event_at
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -34,6 +36,7 @@ class Subscription extends Model
         'customer_id',
         'price_id',
         'payment_method_id',
+        'provider',
         'provider_subscription_id',
         'status',
         'trial_starts_at',
@@ -42,6 +45,7 @@ class Subscription extends Model
         'current_period_ends_at',
         'cancelled_at',
         'ends_at',
+        'last_event_at',
         'metadata',
     ];
 
@@ -58,6 +62,7 @@ class Subscription extends Model
             'current_period_ends_at' => 'datetime',
             'cancelled_at' => 'datetime',
             'ends_at' => 'datetime',
+            'last_event_at' => 'datetime',
             'metadata' => 'array',
         ];
     }

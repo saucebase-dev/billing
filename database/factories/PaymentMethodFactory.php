@@ -23,6 +23,7 @@ class PaymentMethodFactory extends Factory
     {
         return [
             'customer_id' => Customer::factory(),
+            'provider' => 'stripe',
             'provider_payment_method_id' => 'pm_'.fake()->regexify('[A-Za-z0-9]{24}'),
             'type' => PaymentMethodType::Card,
             'details' => [

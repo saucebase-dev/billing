@@ -75,7 +75,7 @@ function getToggleLabel(interval: string): string {
             class="mt-16 flex justify-center"
         >
             <div
-                class="relative flex items-center rounded-xl bg-gray-100 p-1 shadow-lg dark:bg-white/5"
+                class="bg-card/35 relative flex items-center rounded-xl p-1 shadow-lg"
             >
                 <button
                     v-for="interval in availableIntervals"
@@ -85,7 +85,7 @@ function getToggleLabel(interval: string): string {
                         'relative z-10 rounded-xl px-6 py-2 text-sm font-medium transition-all duration-200',
                         billingInterval === interval
                             ? 'bg-primary text-white'
-                            : 'text-gray-600 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white',
+                            : 'text-foreground/70 hover:text-foreground',
                     ]"
                 >
                     {{ $t(getToggleLabel(interval)) }}

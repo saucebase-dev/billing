@@ -1,1 +1,10 @@
-vendor/
+/vendor
+/composer.lock
+/package-lock.json
+/node_modules
+/resources/js/types/generated.d.ts
+/test-results
+/playwright-report
+.phpunit.cache
+.phpunit.result.cache
+.DS_Store

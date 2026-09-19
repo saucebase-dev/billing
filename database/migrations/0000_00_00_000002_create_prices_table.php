@@ -3,7 +3,6 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Modules\Billing\Models\PaymentProvider;
 use Modules\Billing\Models\Product;
 
 return new class extends Migration
@@ -18,15 +17,15 @@ return new class extends Migration
 
             // Foreign keys
             $table->foreignIdFor(Product::class)->constrained()->cascadeOnDelete();
-            $table->foreignIdFor(PaymentProvider::class)->nullable()->constrained()->nullOnDelete();
 
             // Identifiers
+            $table->string('provider');
             $table->string('provider_price_id')->nullable();
 
             // Pricing
             $table->string('currency', 3);
             $table->unsignedBigInteger('amount');
-            $table->string('billing_scheme')->default('flat_amount');
+            $table->string('billing_scheme')->default('flat_rate');
 
             // Billing interval
             $table->string('interval')->nullable();
@@ -42,7 +41,9 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
-            $table->index('provider_price_id');
+            // Unique, like every other provider ID: CatalogSync upserts on this
+            // pair, so two overlapping runs would otherwise both insert.
+            $table->unique(['provider', 'provider_price_id']);
             $table->index('is_active');
         });
     }

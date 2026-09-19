@@ -2,8 +2,8 @@
 
 namespace Modules\Billing\Filament;
 
-use App\Filament\ModulePlugin;
 use Filament\Contracts\Plugin;
+use Saucebase\Core\Filament\ModulePlugin;
 
 class BillingPlugin implements Plugin
 {

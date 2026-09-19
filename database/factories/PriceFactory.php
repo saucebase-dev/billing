@@ -24,7 +24,7 @@ class PriceFactory extends Factory
     {
         return [
             'product_id' => Product::factory(),
-            'payment_provider_id' => null,
+            'provider' => 'stripe',
             'provider_price_id' => 'price_'.fake()->regexify('[A-Za-z0-9]{24}'),
             'currency' => Currency::default(),
             'amount' => fake()->randomElement([999, 1999, 4999]),

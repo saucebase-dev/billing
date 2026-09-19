@@ -5,16 +5,23 @@ namespace Modules\Billing\Database\Seeders;
 use Illuminate\Database\Seeder;
 use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\Currency;
-use Modules\Billing\Models\PaymentProvider;
 use Modules\Billing\Models\Product;
 
-class ProductSeeder extends Seeder
+/**
+ * The demo site's plans.
+ *
+ * They carry no provider IDs: nothing here exists at a payment provider until
+ * somebody pushes it there (`billing:push-catalog`), and claiming an ID we do
+ * not own would make the push skip them and checkout fail against a price
+ * Stripe has never heard of.
+ *
+ * A real app defines its own products, which is why these are demo content
+ * rather than install data.
+ */
+class DemoProductSeeder extends Seeder
 {
-    private ?int $stripeProviderId = null;
-
     public function run(): void
     {
-        $this->stripeProviderId = PaymentProvider::where('slug', 'stripe')->value('id');
 
         $this->createFreeProduct();
         $this->createProProduct();
@@ -46,8 +53,6 @@ class ProductSeeder extends Seeder
 
         foreach ([
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_free_monthly',
                 'currency' => Currency::default(),
                 'amount' => 0,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -56,8 +61,6 @@ class ProductSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_free_yearly',
                 'currency' => Currency::default(),
                 'amount' => 0,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -67,7 +70,7 @@ class ProductSeeder extends Seeder
             ],
         ] as $price) {
             $product->prices()->updateOrCreate(
-                ['provider_price_id' => $price['provider_price_id']],
+                ['interval' => $price['interval'], 'amount' => $price['amount']],
                 $price
             );
         }
@@ -102,8 +105,6 @@ class ProductSeeder extends Seeder
 
         foreach ([
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyadREx2sHJcHgwCt0ReZEJ',
                 'currency' => Currency::default(),
                 'amount' => 2900,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -112,8 +113,6 @@ class ProductSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyaCQEx2sHJcHgwEC9VmwSZ',
                 'currency' => Currency::default(),
                 'amount' => 29000,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -127,8 +126,6 @@ class ProductSeeder extends Seeder
                 ],
             ],
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyaajEx2sHJcHgwMC3qb0c6',
                 'currency' => Currency::default(),
                 'amount' => 29900,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -138,7 +135,7 @@ class ProductSeeder extends Seeder
             ],
         ] as $price) {
             $product->prices()->updateOrCreate(
-                ['provider_price_id' => $price['provider_price_id']],
+                ['interval' => $price['interval'], 'amount' => $price['amount']],
                 $price
             );
         }
@@ -173,8 +170,6 @@ class ProductSeeder extends Seeder
 
         foreach ([
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyaL0Ex2sHJcHgwWaaTGLgo',
                 'currency' => Currency::default(),
                 'amount' => 7900,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -183,8 +178,6 @@ class ProductSeeder extends Seeder
                 'is_active' => true,
             ],
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyaLWEx2sHJcHgw3fQdYV0J',
                 'currency' => Currency::default(),
                 'amount' => 79000,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -198,8 +191,6 @@ class ProductSeeder extends Seeder
                 ],
             ],
             [
-                'payment_provider_id' => $this->stripeProviderId,
-                'provider_price_id' => 'price_1SyaXDEx2sHJcHgwt74dHzHh',
                 'currency' => Currency::default(),
                 'amount' => 79900,
                 'billing_scheme' => BillingScheme::FlatRate,
@@ -209,7 +200,7 @@ class ProductSeeder extends Seeder
             ],
         ] as $price) {
             $product->prices()->updateOrCreate(
-                ['provider_price_id' => $price['provider_price_id']],
+                ['interval' => $price['interval'], 'amount' => $price['amount']],
                 $price
             );
         }
