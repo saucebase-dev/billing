@@ -20,6 +20,16 @@ Subscription management, checkout sessions, payment processing, and webhook hand
 | Trait | `Billable` — added to User model (`billingCustomer()` HasOne relationship) |
 | Pages | `SettingsBilling`, `Checkout` |
 
+## Frontend
+
+Both stacks ship: `resources/js/vue/` and `resources/js/react/` hold the same four screens — `pages/Plans`, `pages/Checkout`, `pages/SettingsBilling` and `components/ProductCard`/`ProductSection` — plus a `CheckoutLayout`. Change one, change the other.
+
+`resources/js/utils/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
+
+Vue's `ProductSection` takes the heading through the default slot and the footer through a named one; React takes them as `children` and a `footer` prop. React has no `InputField`, so `Checkout.tsx` composes `Field`/`FieldLabel`/`Input` the way the auth module's panels do.
+
+The React sources are not type-checked in contributor mode: the root `tsconfig.json` maps `@/*` to the Vue stack and React itself is only installed once a stack is selected. The same is true of the auth module's React files.
+
 ## Routes
 
 **Checkout** (no auth required):

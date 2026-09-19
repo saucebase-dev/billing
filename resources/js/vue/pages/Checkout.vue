@@ -5,7 +5,7 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
 import { computed, ref } from 'vue';
 import CheckoutLayout from '../layouts/CheckoutLayout.vue';
-import { getIntervalDisplay } from '../utils/intervals';
+import { getIntervalDisplay } from '../../utils/intervals';
 
 import IconCheck from '~icons/heroicons/check';
 import IconLock from '~icons/heroicons/lock-closed';

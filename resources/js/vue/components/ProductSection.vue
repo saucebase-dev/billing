@@ -6,7 +6,7 @@ import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
-} from '../utils/intervals';
+} from '../../utils/intervals';
 
 import ProductCard from './ProductCard.vue';
 
