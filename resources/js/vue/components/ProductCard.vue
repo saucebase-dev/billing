@@ -56,6 +56,7 @@ watch(priceKey, () => {
     >
         <span
             v-if="product.metadata?.badge || product.is_highlighted"
+            data-testid="product-badge"
             class="bg-primary absolute left-1/2 -translate-x-1/2 -translate-y-2/1 rounded-md px-3 py-1 text-xs font-semibold text-white shadow-2xl"
         >
             {{ product.metadata?.badge || $t('Most popular') }}

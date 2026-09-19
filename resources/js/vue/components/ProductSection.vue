@@ -93,10 +93,25 @@ function getToggleLabel(interval: string): string {
             </div>
         </div>
 
+        <!-- No plan can be bought until it exists at the provider, so a fresh
+             install and a catalogue that was never pushed look the same here. -->
+        <div
+            v-if="filteredProducts.length === 0"
+            class="bg-muted/70 text-muted-foreground mx-auto mt-16 max-w-xl rounded-lg p-4 text-center text-xl"
+            data-testid="pricing-empty"
+        >
+            {{
+                $t('No plans are available right now. Please check back soon.')
+            }}
+        </div>
+
         <!-- Pricing Cards -->
         <div
-            class="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-8"
+            v-else
+            class="mx-auto mt-16 grid grid-cols-1 gap-8"
             :class="{
+                'max-w-[450px]': filteredProducts.length === 1,
+                'max-w-6xl': filteredProducts.length > 1,
                 'lg:grid-cols-2': filteredProducts.length === 2,
                 'lg:grid-cols-3': filteredProducts.length === 3,
                 'lg:grid-cols-4': filteredProducts.length >= 4,

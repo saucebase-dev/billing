@@ -88,13 +88,17 @@ class Price extends Model
     }
 
     /**
-     * A price somebody may buy right now: active itself and on a product that is
-     * active and not deleted. Hidden products stay purchasable so a private link
-     * can still sell them.
+     * A price somebody may buy right now: active itself, known to the provider,
+     * and on a product that is active and not deleted. Hidden products stay
+     * purchasable so a private link can still sell them.
+     *
+     * A price drafted here and never pushed has no provider ID, and the
+     * provider rejects a checkout that names an empty one.
      */
     public function scopePurchasable(Builder $query): Builder
     {
         return $query->where('is_active', true)
+            ->whereNotNull('provider_price_id')
             ->whereHas('product', fn (Builder $product) => $product->where('is_active', true));
     }
 

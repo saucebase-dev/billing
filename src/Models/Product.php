@@ -38,6 +38,17 @@ class Product extends Model
 
     protected static function booted(): void
     {
+        // Prices cascade from here in the database, which does not fire their own
+        // deleting guard, so a force delete would silently take prices the
+        // provider still knows. Refused for the same reason they are.
+        static::forceDeleting(function (Product $product): void {
+            $known = $product->prices()->whereNotNull('provider_price_id')->first();
+
+            if ($known) {
+                throw new \RuntimeException("Product {$product->id} has prices at {$known->provider}; archive it there and sync.");
+            }
+        });
+
         static::addGlobalScope('ordered', function ($query) {
             // Insertion order breaks the tie: rows sharing a display_order would
             // otherwise come back in whatever order the database felt like, and
@@ -112,13 +123,15 @@ class Product extends Model
     }
 
     /**
-     * Scope a query to only include displayable products with active prices.
+     * Scope a query to only include displayable products with prices that can
+     * actually be bought — the pricing page must not offer a plan the provider
+     * would refuse at checkout.
      */
     public function scopeDisplayable(Builder $query): Builder
     {
         return $query->where('is_active', true)
             ->where('is_visible', true)
-            ->with(['prices' => fn ($query) => $query->where('is_active', true)]);
+            ->with(['prices' => fn ($prices) => $prices->purchasable()]);
     }
 
     /**

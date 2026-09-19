@@ -36,7 +36,11 @@ onMounted(() => {
     // Through the router, not history.replaceState: Inertia keeps its own copy of
     // the URL and re-renders from it, so switching panel would toast again.
     url.searchParams.delete('checkout');
-    router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
+    router.replace({
+        url: url.toString(),
+        preserveState: true,
+        preserveScroll: true,
+    });
 });
 
 const isCancelling = ref(false);
@@ -130,14 +134,9 @@ function resumeSubscription() {
 
 <template>
     <div class="space-y-8" data-testid="settings-billing-panel">
-        <div class="space-y-1.5">
-            <h2 class="text-lg font-semibold">{{ $t('Billing') }}</h2>
-            <p class="text-muted-foreground text-sm">
-                {{
-                    $t('Manage your subscription, payment method, and invoices')
-                }}
-            </p>
-        </div>
+        <p class="text-muted-foreground text-sm">
+            {{ $t('Manage your subscription, payment method, and invoices') }}
+        </p>
 
         <template v-if="subscription">
             <div data-testid="subscription-section" class="space-y-8">

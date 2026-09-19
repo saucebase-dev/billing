@@ -105,6 +105,79 @@ class BillingTestHelper
         ], 'evt_fixture_cancelled_update');
     }
 
+    /**
+     * Extra plans the pricing page is asserted against.
+     *
+     * Kept apart from the subscriber fixtures because the specs that use them
+     * care about what is *listed*, not what anybody is paying for.
+     */
+    public static function createPricingFixtures(): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        $starter = Product::firstOrCreate(
+            ['slug' => 'starter'],
+            ['sku' => 'starter', 'name' => 'Starter', 'display_order' => 0, 'is_visible' => true, 'is_active' => true],
+        );
+
+        Price::firstOrCreate(
+            ['provider_price_id' => 'price_e2e_starter_monthly'],
+            [
+                'product_id' => $starter->id,
+                'currency' => Currency::default(),
+                'amount' => 900,
+                'billing_scheme' => BillingScheme::FlatRate,
+                'interval' => 'month',
+                'interval_count' => 1,
+                'is_active' => true,
+            ],
+        );
+
+        // Imported from the provider but not yet reviewed: must never be offered.
+        Product::firstOrCreate(
+            ['slug' => 'unreviewed'],
+            ['sku' => 'unreviewed', 'name' => 'Unreviewed', 'display_order' => 9, 'is_visible' => false, 'is_active' => true],
+        );
+    }
+
+    /**
+     * Finish the checkout this user just started, the way the provider's webhook
+     * would. The hand-off itself needs Stripe; everything after it does not.
+     */
+    public static function completeCheckout(string $email): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        $user = User::where('email', $email)->firstOrFail();
+
+        $customer = Customer::firstOrCreate(
+            ['user_id' => $user->id],
+            ['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id],
+        );
+
+        $session = CheckoutSession::where('status', CheckoutSessionStatus::Pending)
+            ->where(fn ($query) => $query->whereNull('customer_id')->orWhere('customer_id', $customer->id))
+            ->latest('id')
+            ->firstOrFail();
+
+        $session->update([
+            'customer_id' => $customer->id,
+            'provider' => 'stripe',
+            'provider_session_id' => 'cs_e2e_'.$session->id,
+        ]);
+
+        self::handleFakeWebhook(WebhookEventType::CheckoutCompleted, [
+            'id' => 'cs_e2e_'.$session->id,
+            'subscription' => 'sub_e2e_'.$session->id,
+            'currency' => 'eur',
+            'amount_total' => 2900,
+        ], 'evt_e2e_'.$session->id);
+    }
+
     private static function handleFakeWebhook(WebhookEventType $type, array $payload, string $eventId): void
     {
         $webhookData = new WebhookData(

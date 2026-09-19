@@ -48,7 +48,6 @@ class ProductForm
                                     ->required()
                                     ->maxLength(255)
                                     ->disabled(fn (?Product $record) => self::managedByGateway($record))
-                                    ->dehydrated(fn (?Product $record) => ! self::managedByGateway($record))
                                     ->helperText(fn (?Product $record) => self::managedByGateway($record) ? __('Managed at the payment provider; sync to update.') : null)
                                     ->columnSpanFull(),
 
@@ -82,7 +81,6 @@ class ProductForm
                                         ? __('Managed at the payment provider: archive it there and sync.')
                                         : __('When disabled, the product cannot be purchased or used in the system'))
                                     ->disabled(fn (?Product $record) => self::managedByGateway($record))
-                                    ->dehydrated(fn (?Product $record) => ! self::managedByGateway($record))
                                     ->onColor('success')
                                     ->default(true),
 
@@ -132,7 +130,6 @@ class ProductForm
                                                 ->numeric()
                                                 ->required()
                                                 ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->minValue(0)
                                                 ->helperText(__('Enter price in cents (e.g., 900 = $9.00)')),
 
@@ -141,7 +138,6 @@ class ProductForm
                                                 ->options(Currency::class)
                                                 ->default(Currency::default())
                                                 ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->required(),
                                         ]),
 
@@ -155,8 +151,7 @@ class ProductForm
                                                     'year' => __('Yearly'),
                                                 ])
                                                 ->placeholder(__('One-time (no interval)'))
-                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get)),
+                                                ->disabled(fn (Get $get) => self::priceManagedByGateway($get)),
 
                                             TextInput::make('interval_count')
                                                 ->label(__('Interval Count'))
@@ -164,14 +159,12 @@ class ProductForm
                                                 ->minValue(1)
                                                 ->default(1)
                                                 ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->helperText(__('e.g., 3 for quarterly')),
 
                                             Toggle::make('is_active')
                                                 ->label(__('Active'))
                                                 ->default(true)
                                                 ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                                 ->onColor('success'),
                                         ]),
 
@@ -181,7 +174,6 @@ class ProductForm
                                                 ? __('Managed at the payment provider; amount, currency and interval are synced from there.')
                                                 : __('Leave empty for a price the provider does not know about.'))
                                             ->disabled(fn (Get $get) => self::priceManagedByGateway($get))
-                                                ->dehydrated(fn (Get $get) => ! self::priceManagedByGateway($get))
                                             ->maxLength(255)
                                             ->columnSpanFull(),
 

@@ -1,38 +1,43 @@
 {
-  "name": "saucebase/billing",
-  "description": "Payment gateway and subscription management module for Saucebase",
-  "type": "saucebase-module",
-  "version": "v2.1.2",
-  "authors": [
-    {
-      "name": "Saucebase",
-      "email": "hello@saucebase.dev"
+    "name": "saucebase/billing",
+    "description": "Payment gateway and subscription management module for Saucebase",
+    "type": "saucebase-module",
+    "version": "v2.1.2",
+    "authors": [
+        {
+            "name": "Saucebase",
+            "email": "hello@saucebase.dev"
+        }
+    ],
+    "require": {
+        "stripe/stripe-php": "^21.0"
+    },
+    "license": "proprietary",
+    "minimum-stability": "stable",
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Modules\\Billing\\Providers\\BillingServiceProvider"
+            ],
+            "aliases": {}
+        },
+        "saucebase": {
+            "frameworks": [
+                "vue"
+            ]
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Modules\\Billing\\": "src/",
+            "Modules\\Billing\\Database\\Factories\\": "database/factories/",
+            "Modules\\Billing\\Database\\Seeders\\": "database/seeders/",
+            "Modules\\Billing\\Tests\\Support\\": "tests/Support/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Modules\\Billing\\Tests\\": "tests/"
+        }
     }
-  ],
-  "require": {
-    "stripe/stripe-php": "^21.0"
-  },
-  "license": "proprietary",
-  "minimum-stability": "stable",
-  "extra": {
-    "laravel": {
-      "providers": [
-        "Modules\\Billing\\Providers\\BillingServiceProvider"
-      ],
-      "aliases": {}
-    }
-  },
-  "autoload": {
-    "psr-4": {
-      "Modules\\Billing\\": "src/",
-      "Modules\\Billing\\Database\\Factories\\": "database/factories/",
-      "Modules\\Billing\\Database\\Seeders\\": "database/seeders/",
-      "Modules\\Billing\\Tests\\Support\\": "tests/Support/"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Modules\\Billing\\Tests\\": "tests/"
-    }
-  }
 }

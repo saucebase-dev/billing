@@ -116,6 +116,18 @@ class CheckoutControllerTest extends TestCase
             ->assertNotFound();
     }
 
+    /** The provider rejects a checkout naming a price it has never heard of. */
+    public function test_a_price_the_provider_does_not_know_cannot_be_bought(): void
+    {
+        $user = $this->createUser();
+
+        $this->session->price->update(['provider_price_id' => null]);
+
+        $this->actingAs($user)
+            ->post(route('billing.checkout.create'), ['price_id' => $this->session->price_id])
+            ->assertSessionHasErrors('price_id');
+    }
+
     public function test_opening_a_checkout_session_goes_straight_to_the_gateway(): void
     {
         app(BillingSettings::class)->fill(['redirect_to_gateway' => true])->save();

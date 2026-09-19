@@ -108,11 +108,13 @@ Everything the module ships is demo content, run by `modules:seed --demo` throug
 
 | Seeder | What it makes |
 | --- | --- |
-| `DemoProductSeeder` | The Free/Pro/Team plans and their prices, carrying the demo Stripe account's price IDs — a real install defines its own. |
+| `DemoProductSeeder` | The Free/Pro/Team plans and their prices, with no provider IDs. A real install defines its own. |
 | `DemoCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
 | `DemoSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
 
 Keep the `Demo` prefix on each: it is what marks the data as the demo site's rather than an install's.
+
+`DemoBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this the demo's pricing page is empty. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `DemoProductSeeder`: the runner draws a task line around each seeder and swallows its output.
 
 Two properties hold the demo data together, and a new seeder should keep both. It is **deterministic** — the customer names come from a fixed faker seed, and everything else from the customer's index — and it is **idempotent**, keyed on `*_demo_*` provider IDs, so reseeding updates rather than duplicates. `DemoSeederTest` covers the second.
 
@@ -127,6 +129,17 @@ php artisan test --testsuite=Modules --filter='^Modules\\Billing\\Tests'  # PHPU
 npx playwright test --project="@billing*"                  # E2E
 ```
 
+The provider hand-off is asserted in PHP, where the gateway is mocked; e2e cannot
+reach Stripe. `BillingTestHelper::completeCheckout()` finishes a started checkout
+the way the webhook would, which is what lets `checkout.flow.spec.ts` run pricing
+page → checkout → subscription as one flow.
+
+`redirect_to_gateway` is a global setting, so **exactly one spec file owns it**:
+`checkout.flow.spec.ts` switches it off in `beforeAll` and back in `afterAll`,
+and runs `describe.configure({ mode: 'serial' })`. The runner is `fullyParallel`
+— across files as well as tests — so a second file flipping the same setting
+fails both.
+
 ## Debugging Billing Issues
 
 Before diving into code, verify the external dependencies are running:
@@ -134,6 +147,11 @@ Before diving into code, verify the external dependencies are running:
 - **Stripe CLI listener** — webhooks won't fire locally without it. Run `stripe listen --forward-to localhost/billing/webhooks/stripe` and confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener.
 - **Stripe keys** — confirm `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are set and match the environment (test vs. live). A mismatched key causes silent 401s from Stripe with no local exception.
 - **Queue worker** — if listeners appear registered but notifications or role sync don't happen, check whether jobs are being queued but not processed (`php artisan queue:work`).
+
+Uncaught page errors fail the test: the `failOnPageError` fixture in
+`tests/e2e/fixtures/index.ts` is `auto`, repo-wide. A spec that provokes one on
+purpose allows it by pattern, e.g.
+`test.use({ allowedPageErrors: [/Network error/] })`.
 
 ## Gotchas
 
@@ -149,6 +167,7 @@ Before diving into code, verify the external dependencies are running:
 - Products use SoftDeletes; always scope to `active()` or `displayable()` when listing plans
 - **Billing history outlives the account.** `customers.user_id` is `nullOnDelete`, so deleting a user detaches the customer and its subscriptions, payments and invoices stay put. `Customer::$user_id` is nullable and every notification listener uses `$user?->notify()`; the admin shows *Account deleted* where the name would be
 - `subscriptions.price_id` is `restrictOnDelete`, not cascade: products cascade to prices and the admin can force-delete a product, so cascading would take paid subscriptions with it. Archive the plan instead
+- `Product` refuses a **force** delete while any of its prices has a `provider_price_id`. Prices cascade from products in the database, and a cascade does not fire the price's own model event, so without this the provider would be silently desynced
 - `Price` refuses deletion while `provider_price_id` is set — the provider's prices are immutable and subscriptions bill on them, so archive there and sync
 - `Product` carries an `ordered` global scope — every query comes back by `display_order`, then `id` to break ties. Callers never add their own `orderBy`; the admin table is `reorderable('display_order')`, so dragging a row there is what changes the pricing page
 - `BillingSettings::$currency` is the ISO code as a **string**, because `Currency::default()` does `Currency::from()` on it. A Filament `Select` fed the enum class would hand back a `Currency` instance and fail to assign — pass an array of values instead

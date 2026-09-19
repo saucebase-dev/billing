@@ -10,19 +10,20 @@ use Modules\Billing\Models\Product;
 /**
  * The demo site's plans.
  *
- * They carry no provider IDs: nothing here exists at a payment provider until
- * somebody pushes it there (`billing:push-catalog`), and claiming an ID we do
- * not own would make the push skip them and checkout fail against a price
- * Stripe has never heard of.
+ * They carry no provider IDs: claiming an ID we do not own would make the push
+ * skip them and checkout fail against a price Stripe has never heard of.
+ * `DemoBillingDatabaseSeeder` pushes them once every seeder has run.
  *
  * A real app defines its own products, which is why these are demo content
  * rather than install data.
  */
 class DemoProductSeeder extends Seeder
 {
+    /** The plans this seeder owns, and the only ones the demo may push. */
+    public const SLUGS = ['free', 'pro', 'team'];
+
     public function run(): void
     {
-
         $this->createFreeProduct();
         $this->createProProduct();
         $this->createTeamProduct();
