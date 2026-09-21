@@ -7,7 +7,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
-use Modules\Billing\Models\Customer;
 use Modules\Billing\Services\BillingService;
 
 class SubscriptionController
@@ -21,26 +20,13 @@ class SubscriptionController
         /** @var User $user */
         $user = Auth::user();
 
-        /** @var Customer|null $customer */
-        $customer = $user->billingCustomer;
-
-        $subscription = $customer
-            ?->subscriptions()
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
-            ->latest()
-            ->first();
+        $subscription = $user->billingCustomer?->currentSubscription();
 
         if (! $subscription) {
             abort(404);
         }
 
-        $periodEnd = $this->billingService->cancel($subscription, immediately: false);
-
-        $subscription->update([
-            'cancelled_at' => now(),
-            'ends_at' => $periodEnd ?? $subscription->current_period_ends_at,
-            'current_period_ends_at' => $periodEnd ?? $subscription->current_period_ends_at,
-        ]);
+        $this->billingService->cancelAtPeriodEnd($subscription);
 
         return back()->with('toast', [
             'type' => 'success',
@@ -53,10 +39,7 @@ class SubscriptionController
         /** @var User $user */
         $user = Auth::user();
 
-        /** @var Customer|null $customer */
-        $customer = $user->billingCustomer;
-
-        $subscription = $customer
+        $subscription = $user->billingCustomer
             ?->subscriptions()
             ->where('status', SubscriptionStatus::Active)
             ->whereNotNull('cancelled_at')

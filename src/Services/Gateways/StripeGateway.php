@@ -38,6 +38,7 @@ class StripeGateway implements PaymentGatewayInterface
         'invoice.payment_succeeded' => WebhookEventType::PaymentSucceeded,
         'invoice.payment_failed' => WebhookEventType::PaymentFailed,
         'invoice.paid' => WebhookEventType::InvoicePaid,
+        'charge.refunded' => WebhookEventType::PaymentRefunded,
     ];
 
     public function __construct(
@@ -131,14 +132,8 @@ class StripeGateway implements PaymentGatewayInterface
         return $matches->data[0]->id ?? null;
     }
 
-    public function cancelSubscription(Subscription $subscription, bool $immediately = false): ?\DateTimeInterface
+    public function cancelSubscription(Subscription $subscription): ?\DateTimeInterface
     {
-        if ($immediately) {
-            $this->stripe->subscriptions->cancel($subscription->provider_subscription_id);
-
-            return null;
-        }
-
         $stripeSub = $this->stripe->subscriptions->update($subscription->provider_subscription_id, [
             'cancel_at_period_end' => true,
         ]);
@@ -162,6 +157,29 @@ class StripeGateway implements PaymentGatewayInterface
         $session = $this->stripe->billingPortal->sessions->create([
             'customer' => $customer->provider_customer_id,
             'return_url' => route('settings.billing'),
+        ]);
+
+        return $session->url;
+    }
+
+    /**
+     * Opens the billing portal straight on its plan picker. Which plans it
+     * offers, and whether downgrades wait for the period end, are set in the
+     * portal's own configuration in the Stripe dashboard.
+     */
+    public function getPlanChangeUrl(Subscription $subscription): string
+    {
+        $session = $this->stripe->billingPortal->sessions->create([
+            'customer' => $subscription->customer->provider_customer_id,
+            'return_url' => route('settings.billing'),
+            'flow_data' => [
+                'type' => 'subscription_update',
+                'subscription_update' => ['subscription' => $subscription->provider_subscription_id],
+                'after_completion' => [
+                    'type' => 'redirect',
+                    'redirect' => ['return_url' => route('settings.billing')],
+                ],
+            ],
         ]);
 
         return $session->url;

@@ -3,40 +3,36 @@
 namespace Modules\Billing\Listeners;
 
 use App\Enums\Role;
-use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
-use Modules\Billing\Models\Subscription;
+use Modules\Billing\Models\Customer;
 
+/**
+ * The subscriber role follows the customer's access as a whole — a current
+ * subscription or a lifetime purchase — never one subscription's status, so
+ * ending a subscription cannot take the role from a lifetime owner.
+ */
 class SyncSubscriberRole
 {
     public function handle(SubscriptionCreated|SubscriptionUpdated|SubscriptionCancelled $event): void
     {
-        $this->sync($event->subscription);
+        if ($event->subscription->customer) {
+            $this->sync($event->subscription->customer);
+        }
     }
 
-    public function sync(Subscription $subscription): void
+    public function sync(Customer $customer): void
     {
-        $user = $subscription->customer?->user;
+        $user = $customer->user;
 
         if (! $user) {
             return;
         }
 
-        if (in_array($subscription->status, [SubscriptionStatus::Active, SubscriptionStatus::PastDue])) {
+        if ($customer->hasAccess()) {
             $user->assignRole(Role::SUBSCRIBER);
-
-            return;
-        }
-
-        // Only remove subscriber role if user has no other active/past_due subscriptions
-        $hasOtherActiveSubscription = Subscription::where('customer_id', $subscription->customer_id)
-            ->where('id', '!=', $subscription->id)
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
-            ->exists();
-
-        if (! $hasOtherActiveSubscription) {
+        } else {
             $user->removeRole(Role::SUBSCRIBER);
         }
     }

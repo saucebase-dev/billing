@@ -47,7 +47,7 @@ class SubscriptionCancelTest extends TestCase
 
         $this->gateway->expects($this->once())
             ->method('cancelSubscription')
-            ->with($this->anything(), false);
+            ->with($this->anything());
 
         $response = $this->actingAs($user)->post(route('billing.subscription.cancel'));
 

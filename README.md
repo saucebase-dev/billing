@@ -24,6 +24,9 @@ Adds a pricing page, a checkout, a billing settings page, and an admin panel for
 - **Stripe checkout** — send buyers straight to Stripe, or use the module's own checkout page first
 - **Subscriptions** — cancel at the end of the period, resume before it runs out
 - **Customer portal** — one click to Stripe's portal, where customers update their card and download invoices
+- **Plan changes** — subscribers switch plans in Stripe's portal, and the app follows
+- **One plan per customer** — checkout refuses a second subscription
+- **Lifetime deals** — sell a one-time plan that grants access for good; a full refund takes it back
 - **Pricing page** — a public `/pricing` built from your plans, with monthly, yearly and one-time prices, discount badges, and "Contact sales" plans
 - **Billing settings** — current plan, invoices and saved card at `/settings/billing`
 - **Catalogue sync** — pull your plans from Stripe, or push plans you drafted in the admin up to Stripe
@@ -86,6 +89,19 @@ In Stripe, go to **Developers → Webhooks** and add this URL:
 https://your-app.com/billing/webhooks/stripe
 ```
 
+Send these events:
+
+```
+checkout.session.completed
+checkout.session.async_payment_succeeded
+customer.subscription.updated
+customer.subscription.deleted
+invoice.paid
+invoice.payment_succeeded
+invoice.payment_failed
+charge.refunded
+```
+
 Stripe gives you a signing secret. That is the `STRIPE_WEBHOOK_SECRET` above.
 
 For local development, forward the events instead:
@@ -107,6 +123,18 @@ Plans arrive hidden. Go to `/admin` → Billing → Products, add a description 
 Stripe owns the name, price, currency and interval. Anything you write in the admin is yours and is never overwritten.
 
 If you drafted your plans in the admin first, `php artisan billing:push-catalog` creates them in Stripe for you.
+
+### 5. Turn on plan changes in Stripe
+
+Subscribers change plan in Stripe's customer portal, so Stripe needs to know what they can switch to.
+
+In Stripe, go to **Settings → Billing → Customer portal**, turn on *Customers can switch plans*, and add the products they can pick.
+
+### Block double subscriptions (optional)
+
+The app refuses a second subscription. It cannot stop one case: a customer who opens two checkouts at the same time and pays both.
+
+To close that gap, go to **Settings → Checkout** in Stripe and turn on *Limit customers to one subscription*.
 
 ### Sample data (optional)
 

@@ -3,6 +3,7 @@
 namespace Modules\Billing\Models;
 
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,8 @@ use Modules\Billing\Enums\SubscriptionStatus;
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
+ * @method static Builder<Subscription> current()
  */
 class Subscription extends Model
 {
@@ -65,6 +68,18 @@ class Subscription extends Model
             'last_event_at' => 'datetime',
             'metadata' => 'array',
         ];
+    }
+
+    /**
+     * Subscriptions that still grant access: paid up, or behind on a payment
+     * the provider is still retrying.
+     *
+     * @param  Builder<Subscription>  $query
+     * @return Builder<Subscription>
+     */
+    public function scopeCurrent(Builder $query): Builder
+    {
+        return $query->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue]);
     }
 
     /**

@@ -10,6 +10,8 @@ use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Payment;
+use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
 
@@ -79,6 +81,23 @@ class SyncSubscriberRoleTest extends TestCase
         ]);
 
         event(new SubscriptionCancelled($cancelledSubscription));
+
+        $this->assertTrue($this->user->fresh()->hasRole(Role::SUBSCRIBER));
+    }
+
+    public function test_ending_a_subscription_keeps_the_role_of_a_lifetime_owner(): void
+    {
+        $this->user->assignRole(Role::SUBSCRIBER);
+        Payment::factory()->create([
+            'customer_id' => $this->customer->id,
+            'price_id' => Price::factory()->oneTime()->create()->id,
+        ]);
+
+        $subscription = Subscription::factory()->cancelled()->create([
+            'customer_id' => $this->customer->id,
+        ]);
+
+        event(new SubscriptionCancelled($subscription));
 
         $this->assertTrue($this->user->fresh()->hasRole(Role::SUBSCRIBER));
     }

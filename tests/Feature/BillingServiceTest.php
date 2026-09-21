@@ -136,26 +136,21 @@ class BillingServiceTest extends TestCase
         $this->assertEquals('uuid', $session->getRouteKeyName());
     }
 
-    public function test_cancel_delegates_to_gateway(): void
+    public function test_cancel_at_period_end_stops_renewal_and_records_the_end(): void
     {
         $subscription = Subscription::factory()->create();
+        $periodEnd = now()->addDays(10)->startOfSecond();
 
         $this->gateway->expects($this->once())
             ->method('cancelSubscription')
-            ->with($subscription, false);
+            ->with($subscription)
+            ->willReturn($periodEnd);
 
-        $this->billingService->cancel($subscription);
-    }
+        $this->billingService->cancelAtPeriodEnd($subscription);
 
-    public function test_cancel_immediately_delegates_to_gateway(): void
-    {
-        $subscription = Subscription::factory()->create();
-
-        $this->gateway->expects($this->once())
-            ->method('cancelSubscription')
-            ->with($subscription, true);
-
-        $this->billingService->cancel($subscription, immediately: true);
+        $subscription->refresh();
+        $this->assertNotNull($subscription->cancelled_at);
+        $this->assertTrue($subscription->ends_at->equalTo($periodEnd));
     }
 
     public function test_webhook_checkout_completed_creates_subscription(): void

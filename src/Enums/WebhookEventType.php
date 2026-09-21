@@ -10,4 +10,5 @@ enum WebhookEventType: string
     case PaymentSucceeded = 'payment.succeeded';
     case PaymentFailed = 'payment.failed';
     case InvoicePaid = 'invoice.paid';
+    case PaymentRefunded = 'payment.refunded';
 }

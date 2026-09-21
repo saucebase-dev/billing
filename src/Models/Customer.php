@@ -4,10 +4,12 @@ namespace Modules\Billing\Models;
 
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Billing\Enums\PaymentStatus;
 
 /**
  * @property int $id
@@ -78,5 +80,33 @@ class Customer extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * The subscription that grants access now. A customer holds at most one,
+     * which checkout enforces; the newest wins should that ever break.
+     */
+    public function currentSubscription(): ?Subscription
+    {
+        return $this->subscriptions()->current()->latest('id')->first();
+    }
+
+    /**
+     * The one-time purchase that grants access for good. There is no row of
+     * its own: a paid, unrefunded payment for a price with no interval is it.
+     */
+    public function lifetimePayment(): ?Payment
+    {
+        return $this->payments()
+            ->whereNull('subscription_id')
+            ->where('status', PaymentStatus::Succeeded)
+            ->whereHas('price', fn (Builder $price) => $price->whereNull('interval'))
+            ->latest('id')
+            ->first();
+    }
+
+    public function hasAccess(): bool
+    {
+        return $this->currentSubscription() !== null || $this->lifetimePayment() !== null;
     }
 }

@@ -4,7 +4,6 @@ namespace Modules\Billing\Settings;
 
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\InvoiceStatus;
-use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Saucebase\Core\Settings\SettingsSection;
@@ -60,12 +59,7 @@ class BillingSection extends SettingsSection
             ];
         }
 
-        $subscription = $customer
-            ->subscriptions()
-            ->with(['price.product', 'paymentMethod'])
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
-            ->latest()
-            ->first();
+        $subscription = $customer->currentSubscription()?->load(['price.product', 'paymentMethod']);
 
         $defaultPaymentMethod = $customer
             ->paymentMethods()

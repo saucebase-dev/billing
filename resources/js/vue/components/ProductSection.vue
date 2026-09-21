@@ -8,11 +8,12 @@ import {
     normalizeInterval,
 } from '../../lib/intervals';
 
+import type { PlanAccess } from '../../lib/planAction';
 import ProductCard from './ProductCard.vue';
 
 const props = defineProps<{
     products: Product[];
-    currentProductId?: number | null;
+    access: PlanAccess;
 }>();
 
 const availableIntervals = computed(() => {
@@ -123,7 +124,7 @@ function getToggleLabel(interval: string): string {
                 :key="product.id"
                 :product="product"
                 :price="product.prices[0]"
-                :is-current="product.id === currentProductId"
+                :access="access"
             />
         </div>
 

@@ -26,7 +26,7 @@ Both stacks ship: `resources/js/vue/` and `resources/js/react/` hold the same fo
 
 `ProductSection` drops a plan with no price for the selected interval, unless it has a `cta_url` — that is how a *Contact sales* plan shows with no price. The button reads `metadata.cta_label` in both forms.
 
-The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. `ProductCard` turns the button off as *Not available* for a paid price with no `provider_price_id`, and as *Current plan* for the plan the signed-in user is subscribed to (`currentProductId`, from an Active or PastDue subscription). Checkout still enforces `purchasable()`. There is no *Upgrade*: checkout cannot change a plan, so picking another one starts a second subscription.
+The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. Each card's button comes from `planAction()` in `resources/js/lib/planAction.ts` (shared by both stacks), fed the page's `access` prop (`{productId, kind}`, kind `subscription` | `lifetime` | `free` for signed in with nothing bought, whose `productId` is the first plan with only free prices | `null` for a guest): `buy`, `change` (a plain anchor to `billing.plan.change`), `contact` (the plan's `cta_url`), or disabled `current` / `included` / `unavailable` (a paid price with no `provider_price_id`). It only decides what to offer; checkout enforces the rules. See *Plans and Access*.
 
 `resources/js/lib/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
 
@@ -46,6 +46,7 @@ POST  /billing/checkout/{checkout_session}   → billing.checkout.store   (Redir
 **Auth required**:
 ```
 GET   /billing/portal                → billing.portal
+GET   /billing/plan/change           → billing.plan.change   (throttle:10,1)
 POST  /billing/subscription/cancel   → billing.subscription.cancel
 POST  /billing/subscription/resume   → billing.subscription.resume
 GET   /settings/billing              → settings.billing
@@ -83,7 +84,7 @@ On return, `SettingsBillingController::show()` checks for a `session_id` query p
    - `InvoicePaid` → creates/updates Invoice, syncs subscription period dates
 
 ### Subscription Lifecycle
-Cancellation is always at period end by default. `SubscriptionController::cancel()` calls `BillingService::cancel()` which sets `cancelled_at` and `ends_at` on the Subscription. Resume undoes a scheduled cancellation — `gateway->resumeSubscription()` sets Stripe `cancel_at_period_end: false` and the timestamps are cleared locally. It cannot revive a subscription Stripe has already ended.
+Cancellation is always at period end by default. `SubscriptionController::cancel()` calls `BillingService::cancelAtPeriodEnd()`, which stops renewal at the provider and sets `cancelled_at` and `ends_at` locally. Resume undoes a scheduled cancellation — `gateway->resumeSubscription()` sets Stripe `cancel_at_period_end: false` and the timestamps are cleared locally. It cannot revive a subscription Stripe has already ended.
 
 Status transitions driven by webhooks: Active → PastDue (failed payment) → Cancelled (subscription deleted or never recovered). A cancelled subscription can be resumed while `ends_at` is in the future.
 
@@ -94,8 +95,20 @@ The provider is the source of truth for what is sold: `CatalogSync::run()` pulls
 
 In the admin, `ProductForm` disables the provider's fields when `Product::provider_product_id` / `Price::isManagedByGateway()` is set, and hides the repeater's delete action for synced prices. A product or price with no provider ID (demo, test) stays fully editable.
 
+### Plans and Access
+A customer holds **one plan**: a subscription or lifetime access. `Customer::hasAccess()` is the rule, and everything else asks it:
+
+- **Current subscription** — `Customer::currentSubscription()`, Active or PastDue (`Subscription::current()` scope).
+- **Lifetime access** — `Customer::lifetimePayment()`: a Succeeded payment on a price with no interval and no subscription. There is no row of its own; a full refund (`charge.refunded` with `refunded: true`) marks the payment Refunded and access ends. A partial refund only updates `amount_refunded`. A refund that arrives before its checkout has recorded the payment throws for a known customer, so the provider retries it (the same rule as subscription events); one with no `payment_intent`, or for an unknown customer, is acknowledged. The pricing page resolves lifetime before a subscription, since an upgraded subscriber keeps the old subscription until its paid period ends.
+
+`BillingService::assertCanBuy()` refuses a recurring price to anyone with access and a one-time price to a lifetime owner. `CheckoutController::create()` calls it before a session exists, and `processCheckout()` again for the guest who signed in part-way; the session-reuse return runs first, so a checkout already paid at the provider still completes. It runs before payment, so two checkouts opened at once can both be paid; the app does not try to catch that. Stripe's *Limit customers to one subscription* setting closes it, and the README lists it as an optional setup step.
+
+**Lifetime while subscribed** is allowed: after the checkout commits, `endSubscriptionReplacedByLifetime()` cancels the subscription at period end. It runs on every delivery of the event, because a failed provider call is retried and the retry finds the session already completed.
+
+**Plan changes happen at the provider.** `GET /billing/plan/change` (`billing.plan.change`) sends the subscriber to `PaymentGatewayInterface::getPlanChangeUrl()` — Stripe's billing portal opened on its plan picker. Only the user's own current subscription is used; nothing in the request names one. The change comes back as `customer.subscription.updated`, and `onSubscriptionUpdated()` moves the row to the local price with that provider ID. A price not pulled yet is logged and skipped: the daily catalog sync and the next event put it right. Which plans the portal offers, and whether downgrades wait for the period end, is the portal's configuration in the Stripe dashboard.
+
 ### Role Syncing
-`SyncSubscriberRole` listens to `SubscriptionCreated|SubscriptionUpdated|SubscriptionCancelled`. Assigns `Role::SUBSCRIBER` when the subscription status is Active or PastDue. Removes the role only if the user has no other active subscriptions (to handle multiple subscriptions).
+`SyncSubscriberRole` listens to `SubscriptionCreated|SubscriptionUpdated|SubscriptionCancelled`, and `BillingService` calls `sync(Customer)` directly for checkouts and refunds. The role follows `Customer::hasAccess()`, never one subscription's status, so ending a subscription does not take the role from a lifetime owner.
 
 ### Gateway Driver Pattern
 `PaymentGatewayManager` extends Laravel's `Manager`. The default driver is `billing.default_gateway` config. Adding a new gateway means implementing `PaymentGatewayInterface` and adding a `createXxxDriver()` method. The gateway talks to the provider and returns identifiers; `BillingService` owns every local row (`createCustomer()` returns the provider's customer ID, the service creates the `Customer`). `BillingService` is not yet provider-neutral: the webhook handlers read Stripe payload keys directly, and `fulfillCheckoutIfNeeded()`, `ensurePaymentMethod()` and `syncSubscriptionPeriod()` branch on `instanceof StripeGateway`. A second provider needs those moved behind the interface first.

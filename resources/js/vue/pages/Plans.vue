@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import SiteLayout from '@/layouts/SiteLayout.vue';
 import ProductSection from '../components/ProductSection.vue';
+import type { PlanAccess } from '../../lib/planAction';
 import type { Product } from '../../types';
 
 defineProps<{
     products: Product[];
-    /** The plan the signed-in user is subscribed to, if any. */
-    currentProductId: number | null;
+    access: PlanAccess;
 }>();
 </script>
 
@@ -14,7 +14,7 @@ defineProps<{
     <SiteLayout title="Pricing">
         <ProductSection
             :products="products"
-            :current-product-id="currentProductId"
+            :access="access"
             class="from-primary/20 bg-linear-to-b to-transparent"
         >
             <div class="mx-auto max-w-4xl text-center">

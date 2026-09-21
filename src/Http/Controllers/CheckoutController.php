@@ -33,6 +33,12 @@ class CheckoutController
             throw ValidationException::withMessages(['price_id' => __('This plan is not available.')]);
         }
 
+        // Refused before a session exists; processCheckout() checks again for
+        // the guest who signs in part-way through.
+        if ($customer = $request->user()?->billingCustomer) {
+            $this->billingService->assertCanBuy($customer, $price);
+        }
+
         $session = CheckoutSession::create([
             'price_id' => $price->id,
             'status' => CheckoutSessionStatus::Pending,

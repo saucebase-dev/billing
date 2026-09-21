@@ -4,20 +4,22 @@ import { computed, ref, watch } from 'vue';
 
 import type { Price, Product } from '@modules/billing/resources/js/types';
 import { getIntervalDisplay } from '../../lib/intervals';
+import { planAction, type PlanAccess } from '../../lib/planAction';
 
 const props = defineProps<{
     product: Product;
     price?: Price;
-    isCurrent?: boolean;
+    access: PlanAccess;
 }>();
 
-// A free plan never reaches the provider; a paid one it does not know yet
-// would be refused at checkout.
-const unavailable = computed(
-    () =>
-        !!props.price &&
-        props.price.amount > 0 &&
-        !props.price.provider_price_id,
+const action = computed(() =>
+    planAction(props.product, props.price, props.access),
+);
+
+const ctaClass = computed(() =>
+    props.product.metadata?.badge || props.product.is_highlighted
+        ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
+        : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset',
 );
 
 function handleGetStarted() {
@@ -148,33 +150,40 @@ watch(priceKey, () => {
             {{ product.metadata.tagline }}
         </p>
 
-        <!-- CTA Button -->
+        <!-- CTA: plain anchors for links that leave the app, which an Inertia
+             visit would follow over XHR and fail on the provider's CORS. -->
         <a
-            v-if="product.metadata?.cta_url"
-            :href="product.metadata.cta_url"
+            v-if="action === 'contact'"
+            :href="product.metadata?.cta_url"
             class="mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-2xl transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
-            :class="
-                product.metadata?.badge || product.is_highlighted
-                    ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
-                    : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset'
-            "
+            :class="ctaClass"
         >
             {{ product.metadata?.cta_label || $t('Get started') }}
+        </a>
+        <a
+            v-else-if="action === 'change'"
+            data-testid="change-plan-button"
+            :href="route('billing.plan.change')"
+            class="mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            :class="ctaClass"
+        >
+            {{ $t('Change plan') }}
         </a>
         <button
             v-else
             data-testid="get-started-button"
             class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            :class="
-                product.metadata?.badge || product.is_highlighted
-                    ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
-                    : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset'
-            "
-            :disabled="isCurrent || unavailable"
+            :class="ctaClass"
+            :disabled="action !== 'buy'"
             @click="handleGetStarted"
         >
-            <template v-if="isCurrent">{{ $t('Current plan') }}</template>
-            <template v-else-if="unavailable">{{
+            <template v-if="action === 'current'">{{
+                $t('Current plan')
+            }}</template>
+            <template v-else-if="action === 'included'">{{
+                $t('Included in your plan')
+            }}</template>
+            <template v-else-if="action === 'unavailable'">{{
                 $t('Not available')
             }}</template>
             <template v-else>{{

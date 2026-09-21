@@ -20,11 +20,15 @@ interface PaymentGatewayInterface
 
     public function createCheckoutSession(CheckoutData $data): CheckoutResultData;
 
-    public function cancelSubscription(Subscription $subscription, bool $immediately = false): ?\DateTimeInterface;
+    /** Stops renewal at the end of the paid period; returns when that is. */
+    public function cancelSubscription(Subscription $subscription): ?\DateTimeInterface;
 
     public function resumeSubscription(Subscription $subscription): void;
 
     public function getManagementUrl(Customer $customer): string;
+
+    /** Where the customer picks another plan for this subscription at the provider. */
+    public function getPlanChangeUrl(Subscription $subscription): string;
 
     public function verifyAndParseWebhook(Request $request): WebhookData;
 
