@@ -123,15 +123,15 @@ class Product extends Model
     }
 
     /**
-     * Scope a query to only include displayable products with prices that can
-     * actually be bought — the pricing page must not offer a plan the provider
-     * would refuse at checkout.
+     * Scope a query to the plans on the pricing page, with their active prices.
+     * A price the provider does not know yet is listed too, and the page turns
+     * its button off: checkout still refuses it through `purchasable()`.
      */
     public function scopeDisplayable(Builder $query): Builder
     {
         return $query->where('is_active', true)
             ->where('is_visible', true)
-            ->with(['prices' => fn ($prices) => $prices->purchasable()]);
+            ->with(['prices' => fn ($prices) => $prices->where('is_active', true)]);
     }
 
     /**

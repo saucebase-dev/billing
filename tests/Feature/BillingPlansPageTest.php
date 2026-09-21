@@ -2,10 +2,14 @@
 
 namespace Modules\Billing\Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
+use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
 
 class BillingPlansPageTest extends TestCase
@@ -83,5 +87,46 @@ class BillingPlansPageTest extends TestCase
             ->assertInertia(
                 fn (AssertableInertia $page) => $page->has('products.0.prices', 0)
             );
+    }
+
+    /** Shown with its button off, rather than leaving an empty card before the push. */
+    public function test_a_price_the_provider_does_not_know_yet_is_still_listed(): void
+    {
+        $product = $this->plan('Drafted');
+        $product->prices()->update(['provider_price_id' => null]);
+
+        $this->get(route('billing.plans'))
+            ->assertInertia(
+                fn (AssertableInertia $page) => $page
+                    ->has('products.0.prices', 1)
+                    ->where('products.0.prices.0.provider_price_id', null)
+            );
+    }
+
+    public function test_a_subscriber_sees_which_plan_is_theirs(): void
+    {
+        $product = $this->plan('Mine');
+        $user = User::factory()->create();
+        Subscription::factory()->create([
+            'customer_id' => Customer::factory()->create(['user_id' => $user->id])->id,
+            'price_id' => $product->prices()->first()->id,
+        ]);
+
+        $this->actingAs($user)->get(route('billing.plans'))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('currentProductId', $product->id));
+    }
+
+    public function test_a_cancelled_plan_is_not_current(): void
+    {
+        $product = $this->plan('Gone');
+        $user = User::factory()->create();
+        Subscription::factory()->create([
+            'customer_id' => Customer::factory()->create(['user_id' => $user->id])->id,
+            'price_id' => $product->prices()->first()->id,
+            'status' => SubscriptionStatus::Cancelled,
+        ]);
+
+        $this->actingAs($user)->get(route('billing.plans'))
+            ->assertInertia(fn (AssertableInertia $page) => $page->where('currentProductId', null));
     }
 }

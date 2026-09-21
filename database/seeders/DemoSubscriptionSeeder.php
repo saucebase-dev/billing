@@ -40,7 +40,7 @@ class DemoSubscriptionSeeder extends Seeder
 
     public function run(): void
     {
-        $customers = Customer::where('provider_customer_id', 'like', 'cus_demo_%')
+        $customers = Customer::where('email', 'like', 'demo-customer-%@example.com')
             ->orderBy('created_at')
             ->get();
 

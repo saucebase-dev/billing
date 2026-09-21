@@ -49,7 +49,6 @@ class BillingSection extends SettingsSection
     {
         $user = Auth::user();
 
-        /** @var Customer|null $customer */
         $customer = $user->billingCustomer;
 
         if (! $customer) {

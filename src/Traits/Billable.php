@@ -9,6 +9,8 @@ trait Billable
 {
     /**
      * Get the customer's billing information.
+     *
+     * @return HasOne<Customer, $this>
      */
     public function billingCustomer(): HasOne
     {

@@ -20,11 +20,13 @@ function getToggleLabel(interval: string): string {
 
 export default function ProductSection({
     products,
+    currentProductId = null,
     className,
     children,
     footer,
 }: {
     products: Product[];
+    currentProductId?: number | null;
     className?: string;
     children?: ReactNode;
     footer?: ReactNode;
@@ -66,7 +68,10 @@ export default function ProductSection({
                         matchesInterval(price.interval, billingInterval),
                     ),
                 }))
-                .filter((product) => product.prices.length > 0),
+                .filter(
+                    (product) =>
+                        product.prices.length > 0 || product.metadata?.cta_url,
+                ),
         [products, billingInterval],
     );
 
@@ -107,8 +112,6 @@ export default function ProductSection({
                 </div>
             )}
 
-            {/* No plan can be bought until it exists at the provider, so a fresh
-                install and a catalogue that was never pushed look the same here. */}
             {filteredProducts.length === 0 ? (
                 <div
                     className="bg-muted/70 text-muted-foreground mx-auto mt-16 max-w-xl rounded-lg p-4 text-center text-xl"
@@ -128,6 +131,7 @@ export default function ProductSection({
                             key={product.id}
                             product={product}
                             price={product.prices[0]}
+                            isCurrent={product.id === currentProductId}
                         />
                     ))}
                 </div>

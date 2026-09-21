@@ -24,6 +24,10 @@ Subscription management, checkout sessions, payment processing, and webhook hand
 
 Both stacks ship: `resources/js/vue/` and `resources/js/react/` hold the same four screens — `pages/Plans`, `pages/Checkout`, `pages/SettingsBilling` and `components/ProductCard`/`ProductSection` — plus a `CheckoutLayout`. Change one, change the other.
 
+`ProductSection` drops a plan with no price for the selected interval, unless it has a `cta_url` — that is how a *Contact sales* plan shows with no price. The button reads `metadata.cta_label` in both forms.
+
+The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. `ProductCard` turns the button off as *Not available* for a paid price with no `provider_price_id`, and as *Current plan* for the plan the signed-in user is subscribed to (`currentProductId`, from an Active or PastDue subscription). Checkout still enforces `purchasable()`. There is no *Upgrade*: checkout cannot change a plan, so picking another one starts a second subscription.
+
 `resources/js/lib/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
 
 Vue's `ProductSection` takes the heading through the default slot and the footer through a named one; React takes them as `children` and a `footer` prop. React has no `InputField`, so `Checkout.tsx` composes `Field`/`FieldLabel`/`Input` the way the auth module's panels do.
@@ -118,15 +122,15 @@ Everything the module ships is demo content, run by `modules:seed --demo` throug
 
 | Seeder | What it makes |
 | --- | --- |
-| `DemoProductSeeder` | The Free/Pro/Team plans and their prices, with no provider IDs. A real install defines its own. |
+| `DemoProductSeeder` | Five plans for a made-up developer tool — Free, Pro (highlighted), Team, Lifetime (one-time) and Enterprise (no price, `cta_url` to sales) — chosen so the pricing page shows every option it reads. No provider IDs. A real install defines its own. |
 | `DemoCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
 | `DemoSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
 
 Keep the `Demo` prefix on each: it is what marks the data as the demo site's rather than an install's.
 
-`DemoBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this the demo's pricing page is empty. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `DemoProductSeeder`: the runner draws a task line around each seeder and swallows its output.
+`DemoBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this every paid plan on the demo's pricing page says *Not available*. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `DemoProductSeeder`: the runner draws a task line around each seeder and swallows its output.
 
-Two properties hold the demo data together, and a new seeder should keep both. It is **deterministic** — the customer names come from a fixed faker seed, and everything else from the customer's index — and it is **idempotent**, keyed on `*_demo_*` provider IDs, so reseeding updates rather than duplicates. `DemoSeederTest` covers the second.
+Two properties hold the demo data together, and a new seeder should keep both. It is **deterministic** — the customer names come from a fixed faker seed, and everything else from the customer's index — and it is **idempotent**, keyed on slugs, users and `*_demo_*` IDs, so reseeding updates rather than duplicates. Customers carry no provider ID: checkout creates a real one the first time a demo account buys. `DemoSeederTest` covers the second.
 
 Signup dates drive the whole dashboard: `DemoCustomerSeeder::SIGNUPS_PER_MONTH` is the growth curve the revenue and subscription charts draw, and `DemoSubscriptionSeeder` bills forward from each signup date to today.
 

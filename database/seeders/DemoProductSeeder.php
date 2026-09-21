@@ -8,7 +8,10 @@ use Modules\Billing\Enums\Currency;
 use Modules\Billing\Models\Product;
 
 /**
- * The demo site's plans.
+ * The demo site's plans, for a made-up developer tool. Between them they use
+ * every option the pricing page reads: a free plan, monthly and yearly prices
+ * with a discount, a highlighted plan, a one-time price, a plan with no price
+ * that links to sales, and per-plan button labels and small print.
  *
  * They carry no provider IDs: claiming an ID we do not own would make the push
  * skip them and checkout fail against a price Stripe has never heard of.
@@ -20,190 +23,116 @@ use Modules\Billing\Models\Product;
 class DemoProductSeeder extends Seeder
 {
     /** The plans this seeder owns, and the only ones the demo may push. */
-    public const SLUGS = ['free', 'pro', 'team'];
+    public const SLUGS = ['free', 'pro', 'team', 'lifetime', 'enterprise'];
 
     public function run(): void
     {
-        $this->createFreeProduct();
-        $this->createProProduct();
-        $this->createTeamProduct();
+        foreach ($this->plans() as $order => $plan) {
+            $product = Product::updateOrCreate(
+                ['slug' => $plan['slug']],
+                [
+                    'sku' => $plan['slug'],
+                    'name' => $plan['name'],
+                    'description' => $plan['description'],
+                    'display_order' => $order + 1,
+                    'is_visible' => true,
+                    'is_highlighted' => $plan['slug'] === 'pro',
+                    'is_active' => true,
+                    'features' => $plan['features'],
+                    'metadata' => $plan['metadata'],
+                ],
+            );
+
+            foreach ($plan['prices'] as $price) {
+                $product->prices()->updateOrCreate(
+                    ['interval' => $price['interval'], 'amount' => $price['amount']],
+                    [
+                        'currency' => Currency::default(),
+                        'billing_scheme' => BillingScheme::FlatRate,
+                        'interval_count' => $price['interval'] === null ? null : 1,
+                        'is_active' => true,
+                        'metadata' => $price['metadata'] ?? null,
+                    ] + $price,
+                );
+            }
+        }
     }
 
-    private function createFreeProduct(): void
+    /**
+     * @return list<array{slug: string, name: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
+     */
+    private function plans(): array
     {
-        $product = Product::updateOrCreate(
-            ['slug' => 'free'],
+        return [
             [
-                'sku' => 'free',
+                'slug' => 'free',
                 'name' => 'Free',
-                'description' => 'Get started with the basics',
-                'display_order' => 1,
-                'is_visible' => true,
-                'is_highlighted' => false,
-                'is_active' => true,
-                'features' => [
-                    '1 project',
-                    '500MB storage',
-                    'Community support',
-                ],
+                'description' => 'Everything you need to ship a side project.',
+                'features' => ['3 projects', '10k API requests / month', 'Community support'],
                 'metadata' => [
-                    'tagline' => 'For hobbyists',
+                    'tagline' => 'For side projects',
+                    'cta_label' => 'Start for free',
+                    'after_cta' => 'No card required',
                 ],
-            ]
-        );
-
-        foreach ([
-            [
-                'currency' => Currency::default(),
-                'amount' => 0,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'month',
-                'interval_count' => 1,
-                'is_active' => true,
+                'prices' => [
+                    ['interval' => 'month', 'amount' => 0],
+                    ['interval' => 'year', 'amount' => 0],
+                ],
             ],
             [
-                'currency' => Currency::default(),
-                'amount' => 0,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'year',
-                'interval_count' => 1,
-                'is_active' => true,
-            ],
-        ] as $price) {
-            $product->prices()->updateOrCreate(
-                ['interval' => $price['interval'], 'amount' => $price['amount']],
-                $price
-            );
-        }
-    }
-
-    private function createProProduct(): void
-    {
-        $product = Product::updateOrCreate(
-            ['slug' => 'pro'],
-            [
-                'sku' => 'pro',
+                'slug' => 'pro',
                 'name' => 'Pro',
-                'description' => 'Everything you need to work independently',
-                'display_order' => 3,
-                'is_visible' => true,
-                'is_highlighted' => true,
-                'is_active' => true,
-                'features' => [
-                    'Unlimited projects',
-                    '50GB storage',
-                    'Priority email support',
-                    'Advanced analytics',
-                    'API access',
-                    'Custom domains',
-                ],
+                'description' => 'No limits on projects, and the tools to run them in production.',
+                'features' => ['Unlimited projects', '1M API requests / month', 'Custom domains', 'Webhooks', 'Priority email support'],
                 'metadata' => [
-                    'badge' => 'Most Popular',
-                    'tagline' => 'For professionals',
+                    'tagline' => 'For solo developers',
+                    'after_cta' => 'Cancel anytime',
                 ],
-            ]
-        );
-
-        foreach ([
-            [
-                'currency' => Currency::default(),
-                'amount' => 2900,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'month',
-                'interval_count' => 1,
-                'is_active' => true,
-            ],
-            [
-                'currency' => Currency::default(),
-                'amount' => 29000,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'year',
-                'interval_count' => 1,
-                'is_active' => true,
-                'metadata' => [
-                    'badge' => 'Save 17%',
-                    'label' => 'Billed annually',
-                    'original_price' => '34800',
+                'prices' => [
+                    ['interval' => 'month', 'amount' => 2900],
+                    ['interval' => 'year', 'amount' => 29000, 'metadata' => ['badge' => 'Save 17%', 'original_price' => '34800']],
                 ],
             ],
             [
-                'currency' => Currency::default(),
-                'amount' => 29900,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => null,
-                'interval_count' => null,
-                'is_active' => false,
-            ],
-        ] as $price) {
-            $product->prices()->updateOrCreate(
-                ['interval' => $price['interval'], 'amount' => $price['amount']],
-                $price
-            );
-        }
-    }
-
-    private function createTeamProduct(): void
-    {
-        $product = Product::updateOrCreate(
-            ['slug' => 'team'],
-            [
-                'sku' => 'team',
+                'slug' => 'team',
                 'name' => 'Team',
-                'description' => 'Collaborate with your team, up to 25 members',
-                'display_order' => 4,
-                'is_visible' => true,
-                'is_highlighted' => false,
-                'is_active' => true,
-                'features' => [
-                    'Everything in Pro',
-                    'Up to 25 team members',
-                    '200GB shared storage',
-                    'Team roles & permissions',
-                    'Priority support',
-                    'Shared dashboards',
-                    'Audit logs',
-                ],
+                'description' => 'Work together on every project, up to 25 members.',
+                'features' => ['Everything in Pro', 'Up to 25 members', 'Roles & permissions', 'Audit logs', 'SSO (SAML)'],
                 'metadata' => [
-                    'tagline' => 'For teams',
+                    'tagline' => 'For growing teams',
+                    'after_cta' => 'Cancel anytime',
                 ],
-            ]
-        );
-
-        foreach ([
-            [
-                'currency' => Currency::default(),
-                'amount' => 7900,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'month',
-                'interval_count' => 1,
-                'is_active' => true,
+                'prices' => [
+                    ['interval' => 'month', 'amount' => 7900],
+                    ['interval' => 'year', 'amount' => 79000, 'metadata' => ['badge' => 'Save 17%', 'original_price' => '94800']],
+                ],
             ],
             [
-                'currency' => Currency::default(),
-                'amount' => 79000,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => 'year',
-                'interval_count' => 1,
-                'is_active' => true,
+                'slug' => 'lifetime',
+                'name' => 'Lifetime',
+                'description' => 'Pro, paid once and never again.',
+                'features' => ['Everything in Pro, forever', 'All future updates'],
                 'metadata' => [
-                    'badge' => 'Save 17%',
-                    'label' => 'Billed annually',
-                    'original_price' => '94800',
+                    'tagline' => 'Pay once, own it',
+                    'cta_label' => 'Buy lifetime',
+                    'after_cta' => 'One payment, yours forever',
+                ],
+                'prices' => [
+                    ['interval' => null, 'amount' => 29900],
                 ],
             ],
             [
-                'currency' => Currency::default(),
-                'amount' => 79900,
-                'billing_scheme' => BillingScheme::FlatRate,
-                'interval' => null,
-                'interval_count' => null,
-                'is_active' => false,
+                'slug' => 'enterprise',
+                'name' => 'Enterprise',
+                'description' => 'Custom limits, contracts and support for large organisations.',
+                'features' => ['Unlimited members', 'Uptime SLA', 'Dedicated support engineer', 'Self-hosted option'],
+                'metadata' => [
+                    'tagline' => 'For large organisations',
+                    'cta_label' => 'Contact sales',
+                    'cta_url' => 'mailto:sales@example.com',
+                ],
+                'prices' => [],
             ],
-        ] as $price) {
-            $product->prices()->updateOrCreate(
-                ['interval' => $price['interval'], 'amount' => $price['amount']],
-                $price
-            );
-        }
+        ];
     }
 }

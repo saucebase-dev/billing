@@ -18,11 +18,16 @@ function formatPrice(amount: number | string, currency?: string): string {
 export default function ProductCard({
     product,
     price,
+    isCurrent = false,
 }: {
     product: Product;
-    price: Price;
+    price?: Price;
+    isCurrent?: boolean;
 }) {
     const t = useT();
+    // A free plan never reaches the provider; a paid one it does not know yet
+    // would be refused at checkout.
+    const unavailable = !!price && price.amount > 0 && !price.provider_price_id;
     const featured = !!product.metadata?.badge || product.is_highlighted;
     const [isAnimating, setIsAnimating] = useState(false);
 
@@ -155,10 +160,15 @@ export default function ProductCard({
             ) : (
                 <button
                     data-testid="get-started-button"
-                    className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ${ctaClasses}`}
+                    className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${ctaClasses}`}
+                    disabled={isCurrent || unavailable}
                     onClick={handleGetStarted}
                 >
-                    {t('Get started')}
+                    {isCurrent
+                        ? t('Current plan')
+                        : unavailable
+                          ? t('Not available')
+                          : product.metadata?.cta_label || t('Get started')}
                 </button>
             )}
 

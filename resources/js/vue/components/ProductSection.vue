@@ -12,6 +12,7 @@ import ProductCard from './ProductCard.vue';
 
 const props = defineProps<{
     products: Product[];
+    currentProductId?: number | null;
 }>();
 
 const availableIntervals = computed(() => {
@@ -57,7 +58,9 @@ const filteredProducts = computed(() => {
                 matchesInterval(price.interval, billingInterval.value),
             ),
         }))
-        .filter((product) => product.prices.length > 0);
+        .filter(
+            (product) => product.prices.length > 0 || product.metadata?.cta_url,
+        );
 });
 
 function getToggleLabel(interval: string): string {
@@ -93,8 +96,6 @@ function getToggleLabel(interval: string): string {
             </div>
         </div>
 
-        <!-- No plan can be bought until it exists at the provider, so a fresh
-             install and a catalogue that was never pushed look the same here. -->
         <div
             v-if="filteredProducts.length === 0"
             class="bg-muted/70 text-muted-foreground mx-auto mt-16 max-w-xl rounded-lg p-4 text-center text-xl"
@@ -122,6 +123,7 @@ function getToggleLabel(interval: string): string {
                 :key="product.id"
                 :product="product"
                 :price="product.prices[0]"
+                :is-current="product.id === currentProductId"
             />
         </div>
 

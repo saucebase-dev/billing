@@ -78,10 +78,9 @@ class DemoCustomerSeeder extends Seeder
         $user->assignRole('user');
 
         $customer = Customer::firstOrCreate(
-            ['provider' => 'stripe',
-                'provider_customer_id' => "cus_demo_{$reference}"],
+            ['user_id' => $user->id],
             [
-                'user_id' => $user->id,
+                'provider' => 'stripe',
                 'email' => $email,
                 'name' => $name,
                 'phone' => $faker->phoneNumber(),

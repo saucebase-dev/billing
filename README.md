@@ -24,7 +24,7 @@ Adds a pricing page, a checkout, a billing settings page, and an admin panel for
 - **Stripe checkout** — send buyers straight to Stripe, or use the module's own checkout page first
 - **Subscriptions** — cancel at the end of the period, resume before it runs out
 - **Customer portal** — one click to Stripe's portal, where customers update their card and download invoices
-- **Pricing page** — a public `/pricing` built from your plans, with monthly and yearly switching
+- **Pricing page** — a public `/pricing` built from your plans, with monthly, yearly and one-time prices, discount badges, and "Contact sales" plans
 - **Billing settings** — current plan, invoices and saved card at `/settings/billing`
 - **Catalogue sync** — pull your plans from Stripe, or push plans you drafted in the admin up to Stripe
 - **Webhooks** — safe to retry, and handles events arriving out of order
@@ -114,7 +114,7 @@ If you drafted your plans in the admin first, `php artisan billing:push-catalog`
 php artisan modules:seed --module=billing --demo
 ```
 
-Adds three plans plus demo customers and subscriptions so you can look around. If your Stripe keys are set, the plans are pushed to Stripe so they can be bought. Do not run this in production.
+Adds five sample plans (Free, Pro, Team, Lifetime and Enterprise) plus demo customers and subscriptions so you can look around. If your Stripe keys are set, the plans are pushed to Stripe so they can be bought. Do not run this in production.
 
 ## Extending
 

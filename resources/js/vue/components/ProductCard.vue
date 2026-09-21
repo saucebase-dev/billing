@@ -7,8 +7,18 @@ import { getIntervalDisplay } from '../../lib/intervals';
 
 const props = defineProps<{
     product: Product;
-    price: Price;
+    price?: Price;
+    isCurrent?: boolean;
 }>();
+
+// A free plan never reaches the provider; a paid one it does not know yet
+// would be refused at checkout.
+const unavailable = computed(
+    () =>
+        !!props.price &&
+        props.price.amount > 0 &&
+        !props.price.provider_price_id,
+);
 
 function handleGetStarted() {
     if (!props.price) return;
@@ -154,15 +164,22 @@ watch(priceKey, () => {
         <button
             v-else
             data-testid="get-started-button"
-            class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+            class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             :class="
                 product.metadata?.badge || product.is_highlighted
                     ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
                     : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset'
             "
+            :disabled="isCurrent || unavailable"
             @click="handleGetStarted"
         >
-            {{ $t('Get started') }}
+            <template v-if="isCurrent">{{ $t('Current plan') }}</template>
+            <template v-else-if="unavailable">{{
+                $t('Not available')
+            }}</template>
+            <template v-else>{{
+                product.metadata?.cta_label || $t('Get started')
+            }}</template>
         </button>
 
         <!-- After CTA text from metadata -->

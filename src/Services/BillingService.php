@@ -239,6 +239,14 @@ class BillingService
             )
             : null;
 
+        $customerData = new CustomerData(
+            user: $user,
+            name: $name,
+            email: $email,
+            phone: $phone,
+            address: $addressData,
+        );
+
         $customer = Customer::where('user_id', $user->id)->first();
 
         if ($customer) {
@@ -252,18 +260,15 @@ class BillingService
                 $updates['address'] = $addressData->toArray();
             }
 
+            if (blank($customer->provider_customer_id)) {
+                $updates['provider_customer_id'] = $this->manager->driver($customer->provider)
+                    ->createCustomer($customerData);
+            }
+
             $customer->update($updates);
 
             return $customer;
         }
-
-        $customerData = new CustomerData(
-            user: $user,
-            name: $name,
-            email: $email,
-            phone: $phone,
-            address: $addressData,
-        );
 
         $provider ??= $this->manager->getDefaultDriver();
 

@@ -1364,6 +1364,28 @@ class BillingServiceTest extends TestCase
         $this->assertDatabaseCount('customers', 1);
     }
 
+    public function test_process_checkout_gives_an_existing_customer_without_a_provider_id_one(): void
+    {
+        $user = User::factory()->create();
+        $customer = Customer::factory()->withoutProvider()->create(['user_id' => $user->id]);
+        $price = Price::factory()->create();
+        $session = CheckoutSession::create([
+            'price_id' => $price->id,
+            'status' => CheckoutSessionStatus::Pending,
+            'expires_at' => now()->addHours(24),
+        ]);
+
+        $this->gateway->expects($this->once())->method('createCustomer')->willReturn('cus_created');
+        $this->gateway->method('createCheckoutSession')->willReturn(
+            new CheckoutResultData(sessionId: 'cs_created', url: 'https://stripe.com/checkout', provider: 'stripe'),
+        );
+
+        $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel');
+
+        $this->assertSame('cus_created', $customer->refresh()->provider_customer_id);
+        $this->assertDatabaseCount('customers', 1);
+    }
+
     public function test_ensure_payment_method_reuses_existing_default(): void
     {
         Event::fake([PaymentSucceeded::class]);
