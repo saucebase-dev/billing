@@ -24,7 +24,7 @@ Subscription management, checkout sessions, payment processing, and webhook hand
 
 Both stacks ship: `resources/js/vue/` and `resources/js/react/` hold the same four screens — `pages/Plans`, `pages/Checkout`, `pages/SettingsBilling` and `components/ProductCard`/`ProductSection` — plus a `CheckoutLayout`. Change one, change the other.
 
-`resources/js/utils/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
+`resources/js/lib/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
 
 Vue's `ProductSection` takes the heading through the default slot and the footer through a named one; React takes them as `children` and a `footer` prop. React has no `InputField`, so `Checkout.tsx` composes `Field`/`FieldLabel`/`Input` the way the auth module's panels do.
 

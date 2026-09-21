@@ -1,22 +1,19 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useDialog } from '@/hooks/useDialog';
-import { useT } from '@/i18n';
+import { useT, useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
+import { formatDate } from '@js/lib/dates';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import type { Invoice, PaymentMethod, Subscription } from '../../types';
 
-function formatDate(date: string | null): string {
-    if (!date) return '';
-
-    return new Date(date).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });
-}
+const longDate: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+};
 
 function formatCurrency(amount: number, currency: string | null): string {
     return new Intl.NumberFormat(undefined, {
@@ -111,7 +108,7 @@ export default function SettingsBilling({
     invoices: Invoice[];
     billingPortalUrl: string;
 }) {
-    const t = useT();
+    const { t, locale } = useTranslation();
     const { confirm } = useDialog();
     const [isCancelling, setIsCancelling] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
@@ -203,7 +200,11 @@ export default function SettingsBilling({
                                         &middot;{' '}
                                         <span className="text-destructive">
                                             {t('Cancels on')}{' '}
-                                            {formatDate(subscription.ends_at)}
+                                            {formatDate(
+                                                subscription.ends_at,
+                                                locale,
+                                                longDate,
+                                            )}
                                         </span>
                                     </>
                                 ) : (
@@ -213,6 +214,8 @@ export default function SettingsBilling({
                                             &middot; {t('Renews on')}{' '}
                                             {formatDate(
                                                 subscription.current_period_ends_at,
+                                                locale,
+                                                longDate,
                                             )}
                                         </>
                                     )
@@ -281,6 +284,8 @@ export default function SettingsBilling({
                                                 <td className="text-foreground py-3">
                                                     {formatDate(
                                                         invoice.paid_at,
+                                                        locale,
+                                                        longDate,
                                                     )}
                                                 </td>
                                                 <td className="text-foreground py-3">

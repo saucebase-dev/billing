@@ -6,7 +6,7 @@ import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
-} from '../../utils/intervals';
+} from '../../lib/intervals';
 
 import ProductCard from './ProductCard';
 

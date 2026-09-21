@@ -2,6 +2,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useDialog } from '@/composables/useDialog';
+import { useLocalization } from '@/composables/useLocalization';
+import { formatDate } from '@js/lib/dates';
 import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { toast } from 'vue-sonner';
@@ -47,14 +49,13 @@ const isCancelling = ref(false);
 const isResuming = ref(false);
 const { confirm } = useDialog();
 
-function formatDate(date: string | null): string {
-    if (!date) return '';
-    return new Date(date).toLocaleDateString(undefined, {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-    });
-}
+const { language } = useLocalization();
+
+const longDate: Intl.DateTimeFormatOptions = {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+};
 
 function formatCurrency(amount: number, currency: string | null): string {
     const cur = currency?.toUpperCase() ?? 'USD';
@@ -156,7 +157,13 @@ function resumeSubscription() {
                                 &middot;
                                 <span class="text-destructive">
                                     {{ $t('Cancels on') }}
-                                    {{ formatDate(subscription.ends_at) }}
+                                    {{
+                                        formatDate(
+                                            subscription.ends_at,
+                                            language,
+                                            longDate,
+                                        )
+                                    }}
                                 </span>
                             </template>
                             <template
@@ -167,6 +174,8 @@ function resumeSubscription() {
                                 {{
                                     formatDate(
                                         subscription.current_period_ends_at,
+                                        language,
+                                        longDate,
                                     )
                                 }}
                             </template>
@@ -286,7 +295,13 @@ function resumeSubscription() {
                                     class="border-border border-b last:border-0"
                                 >
                                     <td class="text-foreground py-3">
-                                        {{ formatDate(invoice.paid_at) }}
+                                        {{
+                                            formatDate(
+                                                invoice.paid_at,
+                                                language,
+                                                longDate,
+                                            )
+                                        }}
                                     </td>
                                     <td class="text-foreground py-3">
                                         {{

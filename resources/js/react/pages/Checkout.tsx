@@ -5,7 +5,7 @@ import { useT } from '@/i18n';
 import { useForm, usePage } from '@inertiajs/react';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
 import { useState, type FormEvent } from 'react';
-import { getIntervalDisplay } from '../../utils/intervals';
+import { getIntervalDisplay } from '../../lib/intervals';
 import CheckoutLayout from '../layouts/CheckoutLayout';
 
 import IconCheck from '~icons/heroicons/check';

@@ -3,7 +3,7 @@ import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
 import type { Price, Product } from '@modules/billing/resources/js/types';
-import { getIntervalDisplay } from '../../utils/intervals';
+import { getIntervalDisplay } from '../../lib/intervals';
 
 function formatPrice(amount: number | string, currency?: string): string {
     const cents = typeof amount === 'string' ? parseFloat(amount) : amount;
