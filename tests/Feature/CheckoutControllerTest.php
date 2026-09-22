@@ -5,11 +5,11 @@ namespace Modules\Billing\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutResultData;
-use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
 use Tests\TestCase;
@@ -172,5 +172,16 @@ class CheckoutControllerTest extends TestCase
             $owner->id,
             $this->session->fresh()->customer->user_id,
         );
+    }
+
+    /** A pending session freezes its plan, so a guest's is refused before it exists. */
+    public function test_a_guest_cannot_open_a_checkout_for_the_free_plan(): void
+    {
+        $price = Price::factory()->create(['product_id' => Product::factory()->free()->create()->id, 'amount' => 0]);
+
+        $this->post(route('billing.checkout.create'), ['price_id' => $price->id])
+            ->assertSessionHasErrors('price_id');
+
+        $this->assertDatabaseMissing('checkout_sessions', ['price_id' => $price->id]);
     }
 }

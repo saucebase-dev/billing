@@ -2,11 +2,14 @@
 
 namespace Modules\Billing\Traits;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Billing\Data\Entitlements;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Subscription;
 
 /**
  * Makes a model a billing owner. Pair it with `implements BillingOwner`.
@@ -29,19 +32,13 @@ trait Billable
     public function entitlements(): Entitlements
     {
         $entitlements = Product::where('kind', PlanKind::Free)->first()?->entitlements() ?? Entitlements::none();
-        $account = $this->billingAccount();
-
-        if (! $account) {
-            return $entitlements;
-        }
-
-        $subscribed = $account->currentSubscription()?->price?->plan;
+        $subscribed = $this->heldSubscription()?->price?->plan;
 
         if ($subscribed) {
             $entitlements = $entitlements->merge($subscribed->entitlements());
         }
 
-        foreach ($account->lifetimePurchases() as $purchase) {
+        foreach ($this->heldLifetimePurchases() as $purchase) {
             if ($purchase->price?->plan) {
                 $entitlements = $entitlements->merge($purchase->price->plan->entitlements());
             }
@@ -52,19 +49,14 @@ trait Billable
 
     public function planName(): ?string
     {
-        $account = $this->billingAccount();
-
-        return $account?->currentSubscription()?->price->plan->name
-            ?? $account?->lifetimePurchases()->first()?->price->plan->name
+        return $this->heldSubscription()?->price->plan->name
+            ?? $this->heldLifetimePurchases()->first()?->price->plan->name
             ?? Product::where('kind', PlanKind::Free)->value('name');
     }
 
     public function hasPaidPlan(): bool
     {
-        $account = $this->billingAccount();
-
-        return $account !== null
-            && ($account->currentSubscription() !== null || $account->lifetimePurchases()->isNotEmpty());
+        return $this->heldSubscription() !== null || $this->heldLifetimePurchases()->isNotEmpty();
     }
 
     public function canUseFeature(string $feature): bool
@@ -75,5 +67,20 @@ trait Billable
     public function planLimit(string $key): ?int
     {
         return $this->entitlements()->limit($key);
+    }
+
+    /**
+     * Read once per owner instance: the plan name and the Upgrade menu item both
+     * ask on every page. A fresh instance (`fresh()`, the next request) reads again.
+     */
+    private function heldSubscription(): ?Subscription
+    {
+        return once(fn () => $this->billingAccount()?->currentSubscription());
+    }
+
+    /** @return Collection<int, Payment> */
+    private function heldLifetimePurchases(): Collection
+    {
+        return once(fn () => $this->billingAccount()?->lifetimePurchases() ?? new Collection);
     }
 }

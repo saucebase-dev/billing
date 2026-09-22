@@ -5,14 +5,14 @@ namespace Modules\Billing\Filament\Resources\Products\Pages;
 use Filament\Actions\Action;
 use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
-use Filament\Support\Icons\Heroicon;
-use Modules\Billing\Services\CatalogPush;
-use Modules\Billing\Services\CatalogSync;
-use Modules\Billing\Services\PaymentGatewayManager;
 use Filament\Resources\Pages\ListRecords;
+use Filament\Support\Icons\Heroicon;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Services\CatalogPush;
+use Modules\Billing\Services\CatalogSync;
+use Modules\Billing\Services\PaymentGatewayManager;
 
 class ListProducts extends ListRecords
 {

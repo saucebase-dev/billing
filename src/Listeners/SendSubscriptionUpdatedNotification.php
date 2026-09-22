@@ -2,8 +2,8 @@
 
 namespace Modules\Billing\Listeners;
 
-use Modules\Billing\Enums\SubscriptionStatus;
 use Illuminate\Contracts\Queue\ShouldQueue;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Notifications\SubscriptionUpdatedNotification;
 

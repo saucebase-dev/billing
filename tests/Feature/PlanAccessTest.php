@@ -264,7 +264,7 @@ class PlanAccessTest extends TestCase
     {
         $this->customer->update(['provider_customer_id' => 'cus_known']);
 
-        $this->expectException(\RuntimeException::class);
+        $this->expectException(RuntimeException::class);
 
         $this->webhook(WebhookEventType::PaymentRefunded, [
             'id' => 'ch_early',

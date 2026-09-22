@@ -4,8 +4,8 @@ namespace Modules\Billing\Services;
 
 use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CatalogSyncReport;
-use Modules\Billing\Models\Price;
 use Modules\Billing\Enums\PlanKind;
+use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 
 /**

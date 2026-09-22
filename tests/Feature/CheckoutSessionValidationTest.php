@@ -5,7 +5,6 @@ namespace Modules\Billing\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutResultData;
-use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;

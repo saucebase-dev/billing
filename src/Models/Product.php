@@ -220,7 +220,8 @@ class Product extends Model
             'entitlements.limits.*' => ['nullable', 'integer', 'min:0'],
         ])->after(function ($validator): void {
             foreach (['features', 'limits'] as $group) {
-                foreach (array_keys($this->entitlements[$group] ?? []) as $key) {
+                // The shape rules above report anything that is not a list.
+                foreach (array_keys((array) ($this->entitlements[$group] ?? [])) as $key) {
                     if (! preg_match('/^[a-z][a-z0-9_]*$/', (string) $key)) {
                         $validator->errors()->add('entitlements', __('Entitlement keys are snake_case, like max_projects.'));
                     }

@@ -5,11 +5,11 @@ namespace Modules\Billing\Models;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Collection;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanKind;
 
@@ -95,7 +95,7 @@ class Customer extends Model
 
     /**
      * The lifetime plans this customer owns: paid, unrefunded payments for a
-     * price on a plan of kind Lifetime. There is no row of its own. Retired
+     * price on a plan of kind Lifetime, newest first. There is no row of its own. Retired
      * plans still count — archiving stops new sales, not what was bought.
      *
      * @return Collection<int, Payment>
@@ -107,7 +107,7 @@ class Customer extends Model
             ->where('status', PaymentStatus::Succeeded)
             ->whereHas('price.plan', fn (Builder $plan) => $plan->where('kind', PlanKind::Lifetime))
             ->with('price.plan')
+            ->latest('id')
             ->get();
     }
-
 }

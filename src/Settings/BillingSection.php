@@ -4,7 +4,6 @@ namespace Modules\Billing\Settings;
 
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\InvoiceStatus;
-use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Settings\SettingsSection;

@@ -130,4 +130,12 @@ class PlanRulesTest extends TestCase
 
         Product::factory()->create(['entitlements' => ['limits' => ['projects' => -1]]]);
     }
+
+    /** Code and imports can hand over any shape; it is refused, not crashed on. */
+    public function test_entitlements_in_the_wrong_shape_are_refused(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        Product::factory()->create(['entitlements' => ['features' => 'exports']]);
+    }
 }

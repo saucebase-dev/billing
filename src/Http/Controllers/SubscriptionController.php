@@ -5,9 +5,9 @@ namespace Modules\Billing\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\ValidationException;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
-use Illuminate\Validation\ValidationException;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PurchaseEligibility;
 
