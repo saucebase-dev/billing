@@ -1,23 +1,21 @@
 import { useT } from '@/i18n';
 import SiteLayout from '@/layouts/SiteLayout';
-import type { Product } from '../../types';
+import type { PlanActions, Product } from '../../types';
 import ProductSection from '../components/ProductSection';
 
 export default function Plans({
     products,
-    currentProductId,
-}: {
-    products: Product[];
-    /** The plan the signed-in user is subscribed to, if any. */
-    currentProductId: number | null;
-}) {
+    priceActions,
+    productActions,
+}: PlanActions & { products: Product[] }) {
     const t = useT();
 
     return (
         <SiteLayout title="Pricing">
             <ProductSection
                 products={products}
-                currentProductId={currentProductId}
+                priceActions={priceActions}
+                productActions={productActions}
                 className="from-primary/20 bg-linear-to-b to-transparent"
             >
                 <div className="mx-auto max-w-4xl text-center">

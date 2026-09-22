@@ -1,7 +1,11 @@
 import { useT } from '@/i18n';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import type { Product } from '@modules/billing/resources/js/types';
+import type {
+    PlanAction,
+    PlanActions,
+    Product,
+} from '@modules/billing/resources/js/types';
 import {
     getIntervalLabel,
     matchesInterval,
@@ -20,18 +24,27 @@ function getToggleLabel(interval: string): string {
 
 export default function ProductSection({
     products,
-    currentProductId = null,
+    priceActions,
+    productActions,
     className,
     children,
     footer,
-}: {
+}: PlanActions & {
     products: Product[];
-    currentProductId?: number | null;
     className?: string;
     children?: ReactNode;
     footer?: ReactNode;
 }) {
     const t = useT();
+
+    /** A plan with no price for this interval shows only when it has something to say. */
+    function planAction(product: Product): PlanAction {
+        const price = product.prices[0];
+
+        return price
+            ? (priceActions[price.id] ?? 'unavailable')
+            : (productActions[product.id] ?? 'unavailable');
+    }
 
     const availableIntervals = useMemo(() => {
         const intervals = new Set<string>();
@@ -70,9 +83,11 @@ export default function ProductSection({
                 }))
                 .filter(
                     (product) =>
-                        product.prices.length > 0 || product.metadata?.cta_url,
+                        product.prices.length > 0 ||
+                        (productActions[product.id] ?? 'unavailable') !==
+                            'unavailable',
                 ),
-        [products, billingInterval],
+        [products, productActions, billingInterval],
     );
 
     const columns =
@@ -131,7 +146,7 @@ export default function ProductSection({
                             key={product.id}
                             product={product}
                             price={product.prices[0]}
-                            isCurrent={product.id === currentProductId}
+                            action={planAction(product)}
                         />
                     ))}
                 </div>

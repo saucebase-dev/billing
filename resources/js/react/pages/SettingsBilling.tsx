@@ -99,11 +99,13 @@ function PaymentMethodLine({
 
 export default function SettingsBilling({
     subscription,
+    lifetimePlans,
     paymentMethod,
     invoices,
     billingPortalUrl,
 }: {
     subscription: Subscription | null;
+    lifetimePlans: { name: string | null }[];
     paymentMethod: PaymentMethod | null;
     invoices: Invoice[];
     billingPortalUrl: string;
@@ -180,6 +182,21 @@ export default function SettingsBilling({
                 {t('Manage your subscription, payment method, and invoices')}
             </p>
 
+            {/* Lifetime plans are owned for good, alongside any subscription */}
+            {lifetimePlans.length > 0 && (
+                <div data-testid="lifetime-plans" className="space-y-1">
+                    <h3 className="font-medium">{t('Lifetime')}</h3>
+                    {lifetimePlans.map((plan, index) => (
+                        <p
+                            key={index}
+                            className="text-foreground text-lg font-semibold"
+                        >
+                            {plan.name ?? t('Unknown Plan')}
+                        </p>
+                    ))}
+                </div>
+            )}
+
             {subscription ? (
                 <div data-testid="subscription-section" className="space-y-8">
                     {/* Current plan */}
@@ -198,14 +215,29 @@ export default function SettingsBilling({
                                     <>
                                         {' '}
                                         &middot;{' '}
-                                        <span className="text-destructive">
-                                            {t('Cancels on')}{' '}
-                                            {formatDate(
-                                                subscription.ends_at,
-                                                locale,
-                                                longDate,
-                                            )}
-                                        </span>
+                                        {subscription.replaced_by_lifetime ? (
+                                            <span data-testid="replaced-by-lifetime">
+                                                {t('Ends on')}{' '}
+                                                {formatDate(
+                                                    subscription.ends_at,
+                                                    locale,
+                                                    longDate,
+                                                )}
+                                                ,{' '}
+                                                {t(
+                                                    'replaced by your lifetime plan',
+                                                )}
+                                            </span>
+                                        ) : (
+                                            <span className="text-destructive">
+                                                {t('Cancels on')}{' '}
+                                                {formatDate(
+                                                    subscription.ends_at,
+                                                    locale,
+                                                    longDate,
+                                                )}
+                                            </span>
+                                        )}
                                     </>
                                 ) : (
                                     subscription.current_period_ends_at && (
@@ -333,8 +365,9 @@ export default function SettingsBilling({
                         )}
                     </div>
 
-                    {/* Resume, when the plan is already cancelled */}
-                    {subscription.cancelled_at ? (
+                    {/* Resume, when the plan is already cancelled; a lifetime
+                        plan replacing it leaves nothing to resume. */}
+                    {subscription.replaced_by_lifetime ? null : subscription.cancelled_at ? (
                         <div className="space-y-3">
                             <div className="space-y-1">
                                 <h3 className="font-medium">
@@ -386,7 +419,7 @@ export default function SettingsBilling({
                         </div>
                     )}
                 </div>
-            ) : (
+            ) : lifetimePlans.length > 0 ? null : (
                 /* Nothing bought yet */
                 <div
                     data-testid="no-subscription"

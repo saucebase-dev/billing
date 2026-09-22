@@ -2,7 +2,11 @@ import { useT } from '@/i18n';
 import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
-import type { Price, Product } from '@modules/billing/resources/js/types';
+import type {
+    PlanAction,
+    Price,
+    Product,
+} from '@modules/billing/resources/js/types';
 import { getIntervalDisplay } from '../../lib/intervals';
 
 function formatPrice(amount: number | string, currency?: string): string {
@@ -18,16 +22,13 @@ function formatPrice(amount: number | string, currency?: string): string {
 export default function ProductCard({
     product,
     price,
-    isCurrent = false,
+    action,
 }: {
     product: Product;
     price?: Price;
-    isCurrent?: boolean;
+    action: PlanAction;
 }) {
     const t = useT();
-    // A free plan never reaches the provider; a paid one it does not know yet
-    // would be refused at checkout.
-    const unavailable = !!price && price.amount > 0 && !price.provider_price_id;
     const featured = !!product.metadata?.badge || product.is_highlighted;
     const [isAnimating, setIsAnimating] = useState(false);
 
@@ -45,17 +46,25 @@ export default function ProductCard({
         : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset';
 
     function handleGetStarted() {
-        if (!price) return;
-
-        if (price.amount === 0) {
+        if (action === 'signup') {
             router.visit(route('register'));
             return;
         }
 
-        router.post(route('billing.checkout.create'), {
-            price_id: price.id,
-        });
+        if (action === 'buy' && price) {
+            router.post(route('billing.checkout.create'), {
+                price_id: price.id,
+            });
+        }
     }
+
+    const labels: Partial<Record<PlanAction, string>> = {
+        current: t('Current plan'),
+        included: t('Included in your plan'),
+        later: t('Available when your current plan ends'),
+        unavailable: t('Not available'),
+    };
+    const buttonLabel = labels[action];
 
     return (
         <div
@@ -149,26 +158,33 @@ export default function ProductCard({
                 </p>
             )}
 
-            {/* CTA Button */}
-            {product.metadata?.cta_url ? (
+            {/* CTA: plain anchors for links that leave the app, which an Inertia
+                visit would follow over XHR and fail on the provider's CORS. */}
+            {action === 'contact' ? (
                 <a
-                    href={product.metadata.cta_url}
+                    href={product.metadata?.cta_url}
                     className={`mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-2xl transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ${ctaClasses}`}
                 >
                     {product.metadata?.cta_label || t('Get started')}
                 </a>
+            ) : action === 'change' ? (
+                <a
+                    data-testid="change-plan-button"
+                    href={route('billing.plan.change')}
+                    className={`mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ${ctaClasses}`}
+                >
+                    {t('Change plan')}
+                </a>
             ) : (
                 <button
                     data-testid="get-started-button"
+                    data-action={action}
                     className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${ctaClasses}`}
-                    disabled={isCurrent || unavailable}
+                    disabled={action !== 'buy' && action !== 'signup'}
                     onClick={handleGetStarted}
                 >
-                    {isCurrent
-                        ? t('Current plan')
-                        : unavailable
-                          ? t('Not available')
-                          : product.metadata?.cta_label || t('Get started')}
+                    {buttonLabel ??
+                        (product.metadata?.cta_label || t('Get started'))}
                 </button>
             )}
 

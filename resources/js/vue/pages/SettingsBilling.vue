@@ -408,8 +408,9 @@ function resumeSubscription() {
                     </Button>
                 </div>
 
-                <!-- Otherwise, the way out -->
-                <div v-else class="space-y-3">
+                <!-- Otherwise, the way out; a subscription a lifetime plan
+                     replaces is already ending -->
+                <div v-else-if="!subscription.cancelled_at" class="space-y-3">
                     <div class="space-y-1">
                         <h3 class="font-medium">{{ $t('Cancellation') }}</h3>
                         <p class="text-muted-foreground text-sm">
