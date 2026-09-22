@@ -68,4 +68,27 @@ test.describe.parallel('Pricing page', () => {
         // that round trip outlasts the default assertion timeout.
         await expect(page).toHaveURL(/\/auth\/register/, { timeout: 15_000 });
     });
+
+    test('shows a subscriber their plan and offers a change to the others', async ({
+        page,
+        loginAs,
+        credentials,
+    }) => {
+        await loginAs(credentials.subscriber);
+        await page.goto('/pricing');
+
+        const button = (plan: string) =>
+            page
+                .getByTestId(`product-card-${plan}`)
+                .getByTestId('get-started-button');
+
+        await expect(button('pro')).toHaveAttribute('data-action', 'current');
+        await expect(button('pro')).toBeDisabled();
+        // A change happens at the provider, so it is a link, not the buy button.
+        await expect(
+            page
+                .getByTestId('product-card-starter')
+                .getByTestId('change-plan-button'),
+        ).toHaveAttribute('href', /\/billing\/plan\/change$/);
+    });
 });

@@ -171,6 +171,7 @@ watch(priceKey, () => {
         <button
             v-else
             data-testid="get-started-button"
+            :data-action="action"
             class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             :class="ctaClass"
             :disabled="action !== 'buy' && action !== 'signup'"
