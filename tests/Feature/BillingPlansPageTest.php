@@ -5,9 +5,7 @@ namespace Modules\Billing\Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
-use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
-use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
@@ -104,7 +102,19 @@ class BillingPlansPageTest extends TestCase
             );
     }
 
-    public function test_a_subscriber_sees_which_plan_is_theirs(): void
+    /** The server decides every button; the page only renders what it is sent. */
+    public function test_the_page_sends_an_action_for_every_price_and_priceless_plan(): void
+    {
+        $pro = $this->plan('Pro');
+        $enterprise = Product::factory()->create(['metadata' => ['cta_url' => 'mailto:sales@example.com']]);
+
+        $this->get(route('billing.plans'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('priceActions.'.$pro->prices()->first()->id, 'buy')
+                ->where('productActions.'.$enterprise->id, 'contact'));
+    }
+
+    public function test_a_subscriber_sees_their_plan_as_current(): void
     {
         $product = $this->plan('Mine');
         $user = User::factory()->create();
@@ -115,76 +125,6 @@ class BillingPlansPageTest extends TestCase
 
         $this->actingAs($user)->get(route('billing.plans'))
             ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('access.productId', $product->id)
-                ->where('access.kind', 'subscription'));
-    }
-
-    public function test_a_lifetime_owner_sees_lifetime_as_theirs(): void
-    {
-        $product = $this->plan('Lifetime');
-        $product->prices()->update(['interval' => null, 'interval_count' => null]);
-        $user = User::factory()->create();
-        Payment::factory()->create([
-            'customer_id' => Customer::factory()->create(['user_id' => $user->id])->id,
-            'price_id' => $product->prices()->first()->id,
-        ]);
-
-        $this->actingAs($user)->get(route('billing.plans'))
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('access.productId', $product->id)
-                ->where('access.kind', 'lifetime'));
-    }
-
-    public function test_a_cancelled_plan_leaves_the_user_on_free(): void
-    {
-        $product = $this->plan('Gone');
-        $user = User::factory()->create();
-        Subscription::factory()->create([
-            'customer_id' => Customer::factory()->create(['user_id' => $user->id])->id,
-            'price_id' => $product->prices()->first()->id,
-            'status' => SubscriptionStatus::Cancelled,
-        ]);
-
-        $this->actingAs($user)->get(route('billing.plans'))
-            ->assertInertia(fn (AssertableInertia $page) => $page->where('access.kind', 'free'));
-    }
-
-    /** Several free plans must not all claim to be the visitor's. */
-    public function test_a_user_with_nothing_bought_is_on_the_first_free_plan(): void
-    {
-        $first = $this->plan('Free', ['display_order' => 1]);
-        $second = $this->plan('Trial', ['display_order' => 2]);
-        $first->prices()->update(['amount' => 0]);
-        $second->prices()->update(['amount' => 0]);
-
-        $this->actingAs(User::factory()->create())->get(route('billing.plans'))
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('access.kind', 'free')
-                ->where('access.productId', $first->id));
-    }
-
-    /** Upgraded to lifetime: the subscription runs out its paid period, but lifetime is what they own. */
-    public function test_lifetime_wins_over_a_subscription_running_out(): void
-    {
-        $monthly = $this->plan('Pro');
-        $lifetime = $this->plan('Lifetime');
-        $lifetime->prices()->update(['interval' => null, 'interval_count' => null]);
-        $user = User::factory()->create();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
-        Subscription::factory()->create([
-            'customer_id' => $customer->id,
-            'price_id' => $monthly->prices()->first()->id,
-            'cancelled_at' => now(),
-            'ends_at' => now()->addWeek(),
-        ]);
-        Payment::factory()->create([
-            'customer_id' => $customer->id,
-            'price_id' => $lifetime->prices()->first()->id,
-        ]);
-
-        $this->actingAs($user)->get(route('billing.plans'))
-            ->assertInertia(fn (AssertableInertia $page) => $page
-                ->where('access.productId', $lifetime->id)
-                ->where('access.kind', 'lifetime'));
+                ->where('priceActions.'.$product->prices()->first()->id, 'current'));
     }
 }

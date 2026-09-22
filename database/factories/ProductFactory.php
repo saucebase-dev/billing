@@ -4,6 +4,7 @@ namespace Modules\Billing\Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
 
 /**
@@ -47,6 +48,25 @@ class ProductFactory extends Factory
             'support' => fake()->randomElement(['community', 'email', 'priority', '24/7']),
             'api_calls_per_month' => fake()->randomElement([1000, 10000, 100000, 'unlimited']),
         ];
+    }
+
+    public function free(): static
+    {
+        return $this->state(['kind' => PlanKind::Free]);
+    }
+
+    public function oneOff(): static
+    {
+        return $this->state(['kind' => PlanKind::OneOff]);
+    }
+
+    /** A lifetime plan, replacing the given subscription plan or a new one. */
+    public function lifetime(?Product $replaces = null): static
+    {
+        return $this->state(fn () => [
+            'kind' => PlanKind::Lifetime,
+            'replaces_product_id' => $replaces->id ?? Product::factory()->create()->id,
+        ]);
     }
 
     /**

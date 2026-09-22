@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\InvoiceStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
+use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Settings\SettingsSection;
 
 /**
@@ -16,6 +17,10 @@ use Saucebase\Core\Settings\SettingsSection;
  */
 class BillingSection extends SettingsSection
 {
+    public function __construct(
+        private PurchaseEligibility $eligibility,
+    ) {}
+
     public function slug(): string
     {
         return 'billing';
@@ -53,6 +58,7 @@ class BillingSection extends SettingsSection
         if (! $customer) {
             return [
                 'subscription' => null,
+                'lifetimePlans' => [],
                 'paymentMethod' => null,
                 'invoices' => [],
                 'billingPortalUrl' => route('billing.portal'),
@@ -84,7 +90,14 @@ class BillingSection extends SettingsSection
                 'ends_at' => $subscription->ends_at?->toISOString(),
                 'plan_name' => $subscription->price?->product?->name,
                 'interval' => $subscription->price?->interval,
+                // Only once the provider accepted the cancellation: until then
+                // it still renews, and the panel says so.
+                'replaced_by_lifetime' => $subscription->cancelled_at !== null
+                    && $this->eligibility->isReplacedByLifetime($subscription),
             ] : null,
+            'lifetimePlans' => $customer->lifetimePurchases()
+                ->map(fn ($payment) => ['name' => $payment->price?->plan?->name])
+                ->values(),
             'paymentMethod' => $defaultPaymentMethod ? [
                 'type' => $defaultPaymentMethod->type->value,
                 'category' => $defaultPaymentMethod->type->category(),

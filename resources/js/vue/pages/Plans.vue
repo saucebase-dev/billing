@@ -1,20 +1,17 @@
 <script setup lang="ts">
 import SiteLayout from '@/layouts/SiteLayout.vue';
 import ProductSection from '../components/ProductSection.vue';
-import type { PlanAccess } from '../../lib/planAction';
-import type { Product } from '../../types';
+import type { PlanActions, Product } from '../../types';
 
-defineProps<{
-    products: Product[];
-    access: PlanAccess;
-}>();
+defineProps<PlanActions & { products: Product[] }>();
 </script>
 
 <template>
     <SiteLayout title="Pricing">
         <ProductSection
             :products="products"
-            :access="access"
+            :price-actions="priceActions"
+            :product-actions="productActions"
             class="from-primary/20 bg-linear-to-b to-transparent"
         >
             <div class="mx-auto max-w-4xl text-center">

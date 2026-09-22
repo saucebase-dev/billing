@@ -7,6 +7,7 @@ use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CatalogPriceData;
 use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogSync;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -248,5 +249,45 @@ class CatalogSyncTest extends TestCase
         $this->assertTrue($local->fresh()->is_active);
         $this->assertSame(['price_made_up'], $report->localOnly);
         $this->assertSame(2900, $synced->fresh()->amount);
+    }
+
+    /** Never Lifetime by accident: a one-time product grants nothing until the admin says so. */
+    public function test_a_product_with_only_one_time_prices_is_imported_as_a_one_off(): void
+    {
+        $this->gateway->method('listCatalog')->willReturn([
+            $this->catalogProduct('prod_setup', 'Onboarding', [$this->catalogPrice('price_setup', 49900, null)]),
+            $this->catalogProduct('prod_pro', 'Pro', [$this->catalogPrice('price_pro_month', 2900)]),
+        ]);
+
+        app(CatalogSync::class)->run();
+
+        $this->assertSame(PlanKind::OneOff, Product::where('provider_product_id', 'prod_setup')->first()->kind);
+        $this->assertSame(PlanKind::Subscription, Product::where('provider_product_id', 'prod_pro')->first()->kind);
+    }
+
+    /** The slug is the plan's identity in code; a rename at the provider must not move it. */
+    public function test_a_renamed_product_keeps_its_slug(): void
+    {
+        $this->gateway->method('listCatalog')->willReturnOnConsecutiveCalls(
+            [$this->catalogProduct('prod_pro', 'Pro', [$this->catalogPrice('price_pro_month', 2900)])],
+            [$this->catalogProduct('prod_pro', 'Professional', [$this->catalogPrice('price_pro_month', 2900)])],
+        );
+
+        app(CatalogSync::class)->run();
+        $slug = Product::where('provider_product_id', 'prod_pro')->value('slug');
+        app(CatalogSync::class)->run();
+
+        $this->assertSame($slug, Product::where('provider_product_id', 'prod_pro')->value('slug'));
+    }
+
+    /** Nothing to sell, so nothing to import; the push still finds it by slug. */
+    public function test_a_product_with_no_prices_is_not_imported(): void
+    {
+        $this->gateway->method('listCatalog')->willReturn([$this->catalogProduct('prod_sales', 'Enterprise', [])]);
+
+        $report = app(CatalogSync::class)->run();
+
+        $this->assertSame(1, $report->skipped);
+        $this->assertDatabaseCount('products', 0);
     }
 }

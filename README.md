@@ -26,12 +26,13 @@ Adds a pricing page, a checkout, a billing settings page, and an admin panel for
 - **Customer portal** — one click to Stripe's portal, where customers update their card and download invoices
 - **Plan changes** — subscribers switch plans in Stripe's portal, and the app follows
 - **One plan per customer** — checkout refuses a second subscription
-- **Lifetime deals** — sell a one-time plan that grants access for good; a full refund takes it back
+- **Entitlements** — each plan turns features on and sets limits your app checks
+- **Plan kinds** — free, subscription, lifetime and one-off plans
+- **Lifetime deals** — a one-time plan that replaces a subscription plan for good; a full refund takes it back
 - **Pricing page** — a public `/pricing` built from your plans, with monthly, yearly and one-time prices, discount badges, and "Contact sales" plans
 - **Billing settings** — current plan, invoices and saved card at `/settings/billing`
 - **Catalogue sync** — pull your plans from Stripe, or push plans you drafted in the admin up to Stripe
 - **Webhooks** — safe to retry, and handles events arriving out of order
-- **Subscriber role** — added and removed as subscriptions start and end
 - **Admin panel** — manage products, prices, subscriptions and customers, with a revenue dashboard
 - **Events** — hook your own code into every subscription and payment change
 - **Vue and React** — every screen works on both
@@ -52,7 +53,7 @@ php artisan migrate
 npm run build
 ```
 
-### 1. Add the Billable trait
+### 1. Make users billing owners
 
 Required. Without it, subscriptions will not work.
 
@@ -63,9 +64,10 @@ git apply modules/billing/patches/user.patch
 Or add it yourself in `app/Models/User.php`:
 
 ```php
+use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Traits\Billable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements BillingOwner
 {
     use Billable;
 }
@@ -107,7 +109,8 @@ Stripe gives you a signing secret. That is the `STRIPE_WEBHOOK_SECRET` above.
 For local development, forward the events instead:
 
 ```bash
-stripe listen --forward-to localhost/billing/webhooks/stripe
+stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_succeeded,invoice.payment_failed,charge.refunded \
+  --forward-to localhost/billing/webhooks/stripe
 ```
 
 ### 4. Import your plans
@@ -143,6 +146,20 @@ php artisan modules:seed --module=billing --demo
 ```
 
 Adds five sample plans (Free, Pro, Team, Lifetime and Enterprise) plus demo customers and subscriptions so you can look around. If your Stripe keys are set, the plans are pushed to Stripe so they can be bought. Do not run this in production.
+
+## Check access
+
+Give each plan its features and limits in the admin (**Billing → Products → Plan**). Then ask the user:
+
+```php
+if ($user->canUseFeature('exports')) {
+    // ...
+}
+
+$user->planLimit('projects'); // null means unlimited
+```
+
+Everyone gets the free plan's entitlements. A subscription or lifetime plan adds its own on top. Changing a plan's entitlements applies to its existing customers straight away.
 
 ## Extending
 

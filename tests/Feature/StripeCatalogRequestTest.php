@@ -25,17 +25,18 @@ class StripeCatalogRequestTest extends TestCase
     /** @var array<int, array{method: string, url: string, params: array<string, mixed>}> */
     private array $requests = [];
 
-    private function gateway(string $responseBody = '{"id": "prod_new"}'): StripeGateway
+    /** @param  string|array<string, string>  $responseBody  One body, or one per URL path such as `/v1/prices`. */
+    private function gateway(string|array $responseBody = '{"id": "prod_new"}'): StripeGateway
     {
         $client = new class($this->requests, $responseBody) implements ClientInterface
         {
-            public function __construct(private array &$requests, private string $body) {}
+            public function __construct(private array &$requests, private string|array $body) {}
 
             public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
             {
                 $this->requests[] = ['method' => $method, 'url' => $absUrl, 'params' => $params];
 
-                return [$this->body, 200, []];
+                return [is_array($this->body) ? $this->body[parse_url($absUrl, PHP_URL_PATH)] : $this->body, 200, []];
             }
         };
 
@@ -106,5 +107,27 @@ class StripeCatalogRequestTest extends TestCase
         $this->gateway()->pushProductFeatures($product);
 
         $this->assertSame([['name' => 'Real']], $this->requests[0]['params']['marketing_features']);
+    }
+
+    /** The slug is how a reset database finds the product again. */
+    public function test_a_new_product_carries_its_slug(): void
+    {
+        $this->gateway()->createProduct(Product::factory()->create(['slug' => 'pro']));
+
+        $this->assertSame(['slug' => 'pro'], $this->requests[0]['params']['metadata']);
+    }
+
+    /** A plan with no price, like one that links to sales, must still be found by its slug. */
+    public function test_the_catalog_includes_active_products_without_prices(): void
+    {
+        $catalog = $this->gateway([
+            '/v1/prices' => '{"object": "list", "data": [], "has_more": false}',
+            '/v1/products' => '{"object": "list", "data": [{"id": "prod_sales", "object": "product", "name": "Enterprise", "description": null, "active": true, "metadata": {"slug": "enterprise"}}], "has_more": false}',
+        ])->listCatalog();
+
+        $this->assertCount(1, $catalog);
+        $this->assertSame('prod_sales', $catalog[0]->providerProductId);
+        $this->assertSame('enterprise', $catalog[0]->slug);
+        $this->assertSame([], $catalog[0]->prices);
     }
 }

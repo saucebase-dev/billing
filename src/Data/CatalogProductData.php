@@ -17,5 +17,6 @@ class CatalogProductData extends Data
         public bool $active,
         public array $prices,
         public array $features = [],
+        public ?string $slug = null,
     ) {}
 }

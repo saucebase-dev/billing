@@ -6,7 +6,7 @@ tasks:
 
     webhook:stripe:listen:
         desc: Listen to Stripe webhooks and forward to local endpoint
-        cmd: stripe listen --forward-to https://localhost/billing/webhooks/stripe
+        cmd: stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_succeeded,invoice.payment_failed,charge.refunded --forward-to https://localhost/billing/webhooks/stripe
 
     # ── Testing ───────────────────────────────────────────────────
     test:php:

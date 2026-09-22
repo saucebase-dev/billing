@@ -2,19 +2,18 @@
 import { router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 
-import type { Price, Product } from '@modules/billing/resources/js/types';
+import type {
+    PlanAction,
+    Price,
+    Product,
+} from '@modules/billing/resources/js/types';
 import { getIntervalDisplay } from '../../lib/intervals';
-import { planAction, type PlanAccess } from '../../lib/planAction';
 
 const props = defineProps<{
     product: Product;
     price?: Price;
-    access: PlanAccess;
+    action: PlanAction;
 }>();
-
-const action = computed(() =>
-    planAction(props.product, props.price, props.access),
-);
 
 const ctaClass = computed(() =>
     props.product.metadata?.badge || props.product.is_highlighted
@@ -23,16 +22,16 @@ const ctaClass = computed(() =>
 );
 
 function handleGetStarted() {
-    if (!props.price) return;
-
-    if (props.price.amount === 0) {
+    if (props.action === 'signup') {
         router.visit(route('register'));
         return;
     }
 
-    router.post(route('billing.checkout.create'), {
-        price_id: props.price.id,
-    });
+    if (props.action === 'buy' && props.price) {
+        router.post(route('billing.checkout.create'), {
+            price_id: props.price.id,
+        });
+    }
 }
 
 function formatPrice(amount: number | string, currency?: string): string {
@@ -174,7 +173,7 @@ watch(priceKey, () => {
             data-testid="get-started-button"
             class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             :class="ctaClass"
-            :disabled="action !== 'buy'"
+            :disabled="action !== 'buy' && action !== 'signup'"
             @click="handleGetStarted"
         >
             <template v-if="action === 'current'">{{
@@ -182,6 +181,9 @@ watch(priceKey, () => {
             }}</template>
             <template v-else-if="action === 'included'">{{
                 $t('Included in your plan')
+            }}</template>
+            <template v-else-if="action === 'later'">{{
+                $t('Available when your current plan ends')
             }}</template>
             <template v-else-if="action === 'unavailable'">{{
                 $t('Not available')

@@ -12,12 +12,12 @@ Subscription management, checkout sessions, payment processing, and webhook hand
 | Gateway | `StripeGateway` — implements `PaymentGatewayInterface` (create customer/session, cancel/resume, portal, webhook verify) |
 | Enums | `SubscriptionStatus`, `PaymentStatus`, `CheckoutSessionStatus`, `InvoiceStatus`, `PaymentMethodType`, `Currency`, `BillingScheme`, `WebhookEventType` |
 | Events | `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `InvoicePaid`, `CheckoutCompleted` |
-| Listeners | `SyncSubscriberRole` (synchronous — entitlement), and the queued `SendSubscriptionCreatedNotification`, `SendSubscriptionUpdatedNotification`, `SendSubscriptionCancelledNotification`, `SendSubscriptionResumedNotification`, `SendPaymentSucceededNotification`, `SendPaymentFailedNotification` |
+| Listeners | The queued `SendSubscriptionCreatedNotification`, `SendSubscriptionUpdatedNotification`, `SendSubscriptionCancelledNotification`, `SendSubscriptionResumedNotification`, `SendPaymentSucceededNotification`, `SendPaymentFailedNotification` |
 | Data | `CheckoutData`, `CheckoutResultData`, `WebhookData` (carries `occurredAt` for ordering), `CustomerData`, `AddressData`, `PaymentMethodData`, `PaymentMethodDetails` (Spatie Data objects) |
 | Commands | `ExpireCheckoutSessionsCommand` (every 30 min, marks abandoned/expired sessions), `SyncCatalogCommand` (`billing:sync-catalog`, daily and on the admin's *Sync* button), `PushCatalogCommand` (`billing:push-catalog`, on the admin's *Push new* button). Both in `src/Console/Commands/`, which is where internachi discovers them |
 | Middleware | `RedirectToRegister` — redirects guests on checkout pages, stores intended URL |
 | Filament | `BillingPlugin`, `BillingDashboard` (date range stats), `ProductResource`, `SubscriptionResource`, `CustomerResource` |
-| Trait | `Billable` — added to User model (`billingCustomer()` HasOne relationship) |
+| Owner | `Contracts\BillingOwner` + `Traits\Billable` on the User model (`billingCustomer()`, entitlements, `hasPaidPlan()`); `patches/user.patch` adds both |
 | Pages | `SettingsBilling`, `Checkout` |
 
 ## Frontend
@@ -26,7 +26,9 @@ Both stacks ship: `resources/js/vue/` and `resources/js/react/` hold the same fo
 
 `ProductSection` drops a plan with no price for the selected interval, unless it has a `cta_url` — that is how a *Contact sales* plan shows with no price. The button reads `metadata.cta_label` in both forms.
 
-The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. Each card's button comes from `planAction()` in `resources/js/lib/planAction.ts` (shared by both stacks), fed the page's `access` prop (`{productId, kind}`, kind `subscription` | `lifetime` | `free` for signed in with nothing bought, whose `productId` is the first plan with only free prices | `null` for a guest): `buy`, `change` (a plain anchor to `billing.plan.change`), `contact` (the plan's `cta_url`), or disabled `current` / `included` / `unavailable` (a paid price with no `provider_price_id`). It only decides what to offer; checkout enforces the rules. See *Plans and Access*.
+The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. Each card's button is the action the server sends (`priceActions` / `productActions`, see *Plans, Kinds and Entitlements*); `ProductCard` only renders it — `change` is a plain anchor to `billing.plan.change`, `contact` the plan's `cta_url`.
+
+The sidebar's user menu shows the plan under the user's first name: billing shares `billing.plan` (`BillingOwner::planName()` — the subscription's plan, else a lifetime plan, else the free one) and registers `PlanName` in core's `user-subtitle` global-component slot, which falls back to the email.
 
 `resources/js/lib/intervals.ts` is framework-neutral and shared by both; it is the only place that knows `monthly` and `month` are the same interval.
 
@@ -76,7 +78,7 @@ On return, `SettingsBillingController::show()` checks for a `session_id` query p
 
    Retrying only helps when the missing row is still on its way, so `subscriptionForEvent()` splits the two cases: a subscription the app cannot find **under a customer it knows** throws and lets the provider retry, while one whose customer is also unknown is logged and acknowledged. Nothing here ever described that subscription — a foreign account, or a database rebuilt without it — so a 500 would have the provider retry forever.
 3. Routes to private handlers via match on `WebhookEventType`:
-   - `CheckoutCompleted` → locks and re-reads the session, then creates Subscription, Payment, PaymentMethod and assigns the subscriber role **inside the same transaction** (a retry is a no-op once the session is Completed, so nothing after commit may own entitlement). Also mapped from `checkout.session.async_payment_succeeded`
+   - `CheckoutCompleted` → locks and re-reads the session, then creates Subscription, Payment and PaymentMethod **inside the same transaction** (a retry is a no-op once the session is Completed, so nothing after commit may be the only record of what was bought; entitlements are read from those rows). Also mapped from `checkout.session.async_payment_succeeded`
    - `SubscriptionUpdated` → maps Stripe status to `SubscriptionStatus` (active/trialing → Active, past_due/unpaid → PastDue, canceled → Cancelled), syncs period dates. Applied through `applyIfCurrent()`: under a row lock, skipped if older than `last_event_at` or if the row is already Cancelled (Stripe never reactivates one). Provider calls happen before the lock
    - `SubscriptionDeleted` → marks Cancelled, fires `SubscriptionCancelled`. Like `SubscriptionUpdated`, it resolves the row through `subscriptionForEvent()` and acknowledges rather than fails when the customer is unknown
    - `PaymentSucceeded` → creates Payment, restores PastDue subscription to Active
@@ -91,24 +93,44 @@ Status transitions driven by webhooks: Active → PastDue (failed payment) → C
 ### Catalog Sync
 The provider is the source of truth for what is sold: `CatalogSync::run()` pulls `listCatalog()` from the gateway and upserts `Product`/`Price` keyed on `(provider, provider_product_id)` / `(provider, provider_price_id)`. It writes only the provider's fields — name, active, amount, currency, interval — and on first import sets `is_visible = false`, `sku` = provider product ID, takes the provider's description and marketing features as a starting point, and appends `display_order` after the highest one already in use so an import never lands a batch of products on the same rank. After that, description, features, slug, visibility, highlight and order are the app's and are never overwritten. Archived at the provider → `is_active = false`, never deleted (subscriptions point at the rows) — but one archived *and* unknown here is skipped entirely and counted in the report's `skipped`: a plan retired before this app saw it is history, not catalogue. Prices the provider has never heard of are left alone and listed in the report's `localOnly`.
 
-`CatalogPush::run()` is the one-off in the other direction, for plans drafted in the admin before a provider account existed: every product/price with **no** provider ID is created at the provider and gets its ID written back. `run(Product $only)` scopes it to one product — that is the *Push to Stripe* action on the product row and edit page. It never updates anything the provider already knows (provider prices are immutable — change them there and pull), so it has no conflict to resolve. The one exception is the feature list, which `pushProductFeatures()` sends for every product on every run: the app owns a plan's marketing copy once it is here, and the provider's copy exists only so its own pricing pages can show it.
+`CatalogPush::run()` is the one-off in the other direction, for plans drafted in the admin before a provider account existed: every product/price with **no** provider ID is created at the provider and gets its ID written back. `run(Product $only)` scopes it to one product — that is the *Push to Stripe* action on the product row and edit page. It never updates anything the provider already knows (provider prices are immutable — change them there and pull), so it has no conflict to resolve. Each product it creates carries `metadata.slug`; before creating one it looks for an **active** provider product with the same slug and adopts it, along with its active prices that match on currency, amount and interval, so pushing again after a database reset reconnects instead of duplicating. `listCatalog()` includes active products with no price for this lookup (a *Contact sales* plan); sync never imports one. Archive at the provider to force a fresh product. The one exception is the feature list, which `pushProductFeatures()` sends for every product on every run: the app owns a plan's marketing copy once it is here, and the provider's copy exists only so its own pricing pages can show it.
 
 In the admin, `ProductForm` disables the provider's fields when `Product::provider_product_id` / `Price::isManagedByGateway()` is set, and hides the repeater's delete action for synced prices. A product or price with no provider ID (demo, test) stays fully editable.
 
-### Plans and Access
-A customer holds **one plan**: a subscription or lifetime access. `Customer::hasAccess()` is the rule, and everything else asks it:
+### Plans, Kinds and Entitlements
+A `Product` is a plan, and its `slug` is the plan's stable ID in code. Every plan has a **kind** (`PlanKind`) and **entitlements**:
 
-- **Current subscription** — `Customer::currentSubscription()`, Active or PastDue (`Subscription::current()` scope).
-- **Lifetime access** — `Customer::lifetimePayment()`: a Succeeded payment on a price with no interval and no subscription. There is no row of its own; a full refund (`charge.refunded` with `refunded: true`) marks the payment Refunded and access ends. A partial refund only updates `amount_refunded`. A refund that arrives before its checkout has recorded the payment throws for a known customer, so the provider retries it (the same rule as subscription events); one with no `payment_intent`, or for an unknown customer, is acknowledged. The pricing page resolves lifetime before a subscription, since an upgraded subscriber keeps the old subscription until its paid period ends.
+| Kind | Sold with | Grants |
+| --- | --- | --- |
+| `Free` | never sold ($0 prices only, for display) | its entitlements, to everyone |
+| `Subscription` | recurring prices | its entitlements while the subscription is Active or PastDue |
+| `Lifetime` | one-time price | its entitlements until the payment is fully refunded; `replaces_product_id` names the subscription plan it replaces |
+| `OneOff` | one-time price | nothing — a service or something the app handles itself |
 
-`BillingService::assertCanBuy()` refuses a recurring price to anyone with access and a one-time price to a lifetime owner. `CheckoutController::create()` calls it before a session exists, and `processCheckout()` again for the guest who signed in part-way; the session-reuse return runs first, so a checkout already paid at the provider still completes. It runs before payment, so two checkouts opened at once can both be paid; the app does not try to catch that. Stripe's *Limit customers to one subscription* setting closes it, and the README lists it as an optional setup step.
+Entitlements are `{features: {key: true}, limits: {key: int|null}}` on the plan (`Data\Entitlements`; null is unlimited, a missing limit is 0), edited in the admin's *Plan* section. The app asks the owner: `$user->canUseFeature('exports')`, `$user->planLimit('projects')`; counting projects stays the app's job. Resolution (`Billable::entitlements()`) merges the Free plan, the current subscription's plan and every lifetime plan owned — features combine, the higher limit wins. The Free plan always merges in, so a paid plan can never lower a free limit: intended. Plans are read `withTrashed()` through `Price::plan()`, so archiving or deleting a plan never takes back what was bought. Editing a plan's entitlements changes existing customers' access immediately.
 
-**Lifetime while subscribed** is allowed: after the checkout commits, `endSubscriptionReplacedByLifetime()` cancels the subscription at period end. It runs on every delivery of the event, because a failed provider call is retried and the retry finds the session already completed.
+**Invariants, enforced in `Product::assertValid()` on every save** (admin, catalog import, code):
+- One Free plan at most — a unique index on the generated `free_plan` column. It cannot be deleted; edit it in place.
+- `replaces_product_id` only on a Lifetime plan, pointing at a Subscription plan other than itself.
+- `kind`, `slug` and `replaces_product_id` are frozen once the plan is sold (`isSold()`: a Pending or Completed checkout session, a payment, or a subscription on its prices). Checkout creates the session under a `lockForUpdate` on the plan row, and `EditProduct` saves under the same lock in a transaction, so an edit cannot slip in between handoff and payment.
+- Entitlement keys are snake_case; limits are whole numbers ≥ 0 or null.
+
+**Who owns plans.** `Contracts\BillingOwner` (`billingAccount()`, `entitlements()`, `hasPaidPlan()`, `canUseFeature()`, `planLimit()`), implemented by `User` through `Billable`. Everything that decides access or purchases takes a `BillingOwner`, so a workspace can become the owner without touching the rules. The *Upgrade* menu item shows while `hasPaidPlan()` is false. There is no subscriber role: check entitlements.
+
+**Purchases.** `PurchaseEligibility::check(?BillingOwner, Price)` is the single rule, returning a `PurchaseRefusal` or null:
+- the price: inactive, not pushed, or not the kind's type (a one-time price on a Subscription plan) → `Unavailable`; the Free plan → `NotForSale`;
+- a Subscription plan: already subscribed to it → `Current`; replaced by an owned Lifetime → `Included`; the current subscription is being replaced by Lifetime and running out → `AfterCurrentEnds` (wait until it ends); another current subscription → `ChangeInstead` (change it at the provider);
+- a Lifetime plan already owned → `Current`; a OneOff is always allowed.
+
+`BillingService::assertCanBuy()` throws the refusal's message; `CheckoutController::create()` calls it before a session exists and `processCheckout()` again for the guest who signed in part-way (the session-reuse return runs first, so a checkout already paid at the provider still completes). It runs before payment, so two checkouts opened at once can both be paid; Stripe's *Limit customers to one subscription* closes that, listed in the README as optional.
+
+**Pricing buttons come from the server.** `PlanActions::for()` sends `priceActions` (per displayed price) and `productActions` (per plan shown without a price). `buy` appears only where eligibility allows; the rest label a refusal — `change`, `later`, `included`, `current`, `unavailable` — plus `contact` for a `cta_url` and, for the Free plan, `signup` (guest), `current` (nothing paid) or `included` (paid plan). The cards only render what they are sent.
+
+**Lifetime replacing a subscription.** After a Lifetime checkout commits, `endSubscriptionReplacedByLifetime()` cancels the current subscription at period end — only if its plan is the one the Lifetime replaces. It runs on every delivery, since a failed provider call is retried and the retry finds the session already completed. Until the provider accepts the cancellation the subscription shows as renewing; once `cancelled_at` is set the panel says it ends, replaced by lifetime. The app freezes it: `billing.plan.change` 404s and resume is refused (`PurchaseEligibility::isReplacedByLifetime()`). That is app policy — the provider stays the source of truth, and a customer who resumes it in the provider's portal keeps an ordinary subscription.
+
+**Refunds.** `charge.refunded` with `refunded: true` marks the payment Refunded, which ends a lifetime plan; a partial refund only updates `amount_refunded`. A refund that arrives before its checkout has recorded the payment throws for a known customer, so the provider retries it; one with no `payment_intent`, or for an unknown customer, is acknowledged.
 
 **Plan changes happen at the provider.** `GET /billing/plan/change` (`billing.plan.change`) sends the subscriber to `PaymentGatewayInterface::getPlanChangeUrl()` — Stripe's billing portal opened on its plan picker. Only the user's own current subscription is used; nothing in the request names one. The change comes back as `customer.subscription.updated`, and `onSubscriptionUpdated()` moves the row to the local price with that provider ID. A price not pulled yet is logged and skipped: the daily catalog sync and the next event put it right. Which plans the portal offers, and whether downgrades wait for the period end, is the portal's configuration in the Stripe dashboard.
-
-### Role Syncing
-`SyncSubscriberRole` listens to `SubscriptionCreated|SubscriptionUpdated|SubscriptionCancelled`, and `BillingService` calls `sync(Customer)` directly for checkouts and refunds. The role follows `Customer::hasAccess()`, never one subscription's status, so ending a subscription does not take the role from a lifetime owner.
 
 ### Gateway Driver Pattern
 `PaymentGatewayManager` extends Laravel's `Manager`. The default driver is `billing.default_gateway` config. Adding a new gateway means implementing `PaymentGatewayInterface` and adding a `createXxxDriver()` method. The gateway talks to the provider and returns identifiers; `BillingService` owns every local row (`createCustomer()` returns the provider's customer ID, the service creates the `Customer`). `BillingService` is not yet provider-neutral: the webhook handlers read Stripe payload keys directly, and `fulfillCheckoutIfNeeded()`, `ensurePaymentMethod()` and `syncSubscriptionPeriod()` branch on `instanceof StripeGateway`. A second provider needs those moved behind the interface first.
@@ -135,7 +157,7 @@ Everything the module ships is demo content, run by `modules:seed --demo` throug
 
 | Seeder | What it makes |
 | --- | --- |
-| `DemoProductSeeder` | Five plans for a made-up developer tool — Free, Pro (highlighted), Team, Lifetime (one-time) and Enterprise (no price, `cta_url` to sales) — chosen so the pricing page shows every option it reads. No provider IDs. A real install defines its own. |
+| `DemoProductSeeder` | Five plans for a made-up developer tool, each with a kind and entitlements — Free, Pro (highlighted), Team, Lifetime (replaces Pro) and Enterprise (no price, `cta_url` to sales) — chosen so the pricing page shows every option it reads. No provider IDs. A real install defines its own. |
 | `DemoCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
 | `DemoSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
 
@@ -171,9 +193,9 @@ fails both.
 
 Before diving into code, verify the external dependencies are running:
 
-- **Stripe CLI listener** — webhooks won't fire locally without it. Run `stripe listen --forward-to localhost/billing/webhooks/stripe` and confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener.
+- **Stripe CLI listener** — webhooks won't fire locally without it. Run `task billing:webhook:stripe:listen` (it passes the `--events` list the CLI now requires) and confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener.
 - **Stripe keys** — confirm `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are set and match the environment (test vs. live). A mismatched key causes silent 401s from Stripe with no local exception.
-- **Queue worker** — if listeners appear registered but notifications or role sync don't happen, check whether jobs are being queued but not processed (`php artisan queue:work`).
+- **Queue worker** — if listeners appear registered but notifications don't go out, check whether jobs are being queued but not processed (`php artisan queue:work`).
 
 Uncaught page errors fail the test: the `failOnPageError` fixture in
 `tests/e2e/fixtures/index.ts` is `auto`, repo-wide. A spec that provokes one on
@@ -189,8 +211,7 @@ purpose allows it by pattern, e.g.
 - Webhook signature verification happens inside `StripeGateway::verifyAndParseWebhook()` before deduplication — a bad signature throws an HttpException (400), which `WebhookController` returns as a 400 response. Any other exception is a 500 so Stripe retries; do not catch and acknowledge
 - Stripe API versions from 2025-03-31 keep `current_period_start/end` on the subscription **item**, not the subscription. Read periods through `BillingService::subscriptionPeriod()`, which checks both
 - `Price::amount` is stored in minor currency units (cents) — always divide by 100 for display; `Currency::formatAmount()` handles this
-- `SyncSubscriberRole` removes the subscriber role only when the user has no other active subscriptions — check for multiple subscriptions before assuming role removal means cancellation
-- `Billable` trait must be added to the User model (same pattern as Auth's `Sociable`) — `$user->billingCustomer` will fail without it
+- The User model needs `implements BillingOwner` and `use Billable` (`patches/user.patch`, same pattern as Auth's `Sociable`) — entitlement checks and `$user->billingCustomer` fail without them
 - Products use SoftDeletes; always scope to `active()` or `displayable()` when listing plans
 - **Billing history outlives the account.** `customers.user_id` is `nullOnDelete`, so deleting a user detaches the customer and its subscriptions, payments and invoices stay put. `Customer::$user_id` is nullable and every notification listener uses `$user?->notify()`; the admin shows *Account deleted* where the name would be
 - `subscriptions.price_id` is `restrictOnDelete`, not cascade: products cascade to prices and the admin can force-delete a product, so cascading would take paid subscriptions with it. Archive the plan instead

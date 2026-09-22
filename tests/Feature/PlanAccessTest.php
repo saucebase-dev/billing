@@ -2,10 +2,10 @@
 
 namespace Modules\Billing\Tests\Feature;
 
-use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
+use Inertia\Testing\AssertableInertia;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
@@ -14,11 +14,14 @@ use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use PHPUnit\Framework\MockObject\MockObject;
+use RuntimeException;
+use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
 
 /**
@@ -54,16 +57,24 @@ class PlanAccessTest extends TestCase
         $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
     }
 
-    private function subscribe(): Subscription
+    private function subscribe(?Product $plan = null): Subscription
     {
-        return Subscription::factory()->create(['customer_id' => $this->customer->id]);
+        return Subscription::factory()->create([
+            'customer_id' => $this->customer->id,
+            'price_id' => Price::factory()->create(['product_id' => ($plan ?? Product::factory()->create())->id])->id,
+        ]);
     }
 
-    private function buyLifetime(): Payment
+    private function lifetimePlan(?Product $replaces = null): Product
+    {
+        return Product::factory()->lifetime($replaces)->create(['entitlements' => ['features' => ['exports' => true]]]);
+    }
+
+    private function buyLifetime(?Product $plan = null): Payment
     {
         return Payment::factory()->create([
             'customer_id' => $this->customer->id,
-            'price_id' => Price::factory()->oneTime()->create()->id,
+            'price_id' => Price::factory()->oneTime()->create(['product_id' => ($plan ?? $this->lifetimePlan())->id])->id,
             'provider_payment_id' => 'pi_lifetime',
         ]);
     }
@@ -80,40 +91,13 @@ class PlanAccessTest extends TestCase
         $this->billing->handleWebhook('stripe', request());
     }
 
-    public function test_a_subscriber_cannot_buy_a_second_subscription(): void
+    public function test_checkout_refuses_what_eligibility_refuses(): void
     {
         $this->subscribe();
 
         $this->expectException(ValidationException::class);
 
-        $this->billing->assertCanBuy($this->customer, Price::factory()->create());
-    }
-
-    public function test_a_lifetime_owner_cannot_buy_a_subscription(): void
-    {
-        $this->buyLifetime();
-
-        $this->expectException(ValidationException::class);
-
-        $this->billing->assertCanBuy($this->customer, Price::factory()->create());
-    }
-
-    public function test_a_lifetime_owner_cannot_buy_lifetime_again(): void
-    {
-        $this->buyLifetime();
-
-        $this->expectException(ValidationException::class);
-
-        $this->billing->assertCanBuy($this->customer, Price::factory()->oneTime()->create());
-    }
-
-    public function test_a_subscriber_can_upgrade_to_lifetime(): void
-    {
-        $this->subscribe();
-
-        $this->billing->assertCanBuy($this->customer, Price::factory()->oneTime()->create());
-
-        $this->addToAssertionCount(1);
+        $this->billing->assertCanBuy($this->user, Price::factory()->create());
     }
 
     /** The server refuses it: the pricing page hiding the button is not enough. */
@@ -157,18 +141,13 @@ class PlanAccessTest extends TestCase
         $this->assertSame($subscription->price_id, $subscription->fresh()->price_id);
     }
 
-    public function test_buying_lifetime_grants_access_and_ends_the_subscription_at_period_end(): void
+    private function completeLifetimeCheckout(Product $lifetime): CheckoutSession
     {
-        $subscription = $this->subscribe();
         $session = CheckoutSession::factory()->create([
             'customer_id' => $this->customer->id,
-            'price_id' => Price::factory()->oneTime()->create()->id,
+            'price_id' => Price::factory()->oneTime()->create(['product_id' => $lifetime->id])->id,
             'provider_session_id' => 'cs_lifetime',
         ]);
-
-        $this->gateway->expects($this->once())
-            ->method('cancelSubscription')
-            ->willReturn($subscription->current_period_ends_at);
 
         $this->webhook(WebhookEventType::CheckoutCompleted, [
             'id' => 'cs_lifetime',
@@ -177,15 +156,40 @@ class PlanAccessTest extends TestCase
             'amount_total' => 29900,
         ]);
 
+        return $session;
+    }
+
+    public function test_buying_lifetime_ends_the_subscription_it_replaces_at_period_end(): void
+    {
+        $pro = Product::factory()->create();
+        $subscription = $this->subscribe($pro);
+
+        $this->gateway->expects($this->once())
+            ->method('cancelSubscription')
+            ->willReturn($subscription->current_period_ends_at);
+
+        $session = $this->completeLifetimeCheckout($this->lifetimePlan($pro));
+
         $this->assertSame(CheckoutSessionStatus::Completed, $session->fresh()->status);
         $this->assertNotNull($subscription->fresh()->cancelled_at);
-        $this->assertTrue($this->user->fresh()->hasRole(Role::SUBSCRIBER));
+        $this->assertTrue($this->user->fresh()->canUseFeature('exports'));
+    }
+
+    /** Lifetime covers its own plan only; a subscription to another plan keeps renewing. */
+    public function test_buying_lifetime_leaves_a_subscription_it_does_not_replace(): void
+    {
+        $subscription = $this->subscribe();
+
+        $this->gateway->expects($this->never())->method('cancelSubscription');
+
+        $this->completeLifetimeCheckout($this->lifetimePlan(Product::factory()->create()));
+
+        $this->assertNull($subscription->fresh()->cancelled_at);
     }
 
     public function test_a_full_refund_takes_lifetime_access_back(): void
     {
         $payment = $this->buyLifetime();
-        $this->user->assignRole(Role::SUBSCRIBER);
 
         $this->webhook(WebhookEventType::PaymentRefunded, [
             'payment_intent' => 'pi_lifetime',
@@ -194,13 +198,12 @@ class PlanAccessTest extends TestCase
         ]);
 
         $this->assertSame(PaymentStatus::Refunded, $payment->fresh()->status);
-        $this->assertFalse($this->user->fresh()->hasRole(Role::SUBSCRIBER));
+        $this->assertFalse($this->user->fresh()->canUseFeature('exports'));
     }
 
     public function test_a_partial_refund_keeps_access(): void
     {
         $payment = $this->buyLifetime();
-        $this->user->assignRole(Role::SUBSCRIBER);
 
         $this->webhook(WebhookEventType::PaymentRefunded, [
             'payment_intent' => 'pi_lifetime',
@@ -210,7 +213,18 @@ class PlanAccessTest extends TestCase
 
         $this->assertSame(PaymentStatus::Succeeded, $payment->fresh()->status);
         $this->assertSame(100, $payment->fresh()->amount_refunded);
-        $this->assertTrue($this->user->fresh()->hasRole(Role::SUBSCRIBER));
+        $this->assertTrue($this->user->fresh()->canUseFeature('exports'));
+    }
+
+    /** Replaced by lifetime and running out: the app offers no way back into it. */
+    public function test_a_subscription_replaced_by_lifetime_cannot_be_changed_or_resumed(): void
+    {
+        $pro = Product::factory()->create();
+        $this->subscribe($pro)->update(['cancelled_at' => now(), 'ends_at' => now()->addWeek()]);
+        $this->buyLifetime($this->lifetimePlan($pro));
+
+        $this->actingAs($this->user)->get(route('billing.plan.change'))->assertNotFound();
+        $this->actingAs($this->user)->post(route('billing.subscription.resume'))->assertSessionHasErrors();
     }
 
     public function test_changing_plan_needs_a_subscription(): void
@@ -229,6 +243,20 @@ class PlanAccessTest extends TestCase
         $this->actingAs($this->user)
             ->get(route('billing.plan.change'))
             ->assertRedirect('https://billing.stripe.com/p/session/test');
+    }
+
+    /** Stripe refuses when its portal has plan switching turned off. */
+    public function test_a_provider_that_refuses_the_plan_change_sends_the_subscriber_back(): void
+    {
+        $this->subscribe();
+
+        $this->gateway->method('getPlanChangeUrl')->willThrowException(new RuntimeException('portal disabled'));
+
+        $this->actingAs($this->user)
+            ->get(route('billing.plan.change'))
+            ->assertRedirect(SettingsSection::url('billing'));
+
+        $this->get(route('dashboard'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
     }
 
     /** Delivered before the checkout that created the payment: retried, not dropped. */

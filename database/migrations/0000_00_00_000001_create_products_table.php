@@ -24,6 +24,14 @@ return new class extends Migration
             $table->string('provider')->nullable();
             $table->string('provider_product_id')->nullable();
 
+            // What buying it gives, and what it grants: see PlanKind and Entitlements
+            $table->string('kind')->default('subscription');
+            $table->json('entitlements')->nullable();
+            $table->foreignId('replaces_product_id')->nullable()->constrained('products')->restrictOnDelete();
+
+            // Non-null only for the free plan, so the unique index allows one.
+            $table->unsignedTinyInteger('free_plan')->storedAs("case when kind = 'free' then 1 end")->nullable()->unique();
+
             // Display & Marketing
             $table->integer('display_order')->default(0);
             $table->boolean('is_visible')->default(true);

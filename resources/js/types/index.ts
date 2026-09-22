@@ -23,8 +23,29 @@ export interface Price {
     metadata?: PriceMetadata;
 }
 
+/**
+ * What a pricing card's button does, decided on the server (`PlanActions`).
+ * `buy`, `signup`, `change` and `contact` act; the rest are disabled labels.
+ */
+export type PlanAction =
+    | 'buy'
+    | 'signup'
+    | 'change'
+    | 'contact'
+    | 'current'
+    | 'included'
+    | 'later'
+    | 'unavailable';
+
+/** Button per displayed price, and per plan shown without a price. */
+export interface PlanActions {
+    priceActions: Record<number, PlanAction>;
+    productActions: Record<number, PlanAction>;
+}
+
 export interface Product {
     id: number;
+    kind?: 'free' | 'subscription' | 'lifetime' | 'one_off';
     name: string;
     slug?: string;
     description: string | null;
@@ -59,6 +80,8 @@ export interface Subscription {
     ends_at: string | null;
     plan_name: string | null;
     interval: string | null;
+    /** Ending at period end because a lifetime plan replaces it. */
+    replaced_by_lifetime: boolean;
 }
 
 export interface Invoice {

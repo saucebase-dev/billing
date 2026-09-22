@@ -15,6 +15,7 @@ use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Modules\Billing\Enums\Currency;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
 
 class ProductForm
@@ -31,6 +32,53 @@ class ProductForm
     private static function priceManagedByGateway(Get $get): bool
     {
         return filled($get('provider_price_id'));
+    }
+
+    private static function kindIs(mixed $state, PlanKind $kind): bool
+    {
+        return ($state instanceof PlanKind ? $state : PlanKind::tryFrom((string) $state)) === $kind;
+    }
+
+    /**
+     * The stored `{features, limits}` as one row per entitlement.
+     *
+     * @param  array{features?: array<string, bool>, limits?: array<string, int|null>}|null  $stored
+     * @return list<array{key: string, type: string, unlimited?: bool, limit?: int|null}>
+     */
+    private static function entitlementRows(?array $stored): array
+    {
+        $rows = [];
+
+        foreach (array_keys($stored['features'] ?? []) as $key) {
+            $rows[] = ['key' => $key, 'type' => 'feature'];
+        }
+
+        foreach ($stored['limits'] ?? [] as $key => $limit) {
+            $rows[] = ['key' => $key, 'type' => 'limit', 'unlimited' => $limit === null, 'limit' => $limit];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The form's rows back in the stored shape; an empty list stores nothing.
+     *
+     * @param  array<array-key, array{key?: string, type?: string, unlimited?: bool, limit?: int|string|null}>|null  $rows
+     * @return array{features: array<string, true>, limits: array<string, int|null>}|null
+     */
+    private static function storedEntitlements(?array $rows): ?array
+    {
+        $stored = ['features' => [], 'limits' => []];
+
+        foreach ($rows ?? [] as $row) {
+            if (($row['type'] ?? null) === 'limit') {
+                $stored['limits'][$row['key']] = ($row['unlimited'] ?? false) ? null : (int) $row['limit'];
+            } else {
+                $stored['features'][$row['key']] = true;
+            }
+        }
+
+        return $stored === ['features' => [], 'limits' => []] ? null : $stored;
     }
 
     public static function configure(Schema $schema): Schema
@@ -72,6 +120,65 @@ class ProductForm
                                     ->columnSpanFull(),
                             ])
                             ->columns(2),
+
+                        Section::make(__('Plan'))
+                            ->description(__('What buying it gives, and what it lets the customer do.'))
+                            ->schema([
+                                Select::make('kind')
+                                    ->label(__('Kind'))
+                                    ->options(PlanKind::class)
+                                    ->default(PlanKind::Subscription)
+                                    ->required()
+                                    ->live()
+                                    ->disabled(fn (?Product $record) => $record?->isSold() ?? false)
+                                    ->helperText(fn (?Product $record) => $record?->isSold()
+                                        ? __('Fixed: this plan has been sold. Create a new plan to change it.')
+                                        : __('Free is everyone\'s baseline and is never sold. One-off plans grant nothing.')),
+
+                                Select::make('replaces_product_id')
+                                    ->label(__('Replaces plan'))
+                                    ->helperText(__('Buying this lifetime plan ends a subscription to that plan at the end of its period.'))
+                                    ->options(fn (?Product $record) => Product::where('kind', PlanKind::Subscription)
+                                        ->when($record, fn ($query) => $query->whereKeyNot($record->getKey()))
+                                        ->pluck('name', 'id'))
+                                    ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Lifetime))
+                                    ->disabled(fn (?Product $record) => $record?->isSold() ?? false),
+
+                                Repeater::make('entitlements')
+                                    ->label(__('Entitlements'))
+                                    ->helperText(__('Features the plan turns on and limits the app enforces. Changes apply to existing customers straight away.'))
+                                    ->schema([
+                                        TextInput::make('key')
+                                            ->label(__('Key'))
+                                            ->required()
+                                            ->regex('/^[a-z][a-z0-9_]*$/')
+                                            ->distinct()
+                                            ->placeholder('max_projects'),
+                                        Select::make('type')
+                                            ->label(__('Type'))
+                                            ->options(['feature' => __('Feature'), 'limit' => __('Limit')])
+                                            ->default('feature')
+                                            ->required()
+                                            ->live(),
+                                        Toggle::make('unlimited')
+                                            ->label(__('Unlimited'))
+                                            ->live()
+                                            ->visible(fn (Get $get) => $get('type') === 'limit'),
+                                        TextInput::make('limit')
+                                            ->label(__('Limit'))
+                                            ->integer()
+                                            ->minValue(0)
+                                            ->required(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited'))
+                                            ->visible(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited')),
+                                    ])
+                                    ->columns(4)
+                                    ->defaultItems(0)
+                                    ->addActionLabel(__('Add entitlement'))
+                                    ->formatStateUsing(fn (?array $state) => self::entitlementRows($state))
+                                    // Replaces the repeater's own mutation, which would turn the
+                                    // stored shape back into a list of rows.
+                                    ->mutateDehydratedStateUsing(fn (?array $state) => self::storedEntitlements($state)),
+                            ]),
 
                         Section::make(__('Visibility'))
                             ->schema([

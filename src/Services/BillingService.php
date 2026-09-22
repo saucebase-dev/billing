@@ -18,7 +18,9 @@ use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\Currency;
 use Modules\Billing\Enums\InvoiceStatus;
+use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\PaymentStatus;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Events\CheckoutCompleted;
@@ -28,7 +30,6 @@ use Modules\Billing\Events\PaymentSucceeded;
 use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
-use Modules\Billing\Listeners\SyncSubscriberRole;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
@@ -43,7 +44,7 @@ class BillingService
 {
     public function __construct(
         private PaymentGatewayManager $manager,
-        private SyncSubscriberRole $subscriberRole,
+        private PurchaseEligibility $eligibility,
     ) {}
 
     /**
@@ -67,7 +68,7 @@ class BillingService
 
         $price = $session->price()->purchasable()->with('product')->firstOrFail();
 
-        $this->assertCanBuy($customer, $price);
+        $this->assertCanBuy($user, $price);
 
         // One statement, so two requests cannot both bind a fresh session.
         $claimed = CheckoutSession::whereKey($session->id)
@@ -140,27 +141,18 @@ class BillingService
     }
 
     /**
-     * A customer holds one subscription and at most one lifetime purchase.
-     * Checked on the server because the pricing page only hides the button:
-     * a second checkout would bill the customer twice.
-     *
-     * Lifetime stays on sale to a subscriber, whose subscription then ends
-     * with the period already paid for.
+     * Checked on the server because the pricing page only hides the button: a
+     * second subscription would bill the owner twice. `PurchaseEligibility` is
+     * the rule; the pricing page asks it too.
      *
      * @throws ValidationException
      */
-    public function assertCanBuy(Customer $customer, Price $price): void
+    public function assertCanBuy(?BillingOwner $owner, Price $price): void
     {
-        if ($price->interval !== null && $customer->hasAccess()) {
-            throw ValidationException::withMessages([
-                'price_id' => __('You already have a plan. Change it from your billing settings.'),
-            ]);
-        }
+        $refusal = $this->eligibility->check($owner, $price);
 
-        if ($price->interval === null && $customer->lifetimePayment() !== null) {
-            throw ValidationException::withMessages([
-                'price_id' => __('You already own lifetime access.'),
-            ]);
+        if ($refusal) {
+            throw ValidationException::withMessages(['price_id' => $refusal->message()]);
         }
     }
 
@@ -457,10 +449,6 @@ class BillingService
 
             $current->update($updates);
 
-            if ($current->customer) {
-                $this->subscriberRole->sync($current->customer);
-            }
-
             return $current;
         });
     }
@@ -620,11 +608,6 @@ class BillingService
                 $wasJustCreated = $subscription->wasRecentlyCreated;
                 $result['subscription'] = $subscription;
 
-                // Access is granted here, not by a listener: once the session is
-                // Completed a retry does nothing, so nothing after commit may be
-                // the only thing standing between a paid customer and their role.
-                $this->subscriberRole->sync($customer);
-
                 $result['payment'] = Payment::create([
                     'customer_id' => $session->customer_id,
                     'provider' => $webhook->provider,
@@ -648,10 +631,6 @@ class BillingService
                     'amount' => $payload['amount_total'] ?? 0,
                     'status' => PaymentStatus::Succeeded,
                 ]);
-
-                // A one-time price is lifetime access, granted here for the same
-                // reason as a subscription above.
-                $this->subscriberRole->sync($customer);
             }
 
             return $session;
@@ -754,8 +733,10 @@ class BillingService
     }
 
     /**
-     * A subscriber who buys lifetime access stops paying for the subscription
-     * but keeps it until the period they already paid for ends.
+     * A subscriber who buys the lifetime plan replacing their subscription stops
+     * paying for it, and keeps it until the period they already paid for ends.
+     * A subscription to any other plan is left alone: lifetime covers its own
+     * plan only.
      *
      * Runs on every delivery, not only the one that completed the session: it
      * calls the provider after commit, and if that fails the retry — which
@@ -763,19 +744,20 @@ class BillingService
      */
     private function endSubscriptionReplacedByLifetime(string $provider, string $providerSessionId): void
     {
-        $customer = CheckoutSession::where('provider', $provider)
+        $session = CheckoutSession::where('provider', $provider)
             ->where('provider_session_id', $providerSessionId)
             ->where('status', CheckoutSessionStatus::Completed)
-            ->first()
-            ?->customer;
+            ->first();
 
-        if (! $customer || ! $customer->lifetimePayment()) {
+        $plan = $session?->price?->plan;
+
+        if (! $session?->customer || $plan?->kind !== PlanKind::Lifetime || $plan->replaces_product_id === null) {
             return;
         }
 
-        $subscription = $customer->currentSubscription();
+        $subscription = $session->customer->currentSubscription();
 
-        if ($subscription && $subscription->cancelled_at === null) {
+        if ($subscription && $subscription->cancelled_at === null && $subscription->price?->product_id === $plan->replaces_product_id) {
             $this->cancelAtPeriodEnd($subscription);
         }
     }
@@ -843,10 +825,6 @@ class BillingService
             'amount_refunded' => $payload['amount_refunded'] ?? null,
             'status' => ($payload['refunded'] ?? false) === true ? PaymentStatus::Refunded : null,
         ], fn ($value) => $value !== null));
-
-        if ($payment->customer) {
-            $this->subscriberRole->sync($payment->customer);
-        }
     }
 
     private function onSubscriptionDeleted(WebhookData $webhook): void

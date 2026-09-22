@@ -9,7 +9,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Collection;
 use Modules\Billing\Enums\PaymentStatus;
+use Modules\Billing\Enums\PlanKind;
 
 /**
  * @property int $id
@@ -92,21 +94,20 @@ class Customer extends Model
     }
 
     /**
-     * The one-time purchase that grants access for good. There is no row of
-     * its own: a paid, unrefunded payment for a price with no interval is it.
+     * The lifetime plans this customer owns: paid, unrefunded payments for a
+     * price on a plan of kind Lifetime. There is no row of its own. Retired
+     * plans still count — archiving stops new sales, not what was bought.
+     *
+     * @return Collection<int, Payment>
      */
-    public function lifetimePayment(): ?Payment
+    public function lifetimePurchases(): Collection
     {
         return $this->payments()
             ->whereNull('subscription_id')
             ->where('status', PaymentStatus::Succeeded)
-            ->whereHas('price', fn (Builder $price) => $price->whereNull('interval'))
-            ->latest('id')
-            ->first();
+            ->whereHas('price.plan', fn (Builder $plan) => $plan->where('kind', PlanKind::Lifetime))
+            ->with('price.plan')
+            ->get();
     }
 
-    public function hasAccess(): bool
-    {
-        return $this->currentSubscription() !== null || $this->lifetimePayment() !== null;
-    }
 }

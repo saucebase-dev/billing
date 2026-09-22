@@ -1,20 +1,29 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { Product } from '@modules/billing/resources/js/types';
+import type {
+    PlanAction,
+    PlanActions,
+    Product,
+} from '@modules/billing/resources/js/types';
 import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
 } from '../../lib/intervals';
 
-import type { PlanAccess } from '../../lib/planAction';
 import ProductCard from './ProductCard.vue';
 
-const props = defineProps<{
-    products: Product[];
-    access: PlanAccess;
-}>();
+const props = defineProps<PlanActions & { products: Product[] }>();
+
+/** A plan with no price for this interval shows only when it has something to say. */
+function planAction(product: Product): PlanAction {
+    const price = product.prices[0];
+
+    return price
+        ? (props.priceActions[price.id] ?? 'unavailable')
+        : (props.productActions[product.id] ?? 'unavailable');
+}
 
 const availableIntervals = computed(() => {
     if (!props.products) return [];
@@ -60,7 +69,10 @@ const filteredProducts = computed(() => {
             ),
         }))
         .filter(
-            (product) => product.prices.length > 0 || product.metadata?.cta_url,
+            (product) =>
+                product.prices.length > 0 ||
+                (props.productActions[product.id] ?? 'unavailable') !==
+                    'unavailable',
         );
 });
 
@@ -124,7 +136,7 @@ function getToggleLabel(interval: string): string {
                 :key="product.id"
                 :product="product"
                 :price="product.prices[0]"
-                :access="access"
+                :action="planAction(product)"
             />
         </div>
 

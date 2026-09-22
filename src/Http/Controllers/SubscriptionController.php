@@ -7,7 +7,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
+use Illuminate\Validation\ValidationException;
 use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\PurchaseEligibility;
 
 class SubscriptionController
 {
@@ -34,7 +36,7 @@ class SubscriptionController
         ]);
     }
 
-    public function resume(): RedirectResponse
+    public function resume(PurchaseEligibility $eligibility): RedirectResponse
     {
         /** @var User $user */
         $user = Auth::user();
@@ -48,6 +50,12 @@ class SubscriptionController
 
         if (! $subscription) {
             abort(404);
+        }
+
+        if ($eligibility->isReplacedByLifetime($subscription)) {
+            throw ValidationException::withMessages([
+                'subscription' => __('Your lifetime plan replaces this subscription, so it ends as scheduled.'),
+            ]);
         }
 
         $this->billingService->resume($subscription);

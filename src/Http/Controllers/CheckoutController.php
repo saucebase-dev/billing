@@ -4,12 +4,14 @@ namespace Modules\Billing\Http\Controllers;
 
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Settings\BillingSettings;
 use Symfony\Component\HttpFoundation\Response;
@@ -35,15 +37,22 @@ class CheckoutController
 
         // Refused before a session exists; processCheckout() checks again for
         // the guest who signs in part-way through.
-        if ($customer = $request->user()?->billingCustomer) {
-            $this->billingService->assertCanBuy($customer, $price);
+        if ($request->user()) {
+            $this->billingService->assertCanBuy($request->user(), $price);
         }
 
-        $session = CheckoutSession::create([
-            'price_id' => $price->id,
-            'status' => CheckoutSessionStatus::Pending,
-            'expires_at' => now()->addMinutes($this->settings->checkout_expire_after_minutes),
-        ]);
+        // Under the plan's row lock, the same one an admin edit takes: once this
+        // pending session exists the plan's terms are fixed (Product::isSold()),
+        // and the provider is only called after it does.
+        $session = DB::transaction(function () use ($price) {
+            Product::whereKey($price->product_id)->lockForUpdate()->first();
+
+            return CheckoutSession::create([
+                'price_id' => $price->id,
+                'status' => CheckoutSessionStatus::Pending,
+                'expires_at' => now()->addMinutes($this->settings->checkout_expire_after_minutes),
+            ]);
+        });
 
         // Straight to the gateway when we already know who is buying. Going via
         // the checkout route would work too, but an Inertia visit follows that

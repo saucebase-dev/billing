@@ -2,6 +2,8 @@
 
 namespace Modules\Billing\Services;
 
+use Modules\Billing\Data\CatalogPriceData;
+use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CatalogPushReport;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -24,15 +26,29 @@ class CatalogPush
         $gateway = $this->manager->driver($provider);
         $report = new CatalogPushReport;
 
-        Product::whereNull('provider_product_id')
+        $unpushed = Product::whereNull('provider_product_id')
             ->when($only, fn ($query) => $query->whereKey($only))
-            ->each(function (Product $product) use ($provider, $gateway, $report): void {
+            ->get();
+
+        // A reset database pushes the same plans again: reconnect to the ones
+        // pushed last time, tagged with their slug, rather than copying them.
+        $remoteBySlug = $unpushed->isEmpty() ? collect() : collect($gateway->listCatalog())
+            ->filter(fn (CatalogProductData $remote) => $remote->active && $remote->slug !== null)
+            ->keyBy('slug');
+
+        foreach ($unpushed as $product) {
+            $remote = $remoteBySlug->get($product->slug);
+
+            if ($remote) {
+                $this->reconnectPrices($product, $remote, $provider);
+            }
+
             $product->update([
                 'provider' => $provider,
-                'provider_product_id' => $gateway->createProduct($product),
+                'provider_product_id' => $remote->providerProductId ?? $gateway->createProduct($product),
             ]);
             $report->products++;
-        });
+        }
 
         // Features are the app's words, never the provider's, so they are sent
         // every run rather than only when the product is first created.
@@ -59,5 +75,22 @@ class CatalogPush
             });
 
         return $report;
+    }
+
+    /** Adopt the provider's active prices that match one here; the rest are created below. */
+    private function reconnectPrices(Product $product, CatalogProductData $remote, string $provider): void
+    {
+        $available = collect($remote->prices)->filter(fn (CatalogPriceData $price) => $price->active);
+
+        foreach ($product->prices()->whereNull('provider_price_id')->get() as $price) {
+            $key = $available->search(fn (CatalogPriceData $remotePrice) => $remotePrice->currency === $price->currency->value
+                && $remotePrice->amount === $price->amount
+                && $remotePrice->interval === $price->interval
+                && ($remotePrice->intervalCount ?? 1) === ($price->interval_count ?? 1));
+
+            if ($key !== false) {
+                $price->update(['provider' => $provider, 'provider_price_id' => $available->pull($key)->providerPriceId]);
+            }
+        }
     }
 }

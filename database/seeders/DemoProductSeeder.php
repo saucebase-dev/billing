@@ -5,6 +5,7 @@ namespace Modules\Billing\Database\Seeders;
 use Illuminate\Database\Seeder;
 use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\Currency;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
 
 /**
@@ -25,6 +26,12 @@ class DemoProductSeeder extends Seeder
     /** The plans this seeder owns, and the only ones the demo may push. */
     public const SLUGS = ['free', 'pro', 'team', 'lifetime', 'enterprise'];
 
+    /** Pro's entitlements, which Team builds on and Lifetime grants for good. */
+    private const PRO_ENTITLEMENTS = [
+        'features' => ['custom_domains' => true, 'webhooks' => true],
+        'limits' => ['projects' => null, 'api_requests' => 1000000],
+    ];
+
     public function run(): void
     {
         foreach ($this->plans() as $order => $plan) {
@@ -40,6 +47,11 @@ class DemoProductSeeder extends Seeder
                     'is_active' => true,
                     'features' => $plan['features'],
                     'metadata' => $plan['metadata'],
+                    'kind' => $plan['kind'],
+                    'entitlements' => $plan['entitlements'],
+                    'replaces_product_id' => isset($plan['replaces'])
+                        ? Product::where('slug', $plan['replaces'])->value('id')
+                        : null,
                 ],
             );
 
@@ -59,7 +71,7 @@ class DemoProductSeeder extends Seeder
     }
 
     /**
-     * @return list<array{slug: string, name: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
+     * @return list<array{slug: string, name: string, kind: PlanKind, entitlements: array<string, mixed>, replaces?: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
      */
     private function plans(): array
     {
@@ -67,6 +79,8 @@ class DemoProductSeeder extends Seeder
             [
                 'slug' => 'free',
                 'name' => 'Free',
+                'kind' => PlanKind::Free,
+                'entitlements' => ['limits' => ['projects' => 3, 'api_requests' => 10000]],
                 'description' => 'Everything you need to ship a side project.',
                 'features' => ['3 projects', '10k API requests / month', 'Community support'],
                 'metadata' => [
@@ -82,6 +96,8 @@ class DemoProductSeeder extends Seeder
             [
                 'slug' => 'pro',
                 'name' => 'Pro',
+                'kind' => PlanKind::Subscription,
+                'entitlements' => self::PRO_ENTITLEMENTS,
                 'description' => 'No limits on projects, and the tools to run them in production.',
                 'features' => ['Unlimited projects', '1M API requests / month', 'Custom domains', 'Webhooks', 'Priority email support'],
                 'metadata' => [
@@ -96,6 +112,11 @@ class DemoProductSeeder extends Seeder
             [
                 'slug' => 'team',
                 'name' => 'Team',
+                'kind' => PlanKind::Subscription,
+                'entitlements' => [
+                    'features' => [...self::PRO_ENTITLEMENTS['features'], 'roles' => true, 'audit_logs' => true, 'sso' => true],
+                    'limits' => [...self::PRO_ENTITLEMENTS['limits'], 'members' => 25],
+                ],
                 'description' => 'Work together on every project, up to 25 members.',
                 'features' => ['Everything in Pro', 'Up to 25 members', 'Roles & permissions', 'Audit logs', 'SSO (SAML)'],
                 'metadata' => [
@@ -110,6 +131,9 @@ class DemoProductSeeder extends Seeder
             [
                 'slug' => 'lifetime',
                 'name' => 'Lifetime',
+                'kind' => PlanKind::Lifetime,
+                'replaces' => 'pro',
+                'entitlements' => self::PRO_ENTITLEMENTS,
                 'description' => 'Pro, paid once and never again.',
                 'features' => ['Everything in Pro, forever', 'All future updates'],
                 'metadata' => [
@@ -124,6 +148,11 @@ class DemoProductSeeder extends Seeder
             [
                 'slug' => 'enterprise',
                 'name' => 'Enterprise',
+                'kind' => PlanKind::Subscription,
+                'entitlements' => [
+                    'features' => ['custom_domains' => true, 'webhooks' => true, 'roles' => true, 'audit_logs' => true, 'sso' => true],
+                    'limits' => ['projects' => null, 'api_requests' => null, 'members' => null],
+                ],
                 'description' => 'Custom limits, contracts and support for large organisations.',
                 'features' => ['Unlimited members', 'Uptime SLA', 'Dedicated support engineer', 'Self-hosted option'],
                 'metadata' => [

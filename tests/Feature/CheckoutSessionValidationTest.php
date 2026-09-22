@@ -11,6 +11,7 @@ use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
 
 class CheckoutSessionValidationTest extends TestCase
@@ -132,7 +133,7 @@ class CheckoutSessionValidationTest extends TestCase
 
         $response = $this->actingAs($user)->get(route('billing.portal'));
 
-        $response->assertRedirect(route('settings.billing'));
+        $response->assertRedirect(SettingsSection::url('billing'));
         $response->assertSessionHas('toast');
     }
 }

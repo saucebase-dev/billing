@@ -31,7 +31,7 @@ Navigation::addWhen(
 
 // User menu - Upgrade
 Navigation::addWhen(
-    fn () => ! Auth::user()?->isSubscriber(),
+    fn () => Auth::check() && ! Auth::user()->hasPaidPlan(),
     'Upgrade',
     fn () => route('billing.plans'),
     function (Section $section) {

@@ -4,6 +4,8 @@ namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
+use Modules\Billing\Data\CatalogPriceData;
+use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
@@ -107,5 +109,44 @@ class CatalogPushTest extends TestCase
         $this->assertSame(1, $report->products);
         $this->assertSame(1, $report->prices);
         $this->assertNull($other->fresh()->provider_product_id);
+    }
+
+    /** A reset database pushes again; it picks up what it pushed last time instead of copying it. */
+    public function test_a_plan_the_provider_already_has_under_its_slug_is_reconnected(): void
+    {
+        $product = Product::factory()->create(['slug' => 'pro', 'provider' => null, 'provider_product_id' => null]);
+        $monthly = Price::factory()->create(['product_id' => $product->id, 'provider_price_id' => null, 'currency' => 'EUR', 'amount' => 2900, 'interval' => 'month', 'interval_count' => 1]);
+        $yearly = Price::factory()->create(['product_id' => $product->id, 'provider_price_id' => null, 'currency' => 'EUR', 'amount' => 29000, 'interval' => 'year', 'interval_count' => 1]);
+
+        $this->gateway->method('listCatalog')->willReturn([
+            new CatalogProductData(providerProductId: 'prod_old', name: 'Pro', description: null, active: true, slug: 'pro', prices: [
+                new CatalogPriceData(providerPriceId: 'price_old_month', currency: 'EUR', amount: 2900, interval: 'month', intervalCount: 1, active: true),
+            ]),
+        ]);
+        $this->gateway->expects($this->never())->method('createProduct');
+        $this->gateway->expects($this->once())->method('createPrice')
+            ->with($this->callback(fn (Price $given) => $given->is($yearly)), 'prod_old')
+            ->willReturn('price_new_year');
+
+        app(CatalogPush::class)->run();
+
+        $this->assertSame('prod_old', $product->fresh()->provider_product_id);
+        $this->assertSame('price_old_month', $monthly->fresh()->provider_price_id);
+        $this->assertSame('price_new_year', $yearly->fresh()->provider_price_id);
+    }
+
+    /** Archived at the provider means retired: a new product is created instead. */
+    public function test_an_archived_product_with_the_same_slug_is_not_reconnected(): void
+    {
+        $product = Product::factory()->create(['slug' => 'pro', 'provider' => null, 'provider_product_id' => null]);
+
+        $this->gateway->method('listCatalog')->willReturn([
+            new CatalogProductData(providerProductId: 'prod_old', name: 'Pro', description: null, active: false, slug: 'pro', prices: []),
+        ]);
+        $this->gateway->expects($this->once())->method('createProduct')->willReturn('prod_new');
+
+        app(CatalogPush::class)->run();
+
+        $this->assertSame('prod_new', $product->fresh()->provider_product_id);
     }
 }

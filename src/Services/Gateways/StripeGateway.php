@@ -256,30 +256,45 @@ class StripeGateway implements PaymentGatewayInterface
             ->filter(fn (StripePrice $price) => $price->unit_amount !== null)
             ->groupBy(fn (StripePrice $price) => $price->product->id);
 
-        return $prices->map(function ($productPrices) {
-            /** @var StripeProduct $product */
-            $product = $productPrices->first()->product;
+        $catalog = $prices->map(fn ($productPrices) => $this->catalogProduct(
+            $productPrices->first()->product,
+            $productPrices->map(fn (StripePrice $price) => new CatalogPriceData(
+                providerPriceId: $price->id,
+                currency: strtoupper($price->currency),
+                amount: (int) $price->unit_amount,
+                interval: $price->recurring?->interval,
+                intervalCount: $price->recurring?->interval_count,
+                active: $price->active,
+            ))->values()->all(),
+        ));
 
-            return new CatalogProductData(
-                providerProductId: $product->id,
-                name: $product->name,
-                description: $product->description,
-                active: $product->active,
-                features: collect($product->marketing_features ?? [])
-                    ->pluck('name')
-                    ->filter(fn ($name) => is_string($name) && $name !== '')
-                    ->values()
-                    ->all(),
-                prices: $productPrices->map(fn (StripePrice $price) => new CatalogPriceData(
-                    providerPriceId: $price->id,
-                    currency: strtoupper($price->currency),
-                    amount: (int) $price->unit_amount,
-                    interval: $price->recurring?->interval,
-                    intervalCount: $price->recurring?->interval_count,
-                    active: $price->active,
-                ))->values()->all(),
-            );
-        })->values()->all();
+        // Active products with no price too, such as a plan that links to
+        // sales: the push finds them by slug instead of creating another.
+        foreach ($this->stripe->products->all(['limit' => 100, 'active' => true])->autoPagingIterator() as $product) {
+            if (! $catalog->has($product->id)) {
+                $catalog->put($product->id, $this->catalogProduct($product, []));
+            }
+        }
+
+        return $catalog->values()->all();
+    }
+
+    /** @param  list<CatalogPriceData>  $prices */
+    private function catalogProduct(StripeProduct $product, array $prices): CatalogProductData
+    {
+        return new CatalogProductData(
+            providerProductId: $product->id,
+            name: $product->name,
+            description: $product->description,
+            active: $product->active,
+            slug: $product->metadata['slug'] ?? null,
+            features: collect($product->marketing_features ?? [])
+                ->pluck('name')
+                ->filter(fn ($name) => is_string($name) && $name !== '')
+                ->values()
+                ->all(),
+            prices: $prices,
+        );
     }
 
     public function createProduct(Product $product): string
@@ -288,6 +303,7 @@ class StripeGateway implements PaymentGatewayInterface
             'name' => $product->name,
             'description' => $product->description ? strip_tags($product->description) : null,
             'active' => $product->is_active,
+            'metadata' => ['slug' => $product->slug],
         ], fn ($value) => $value !== null))->id;
     }
 

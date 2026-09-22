@@ -110,4 +110,16 @@ class Price extends Model
         return $this->belongsTo(Product::class);
     }
 
+    /**
+     * The product as a plan someone holds, retired or not. Use this, not
+     * `product()`, when deciding what a purchase grants: archiving a plan stops
+     * new sales and must not reach back into what was bought.
+     *
+     * @return BelongsTo<Product, $this>
+     */
+    public function plan(): BelongsTo
+    {
+        return $this->belongsTo(Product::class, 'product_id')->withTrashed();
+    }
+
 }

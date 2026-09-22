@@ -1,10 +1,15 @@
 --- a/app/Models/User.php
 +++ b/app/Models/User.php
-@@ -12,2 +12,3 @@
+@@ -13,2 +13,4 @@
  use Spatie\MediaLibrary\HasMedia;
++use Modules\Billing\Contracts\BillingOwner;
 +use Modules\Billing\Traits\Billable;
  use Spatie\MediaLibrary\InteractsWithMedia;
-@@ -20,2 +21,3 @@
+@@ -18,5 +20,6 @@
+ 
+-class User extends Authenticatable implements FilamentUser, HasLocalePreference, HasMedia
++class User extends Authenticatable implements BillingOwner, FilamentUser, HasLocalePreference, HasMedia
+     // , MustVerifyEmail
  {
 +    use Billable;
      use HasFactory;

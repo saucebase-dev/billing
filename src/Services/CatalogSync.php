@@ -5,6 +5,7 @@ namespace Modules\Billing\Services;
 use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CatalogSyncReport;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
 
 /**
@@ -72,7 +73,8 @@ class CatalogSync
             // A plan retired before this app existed is history, not catalogue.
             // One the app already knows still has to be deactivated below, since
             // subscriptions may point at it.
-            if (! $remote->active) {
+            // Nothing to sell yet is nothing to import either.
+            if (! $remote->active || $remote->prices === []) {
                 return null;
             }
 
@@ -89,6 +91,11 @@ class CatalogSync
                 'description' => $remote->description,
                 'features' => $remote->features,
                 'is_visible' => false,
+                // One-time prices only: a one-off, never lifetime access by
+                // accident. The admin decides whether it is a lifetime plan.
+                'kind' => collect($remote->prices)->every(fn ($price) => $price->interval === null)
+                    ? PlanKind::OneOff
+                    : PlanKind::Subscription,
             ]);
         }
 

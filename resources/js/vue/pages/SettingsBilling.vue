@@ -13,6 +13,7 @@ import type { Invoice, PaymentMethod, Subscription } from '../../types';
 
 defineProps<{
     subscription: Subscription | null;
+    lifetimePlans: { name: string | null }[];
     paymentMethod: PaymentMethod | null;
     invoices: Invoice[];
     billingPortalUrl: string;
@@ -139,6 +140,22 @@ function resumeSubscription() {
             {{ $t('Manage your subscription, payment method, and invoices') }}
         </p>
 
+        <!-- Lifetime plans are owned for good, alongside any subscription -->
+        <div
+            v-if="lifetimePlans.length"
+            data-testid="lifetime-plans"
+            class="space-y-1"
+        >
+            <h3 class="font-medium">{{ $t('Lifetime') }}</h3>
+            <p
+                v-for="(plan, index) in lifetimePlans"
+                :key="index"
+                class="text-foreground text-lg font-semibold"
+            >
+                {{ plan.name ?? $t('Unknown Plan') }}
+            </p>
+        </div>
+
         <template v-if="subscription">
             <div data-testid="subscription-section" class="space-y-8">
                 <!-- Current plan -->
@@ -155,7 +172,21 @@ function resumeSubscription() {
                             {{ formatInterval(subscription.interval) }}
                             <template v-if="subscription.cancelled_at">
                                 &middot;
-                                <span class="text-destructive">
+                                <span
+                                    v-if="subscription.replaced_by_lifetime"
+                                    data-testid="replaced-by-lifetime"
+                                >
+                                    {{ $t('Ends on') }}
+                                    {{
+                                        formatDate(
+                                            subscription.ends_at,
+                                            language,
+                                            longDate,
+                                        )
+                                    }},
+                                    {{ $t('replaced by your lifetime plan') }}
+                                </span>
+                                <span v-else class="text-destructive">
                                     {{ $t('Cancels on') }}
                                     {{
                                         formatDate(
@@ -344,7 +375,13 @@ function resumeSubscription() {
                 </div>
 
                 <!-- Resume, when the plan is already cancelled -->
-                <div v-if="subscription.cancelled_at" class="space-y-3">
+                <div
+                    v-if="
+                        subscription.cancelled_at &&
+                        !subscription.replaced_by_lifetime
+                    "
+                    class="space-y-3"
+                >
                     <div class="space-y-1">
                         <h3 class="font-medium">
                             {{ $t('Resume subscription') }}
@@ -402,7 +439,7 @@ function resumeSubscription() {
 
         <!-- Nothing bought yet -->
         <div
-            v-else
+            v-else-if="!lifetimePlans.length"
             data-testid="no-subscription"
             class="border-border flex w-full flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center"
         >
