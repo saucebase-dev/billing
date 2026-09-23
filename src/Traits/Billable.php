@@ -32,7 +32,7 @@ trait Billable
     public function entitlements(): Entitlements
     {
         $entitlements = Product::where('kind', PlanKind::Free)->first()?->entitlements() ?? Entitlements::none();
-        $subscribed = $this->heldSubscription()?->price?->plan;
+        $subscribed = $this->accessGrantingSubscription()?->price?->plan;
 
         if ($subscribed) {
             $entitlements = $entitlements->merge($subscribed->entitlements());
@@ -49,14 +49,14 @@ trait Billable
 
     public function planName(): ?string
     {
-        return $this->heldSubscription()?->price->plan->name
+        return $this->accessGrantingSubscription()?->price->plan->name
             ?? $this->heldLifetimePurchases()->first()?->price->plan->name
             ?? Product::where('kind', PlanKind::Free)->value('name');
     }
 
     public function hasPaidPlan(): bool
     {
-        return $this->heldSubscription() !== null || $this->heldLifetimePurchases()->isNotEmpty();
+        return $this->accessGrantingSubscription() !== null || $this->heldLifetimePurchases()->isNotEmpty();
     }
 
     public function canUseFeature(string $feature): bool
@@ -73,9 +73,13 @@ trait Billable
      * Read once per owner instance: the plan name and the Upgrade menu item both
      * ask on every page. A fresh instance (`fresh()`, the next request) reads again.
      */
-    private function heldSubscription(): ?Subscription
+    private function accessGrantingSubscription(): ?Subscription
     {
-        return once(fn () => $this->billingAccount()?->currentSubscription());
+        return once(function (): ?Subscription {
+            $subscription = $this->billingAccount()?->currentSubscription();
+
+            return $subscription?->grantsAccess() ? $subscription : null;
+        });
     }
 
     /** @return Collection<int, Payment> */

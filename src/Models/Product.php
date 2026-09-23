@@ -32,6 +32,7 @@ use Modules\Billing\Enums\PlanKind;
  * @property bool $is_active
  * @property PlanKind $kind
  * @property array<string, mixed>|null $entitlements
+ * @property int|null $trial_days
  * @property int|null $replaces_product_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -90,6 +91,7 @@ class Product extends Model
         'is_active',
         'kind',
         'entitlements',
+        'trial_days',
         'replaces_product_id',
     ];
 
@@ -113,6 +115,7 @@ class Product extends Model
             'deleted_at' => 'datetime',
             'kind' => PlanKind::class,
             'entitlements' => 'array',
+            'trial_days' => 'integer',
         ];
     }
 
@@ -211,6 +214,11 @@ class Product extends Model
                 ]);
             }
         }
+
+        // 730 days is the longest trial the provider accepts.
+        Validator::make(['trial_days' => $this->trial_days], [
+            'trial_days' => ['nullable', 'integer', 'min:1', 'max:730'],
+        ])->validate();
 
         Validator::make(['entitlements' => $this->entitlements ?? []], [
             'entitlements' => ['array:features,limits'],

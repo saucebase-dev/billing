@@ -23,13 +23,16 @@ use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
+use Modules\Billing\Events\AccessSuspended;
 use Modules\Billing\Events\CheckoutCompleted;
+use Modules\Billing\Events\GraceStarted;
 use Modules\Billing\Events\InvoicePaid;
 use Modules\Billing\Events\PaymentFailed;
 use Modules\Billing\Events\PaymentSucceeded;
 use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
+use Modules\Billing\Events\TrialEnding;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
@@ -39,6 +42,7 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Models\WebhookEvent;
 use Modules\Billing\Services\Gateways\StripeGateway;
+use Modules\Billing\Settings\BillingSettings;
 
 class BillingService
 {
@@ -82,12 +86,16 @@ class BillingService
             throw new AuthorizationException;
         }
 
+        $session = $this->settleRequest($session, $customer, $price, $successUrl, $cancelUrl, $coupon);
+
         $data = new CheckoutData(
             customer: $customer,
             price: $price,
-            successUrl: $successUrl,
-            cancelUrl: $cancelUrl,
-            coupon: $coupon,
+            successUrl: $session->success_url,
+            cancelUrl: $session->cancel_url,
+            coupon: $session->coupon,
+            trialDays: $session->trial_days ?: null,
+            trialRequiresPaymentMethod: $session->trial_requires_payment_method ?? true,
             // Two requests racing past the check above get the same provider session.
             idempotencyKey: 'checkout_'.$session->uuid,
         );
@@ -99,11 +107,44 @@ class BillingService
             'provider' => $result->provider,
             'provider_session_id' => $result->sessionId,
             'provider_url' => $result->url,
-            'success_url' => $successUrl,
-            'cancel_url' => $cancelUrl,
         ]);
 
         return $result;
+    }
+
+    /**
+     * Decide this checkout's request, once, and write it down before the hand-off.
+     *
+     * The idempotency key stands for one request, so a retry sends the first
+     * one again and the expiry command can replay it to find a session whose
+     * answer was lost. The trial is decided under the customer's row lock, with
+     * the session re-read inside it, so neither a second checkout nor a second
+     * request holding this one can claim or undo the one trial.
+     */
+    private function settleRequest(CheckoutSession $session, Customer $customer, Price $price, string $successUrl, string $cancelUrl, ?string $coupon): CheckoutSession
+    {
+        return DB::transaction(function () use ($session, $customer, $price, $successUrl, $cancelUrl, $coupon): CheckoutSession {
+            Customer::whereKey($customer->id)->lockForUpdate()->first();
+
+            $session->refresh();
+
+            if ($session->trial_days === null) {
+                $days = $price->product?->trial_days;
+
+                $session->forceFill([
+                    'trial_days' => $days && ! $customer->hasTrialed() ? $days : 0,
+                    'trial_requires_payment_method' => app(BillingSettings::class)->trial_requires_payment_method,
+                ]);
+            }
+
+            if ($session->success_url === null) {
+                $session->forceFill(['success_url' => $successUrl, 'cancel_url' => $cancelUrl, 'coupon' => $coupon]);
+            }
+
+            $session->save();
+
+            return $session;
+        });
     }
 
     public function handleWebhook(string $provider, Request $request): void
@@ -162,10 +203,14 @@ class BillingService
             WebhookEventType::CheckoutCompleted => $this->onCheckoutCompleted($webhook),
             WebhookEventType::SubscriptionUpdated => $this->onSubscriptionUpdated($webhook),
             WebhookEventType::SubscriptionDeleted => $this->onSubscriptionDeleted($webhook),
+            WebhookEventType::SubscriptionTrialWillEnd => $this->onTrialWillEnd($webhook),
             WebhookEventType::PaymentSucceeded => $this->onPaymentSucceeded($webhook),
             WebhookEventType::PaymentFailed => $this->onPaymentFailed($webhook),
             WebhookEventType::InvoicePaid => $this->onInvoicePaid($webhook),
             WebhookEventType::PaymentRefunded => $this->onPaymentRefunded($webhook),
+            WebhookEventType::PaymentMethodAttached => $this->onPaymentMethodAttached($webhook),
+            WebhookEventType::PaymentMethodDetached => $this->onPaymentMethodDetached($webhook),
+            WebhookEventType::CustomerUpdated => $this->onCustomerUpdated($webhook),
             default => null,
         };
     }
@@ -322,7 +367,7 @@ class BillingService
         ]);
     }
 
-    private function ensurePaymentMethod(Customer $customer, string $providerId, string $provider): ?PaymentMethod
+    private function ensurePaymentMethod(Customer $customer, string $providerId, string $provider, bool $makeDefault = true): ?PaymentMethod
     {
         $gateway = $this->manager->driver($provider);
 
@@ -336,11 +381,11 @@ class BillingService
             return null;
         }
 
-        return DB::transaction(function () use ($customer, $data, $provider) {
+        return DB::transaction(function () use ($customer, $data, $provider, $makeDefault) {
             $existing = PaymentMethod::where('provider', $provider)->where('provider_payment_method_id', $data->providerPaymentMethodId)->first();
 
             if ($existing) {
-                if (! $existing->is_default) {
+                if ($makeDefault && ! $existing->is_default) {
                     PaymentMethod::where('customer_id', $customer->id)
                         ->where('is_default', true)
                         ->lockForUpdate()
@@ -351,10 +396,12 @@ class BillingService
                 return $existing;
             }
 
-            PaymentMethod::where('customer_id', $customer->id)
-                ->where('is_default', true)
-                ->lockForUpdate()
-                ->update(['is_default' => false]);
+            if ($makeDefault) {
+                PaymentMethod::where('customer_id', $customer->id)
+                    ->where('is_default', true)
+                    ->lockForUpdate()
+                    ->update(['is_default' => false]);
+            }
 
             return PaymentMethod::create([
                 'customer_id' => $customer->id,
@@ -362,7 +409,7 @@ class BillingService
                 'provider_payment_method_id' => $data->providerPaymentMethodId,
                 'type' => $data->type,
                 'details' => $data->details->toArray(),
-                'is_default' => true,
+                'is_default' => $makeDefault,
             ]);
         });
     }
@@ -434,9 +481,9 @@ class BillingService
      * @param  array<string, mixed>  $updates
      * @return Subscription|null The updated row, or null when the event was skipped.
      */
-    private function applyIfCurrent(Subscription $subscription, WebhookData $webhook, array $updates): ?Subscription
+    private function applyIfCurrent(Subscription $subscription, WebhookData $webhook, array $updates, ?SubscriptionStatus $status = null): ?Subscription
     {
-        return DB::transaction(function () use ($subscription, $webhook, $updates) {
+        return DB::transaction(function () use ($subscription, $webhook, $updates, $status) {
             $current = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
 
             $stale = $webhook->occurredAt && $current->last_event_at && $webhook->occurredAt->lt($current->last_event_at);
@@ -447,10 +494,268 @@ class BillingService
                 return null;
             }
 
-            $current->update($updates);
+            $this->transition($current, $status, $updates);
 
             return $current;
         });
+    }
+
+    /**
+     * Write a row locked by the caller, moving it to `$status` under the
+     * delinquency rules when one is given. A status change bumps the revision,
+     * so a provider read taken before it can tell it is about an older row.
+     *
+     * @param  array<string, mixed>  $alsoUpdate
+     */
+    private function transition(Subscription $current, ?SubscriptionStatus $status, array $alsoUpdate = []): void
+    {
+        $delinquency = $status ? $this->delinquencyUpdates($current, $status) : [];
+
+        $current->update($delinquency === []
+            ? $alsoUpdate
+            : [...$alsoUpdate, ...$delinquency, 'state_revision' => $current->state_revision + 1]);
+    }
+
+    /**
+     * Suspend a subscription whose grace window has closed.
+     *
+     * The status is re-checked under the row's lock, so a recovery that landed
+     * between the sweeper's query and this call wins rather than being undone.
+     */
+    public function suspendIfGraceHasRunOut(Subscription $subscription): bool
+    {
+        $suspended = DB::transaction(function () use ($subscription): ?Subscription {
+            $current = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
+
+            if ($current->status !== SubscriptionStatus::PastDue || ! $current->grace_ends_at?->isPast()) {
+                return null;
+            }
+
+            $this->transition($current, SubscriptionStatus::Suspended);
+
+            return $current;
+        });
+
+        if ($suspended) {
+            $this->announceDelinquency($suspended);
+        }
+
+        return $suspended !== null;
+    }
+
+    /** A card added in the provider's portal, which is where a trialing customer adds one. */
+    private function onPaymentMethodAttached(WebhookData $webhook): void
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = $webhook->payload;
+
+        $customer = $this->customerFor($webhook);
+
+        if ($customer && is_string($payload['id'] ?? null)) {
+            // Attaching a card does not make it the one invoices are charged to.
+            $this->ensurePaymentMethod($customer, $payload['id'], $webhook->provider, makeDefault: false);
+        }
+    }
+
+    /** The card invoices are charged to, which the customer may change or clear in the portal. */
+    private function onCustomerUpdated(WebhookData $webhook): void
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = $webhook->payload;
+
+        $customer = is_string($payload['id'] ?? null)
+            ? Customer::where('provider', $webhook->provider)->where('provider_customer_id', $payload['id'])->first()
+            : null;
+
+        if (! $customer) {
+            return;
+        }
+
+        $default = $payload['invoice_settings']['default_payment_method'] ?? null;
+
+        if (is_string($default)) {
+            $this->ensurePaymentMethod($customer, $default, $webhook->provider);
+
+            return;
+        }
+
+        PaymentMethod::where('customer_id', $customer->id)->where('is_default', true)->update(['is_default' => false]);
+    }
+
+    /** Removed there too, and a subscription pointing at it is left without one. */
+    private function onPaymentMethodDetached(WebhookData $webhook): void
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = $webhook->payload;
+
+        // Without an ID this would match every row missing one.
+        if (! is_string($payload['id'] ?? null)) {
+            return;
+        }
+
+        PaymentMethod::where('provider', $webhook->provider)
+            ->where('provider_payment_method_id', $payload['id'])
+            ->each(fn (PaymentMethod $method) => $method->delete());
+    }
+
+    /**
+     * Tell the customer what just happened to their subscription.
+     *
+     * Both mails hang off a transition rather than an event type, so a provider
+     * repeating itself says nothing twice. They are best-effort: a crash between
+     * the committed change and the queued job loses one.
+     */
+    private function announceDelinquency(Subscription $subscription): void
+    {
+        if ($subscription->wasChanged('status') && $subscription->status === SubscriptionStatus::Suspended) {
+            event(new AccessSuspended($subscription));
+
+            return;
+        }
+
+        if ($subscription->wasChanged('grace_ends_at') && $subscription->status === SubscriptionStatus::PastDue) {
+            event(new GraceStarted($subscription));
+        }
+    }
+
+    /** The provider warns before a trial converts; the customer hears it from us. */
+    private function onTrialWillEnd(WebhookData $webhook): void
+    {
+        /** @var array<string, mixed> $payload */
+        $payload = $webhook->payload;
+
+        $subscription = $this->subscriptionForEvent($webhook, $payload['id']);
+
+        if (! $subscription) {
+            return;
+        }
+
+        $subscription = $this->applyIfCurrent($subscription, $webhook, $this->trialDates($payload));
+
+        if ($subscription) {
+            event(new TrialEnding($subscription));
+        }
+    }
+
+    /**
+     * The provider's trial dates, in the app's columns. Stripe keeps them on the
+     * subscription for good, which is what makes "has this customer ever
+     * trialed" answerable from history.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, Carbon>
+     */
+    private function trialDates(array $payload): array
+    {
+        $dates = [];
+
+        foreach (['trial_start' => 'trial_starts_at', 'trial_end' => 'trial_ends_at'] as $key => $column) {
+            if (! empty($payload[$key])) {
+                $dates[$column] = Carbon::createFromTimestamp($payload[$key]);
+            }
+        }
+
+        return $dates;
+    }
+
+    /**
+     * What the provider says this subscription is, in the app's words. A trial
+     * is active there and here; anything unknown leaves the row as it is.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function providerStatus(array $payload, Subscription $subscription): SubscriptionStatus
+    {
+        return match ($payload['status'] ?? null) {
+            'active', 'trialing' => SubscriptionStatus::Active,
+            'past_due' => SubscriptionStatus::PastDue,
+            'unpaid' => SubscriptionStatus::Suspended,
+            'canceled', 'incomplete_expired' => SubscriptionStatus::Cancelled,
+            'incomplete', 'paused' => SubscriptionStatus::Pending,
+            default => $subscription->status,
+        };
+    }
+
+    /**
+     * Ask the provider what a delinquent subscription is now, and apply that.
+     *
+     * Invoice events are not ordered against each other, so a late payment for
+     * an old invoice must not hand access back. The read is authoritative; if
+     * the row changes while it is in flight the answer is about an older row, so
+     * it is asked again. Twice overtaken, it throws: the delivery goes back to
+     * the provider rather than leaving a paying customer suspended.
+     */
+    private function reconcileDelinquency(Subscription $subscription): void
+    {
+        for ($attempt = 0; $attempt < 2; $attempt++) {
+            $subscription->refresh();
+
+            if (! in_array($subscription->status, [SubscriptionStatus::PastDue, SubscriptionStatus::Suspended], true)) {
+                return;
+            }
+
+            $revision = $subscription->state_revision;
+            $payload = $this->manager->driver($subscription->provider)->retrieveSubscription($subscription->provider_subscription_id);
+            $status = $this->providerStatus($payload, $subscription);
+
+            $applied = DB::transaction(function () use ($subscription, $revision, $status): ?Subscription {
+                $current = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
+
+                if ($current->state_revision !== $revision) {
+                    return null;
+                }
+
+                $this->transition($current, $status);
+
+                return $current;
+            });
+
+            if ($applied) {
+                $this->announceDelinquency($applied);
+
+                return;
+            }
+        }
+
+        throw new \RuntimeException("Could not reconcile subscription {$subscription->id}: it kept changing while the provider was asked.");
+    }
+
+    /**
+     * One failed payment opens one episode with one deadline.
+     *
+     * The deadline is set once and never extended, so a second failure cannot buy
+     * another window; a suspension pulls it back to now; and a suspension only
+     * ends with a recovery or a cancellation, never with another failure.
+     *
+     * @return array<string, mixed>
+     */
+    private function delinquencyUpdates(Subscription $current, SubscriptionStatus $status): array
+    {
+        if ($current->status === SubscriptionStatus::Suspended && $status === SubscriptionStatus::PastDue) {
+            return [];
+        }
+
+        if ($status === SubscriptionStatus::PastDue) {
+            $deadline = $current->grace_ends_at ?? now()->addDays(app(BillingSettings::class)->grace_period_days);
+
+            // A window of zero days, or one that closed while nobody was looking,
+            // is a suspension rather than a grace period.
+            return [
+                'status' => $deadline->isFuture() ? SubscriptionStatus::PastDue : SubscriptionStatus::Suspended,
+                'grace_ends_at' => $deadline,
+            ];
+        }
+
+        if ($status === SubscriptionStatus::Suspended) {
+            // A deadline already passed stays; one still ahead is pulled back to now.
+            return [
+                'status' => $status,
+                'grace_ends_at' => $current->grace_ends_at?->isPast() ? $current->grace_ends_at : now(),
+            ];
+        }
+
+        // Active (a trial included), pending or cancelled: the episode is over.
+        return ['status' => $status, 'grace_ends_at' => null];
     }
 
     /**
@@ -676,18 +981,15 @@ class BillingService
             ? $this->ensurePaymentMethod($subscription->customer, $payload['default_payment_method'], $webhook->provider)
             : null;
 
-        $status = match ($payload['status'] ?? null) {
-            'active', 'trialing' => SubscriptionStatus::Active,
-            'past_due', 'unpaid' => SubscriptionStatus::PastDue,
-            'canceled', 'incomplete_expired' => SubscriptionStatus::Cancelled,
-            'incomplete', 'paused' => SubscriptionStatus::Pending,
-            default => $subscription->status,
-        };
+        $status = $this->providerStatus($payload, $subscription);
 
-        $updates = ['status' => $status, 'last_event_at' => $webhook->occurredAt];
+        $updates = ['last_event_at' => $webhook->occurredAt, ...$this->trialDates($payload)];
 
         if ($pm) {
             $updates['payment_method_id'] = $pm->id;
+        } elseif (array_key_exists('default_payment_method', $payload) && $payload['default_payment_method'] === null) {
+            // Cleared at the provider: invoices fall back to the customer's default.
+            $updates['payment_method_id'] = null;
         }
 
         // A plan changed at the provider (its billing portal) arrives here.
@@ -721,13 +1023,15 @@ class BillingService
             $updates['ends_at'] = null;
         }
 
-        $subscription = $this->applyIfCurrent($subscription, $webhook, $updates);
+        $subscription = $this->applyIfCurrent($subscription, $webhook, $updates, $status);
 
         if (! $subscription) {
             return;
         }
 
-        Log::info('Subscription updated', ['subscription_id' => $subscription->id, 'status' => $status->value]);
+        Log::info('Subscription updated', ['subscription_id' => $subscription->id, 'status' => $subscription->status->value]);
+
+        $this->announceDelinquency($subscription);
 
         event(new SubscriptionUpdated($subscription));
     }
@@ -839,11 +1143,10 @@ class BillingService
         }
 
         $subscription = $this->applyIfCurrent($subscription, $webhook, [
-            'status' => SubscriptionStatus::Cancelled,
             'cancelled_at' => now(),
             'ends_at' => now(),
             'last_event_at' => $webhook->occurredAt,
-        ]);
+        ], SubscriptionStatus::Cancelled);
 
         if (! $subscription) {
             return;
@@ -862,17 +1165,16 @@ class BillingService
             return;
         }
 
+        // Before the early return below: a first attempt that saved the payment
+        // and then failed to reach the provider must be repaired by the retry.
+        if ($payment->subscription) {
+            $this->reconcileDelinquency($payment->subscription);
+        }
+
         // Filling in the checkout-created payment's intent is not a new success;
         // its event already fired from the checkout.
         if (! $payment->wasRecentlyCreated && ! $payment->wasChanged('status')) {
             return;
-        }
-
-        // Restore subscription status after successful payment recovery
-        if ($payment->subscription_id) {
-            Subscription::where('id', $payment->subscription_id)
-                ->where('status', SubscriptionStatus::PastDue)
-                ->update(['status' => SubscriptionStatus::Active]);
         }
 
         event(new PaymentSucceeded($payment));
@@ -886,10 +1188,8 @@ class BillingService
             return;
         }
 
-        if ($payment->subscription_id) {
-            Subscription::where('id', $payment->subscription_id)->update(['status' => SubscriptionStatus::PastDue]);
-        }
-
+        // The subscription's own event says it fell behind, in a stream the
+        // provider does order. Inferring it from an invoice would race with it.
         event(new PaymentFailed($payment));
     }
 
@@ -947,9 +1247,12 @@ class BillingService
                 return;
             }
 
-            $period = $this->subscriptionPeriod($gateway->retrieveSubscription($providerSubscriptionId));
+            $remote = $gateway->retrieveSubscription($providerSubscriptionId);
+            $period = $this->subscriptionPeriod($remote);
 
-            $updates = [];
+            // Read at checkout rather than waiting for the first update event,
+            // so a trial is on the row within a second of the buyer paying.
+            $updates = $this->trialDates($remote);
             if ($period['start']) {
                 $updates['current_period_starts_at'] = Carbon::createFromTimestamp($period['start']);
             }

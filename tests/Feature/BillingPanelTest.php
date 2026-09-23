@@ -5,6 +5,7 @@ namespace Modules\Billing\Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Enums\InvoiceStatus;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
@@ -78,6 +79,19 @@ class BillingPanelTest extends TestCase
         $this->assertTrue($this->props()['subscription']['replaced_by_lifetime']);
     }
 
+    /** Lifetime covers it, so there is no card to chase. */
+    public function test_a_replaced_subscription_that_fell_behind_is_not_chased(): void
+    {
+        $this->subscribeToPro(['status' => SubscriptionStatus::Suspended, 'grace_ends_at' => now()->subDay(), 'cancelled_at' => now(), 'ends_at' => now()->addWeek()]);
+        $this->ownLifetimePro();
+
+        $props = $this->props()['subscription'];
+
+        $this->assertTrue($props['replaced_by_lifetime']);
+        $this->assertFalse($props['suspended']);
+        $this->assertNull($props['grace_ends_at']);
+    }
+
     /** Lifetime paid, cancel call still being retried: the panel shows it renewing, as it is. */
     public function test_a_replaced_subscription_whose_cancellation_is_pending_is_shown_as_it_is(): void
     {
@@ -133,5 +147,58 @@ class BillingPanelTest extends TestCase
         $this->assertSame('card', $method['type']);
         $this->assertSame('visa', $method['details']['brand']);
         $this->assertSame('4242', $method['details']['last4']);
+    }
+
+    public function test_a_trial_says_when_it_ends(): void
+    {
+        $this->subscribeToPro(['trial_starts_at' => now()->subDay(), 'trial_ends_at' => now()->addDays(13)]);
+
+        $props = $this->props();
+
+        $this->assertTrue($props['subscription']['on_trial']);
+        $this->assertNotNull($props['subscription']['trial_ends_at']);
+    }
+
+    public function test_a_finished_trial_is_no_longer_a_trial(): void
+    {
+        $this->subscribeToPro(['trial_starts_at' => now()->subMonth(), 'trial_ends_at' => now()->subDay()]);
+
+        $this->assertFalse($this->props()['subscription']['on_trial']);
+    }
+
+    public function test_falling_behind_shows_the_date_access_ends(): void
+    {
+        $this->subscribeToPro(['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->addDays(3)]);
+
+        $props = $this->props();
+
+        $this->assertNotNull($props['subscription']['grace_ends_at']);
+        $this->assertFalse($props['subscription']['suspended']);
+    }
+
+    /** A suspended plan is still theirs: the panel has to say so, and how to fix it. */
+    public function test_a_suspended_subscription_is_still_shown(): void
+    {
+        $this->subscribeToPro(['status' => SubscriptionStatus::Suspended, 'grace_ends_at' => now()->subDay()]);
+
+        $props = $this->props();
+
+        $this->assertSame('Pro', $props['subscription']['plan_name']);
+        $this->assertTrue($props['subscription']['suspended']);
+    }
+
+    public function test_a_trial_without_a_card_is_asked_for_one(): void
+    {
+        $this->subscribeToPro(['trial_ends_at' => now()->addDays(13), 'payment_method_id' => null]);
+
+        $this->assertTrue($this->props()['subscription']['needs_payment_method']);
+    }
+
+    public function test_a_subscription_with_a_card_is_not_asked_for_one(): void
+    {
+        $method = PaymentMethod::factory()->create(['customer_id' => $this->customer->id]);
+        $this->subscribeToPro(['trial_ends_at' => now()->addDays(13), 'payment_method_id' => $method->id]);
+
+        $this->assertFalse($this->props()['subscription']['needs_payment_method']);
     }
 }

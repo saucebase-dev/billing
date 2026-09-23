@@ -461,7 +461,9 @@ class BillingServiceTest extends TestCase
         );
 
         $this->billingService->handleWebhook('stripe', request());
-        $this->assertEquals(SubscriptionStatus::PastDue, $subscription->fresh()->status);
+        // The invoice records the failure; the subscription's own event is what
+        // moves it, so the row is untouched here.
+        $this->assertEquals(SubscriptionStatus::Active, $subscription->fresh()->status);
 
         $this->billingService->handleWebhook('stripe', request());
 
@@ -804,7 +806,7 @@ class BillingServiceTest extends TestCase
             'active' => ['active', SubscriptionStatus::Active],
             'trialing' => ['trialing', SubscriptionStatus::Active],
             'past_due' => ['past_due', SubscriptionStatus::PastDue],
-            'unpaid' => ['unpaid', SubscriptionStatus::PastDue],
+            'unpaid' => ['unpaid', SubscriptionStatus::Suspended],
             'canceled' => ['canceled', SubscriptionStatus::Cancelled],
             'incomplete_expired' => ['incomplete_expired', SubscriptionStatus::Cancelled],
             'incomplete' => ['incomplete', SubscriptionStatus::Pending],
@@ -958,7 +960,7 @@ class BillingServiceTest extends TestCase
         Event::assertDispatched(PaymentSucceeded::class);
     }
 
-    public function test_webhook_payment_failed_marks_subscription_past_due(): void
+    public function test_webhook_payment_failed_leaves_the_status_to_the_provider(): void
     {
         Event::fake([PaymentFailed::class]);
 
@@ -991,7 +993,7 @@ class BillingServiceTest extends TestCase
         $this->billingService->handleWebhook('stripe', request());
 
         $subscription->refresh();
-        $this->assertEquals(SubscriptionStatus::PastDue, $subscription->status);
+        $this->assertEquals(SubscriptionStatus::Active, $subscription->status);
 
         $this->assertDatabaseHas('payment_methods', [
             'provider_payment_method_id' => 'pm_test_123',

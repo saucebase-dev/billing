@@ -5,6 +5,7 @@ namespace Modules\Billing\Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Enums\PurchaseRefusal;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
@@ -57,6 +58,12 @@ class PurchaseEligibilityTest extends TestCase
     private function subscribeTo(Product $plan): Subscription
     {
         return Subscription::factory()->create(['customer_id' => $this->customer->id, 'price_id' => $this->monthly($plan)->id]);
+    }
+
+    /** Behind on payment and out of grace: still their plan, still one subscription. */
+    private function suspend(Subscription $subscription): void
+    {
+        $subscription->update(['status' => SubscriptionStatus::Suspended, 'grace_ends_at' => now()->subDay()]);
     }
 
     private function own(Product $lifetime): void
@@ -153,5 +160,19 @@ class PurchaseEligibilityTest extends TestCase
         Payment::factory()->create(['customer_id' => $this->customer->id, 'price_id' => $this->oneTime($oneOff)->id]);
 
         $this->assertNull($this->check($this->oneTime($oneOff)));
+    }
+
+    public function test_a_suspended_subscriber_changes_plan_rather_than_buying_a_second(): void
+    {
+        $this->suspend($this->subscribeTo($this->pro));
+
+        $this->assertSame(PurchaseRefusal::ChangeInstead, $this->check($this->monthly($this->team)));
+    }
+
+    public function test_a_suspended_subscriber_cannot_buy_the_plan_they_already_have(): void
+    {
+        $this->suspend($this->subscribeTo($this->pro));
+
+        $this->assertSame(PurchaseRefusal::Current, $this->check($this->monthly($this->pro)));
     }
 }

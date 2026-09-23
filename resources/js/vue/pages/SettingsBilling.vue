@@ -170,7 +170,60 @@ function resumeSubscription() {
                         </p>
                         <p class="text-muted-foreground text-sm">
                             {{ formatInterval(subscription.interval) }}
-                            <template v-if="subscription.cancelled_at">
+                            <!-- Trial, then trouble, then the ordinary dates -->
+                            <template v-if="subscription.suspended">
+                                &middot;
+                                <span
+                                    class="text-destructive"
+                                    data-testid="subscription-suspended"
+                                >
+                                    {{
+                                        $t(
+                                            'Suspended — update your payment details to start it again',
+                                        )
+                                    }}
+                                </span>
+                            </template>
+                            <template v-else-if="subscription.grace_ends_at">
+                                &middot;
+                                <span
+                                    class="text-destructive"
+                                    data-testid="subscription-grace"
+                                >
+                                    {{
+                                        $t(
+                                            'Payment failed — update your card by',
+                                        )
+                                    }}
+                                    {{
+                                        formatDate(
+                                            subscription.grace_ends_at,
+                                            language,
+                                            longDate,
+                                        )
+                                    }}
+                                    {{ $t('to keep this subscription') }}
+                                </span>
+                            </template>
+                            <template
+                                v-else-if="
+                                    subscription.on_trial &&
+                                    !subscription.cancelled_at
+                                "
+                            >
+                                &middot;
+                                <span data-testid="subscription-trial">
+                                    {{ $t('Trial ends on') }}
+                                    {{
+                                        formatDate(
+                                            subscription.trial_ends_at,
+                                            language,
+                                            longDate,
+                                        )
+                                    }}
+                                </span>
+                            </template>
+                            <template v-else-if="subscription.cancelled_at">
                                 &middot;
                                 <span
                                     v-if="subscription.replaced_by_lifetime"
@@ -186,7 +239,11 @@ function resumeSubscription() {
                                     }},
                                     {{ $t('replaced by your lifetime plan') }}
                                 </span>
-                                <span v-else class="text-destructive">
+                                <span
+                                    v-else
+                                    class="text-destructive"
+                                    data-testid="subscription-cancels-on"
+                                >
                                     {{ $t('Cancels on') }}
                                     {{
                                         formatDate(
@@ -213,7 +270,14 @@ function resumeSubscription() {
                         </p>
                     </div>
                     <a :href="billingPortalUrl">
-                        <Button variant="outline" size="sm">
+                        <Button
+                            v-if="subscription.needs_payment_method"
+                            size="sm"
+                            data-testid="add-payment-method"
+                        >
+                            {{ $t('Add payment method') }}
+                        </Button>
+                        <Button v-else variant="outline" size="sm">
                             {{ $t('Adjust plan') }}
                         </Button>
                     </a>

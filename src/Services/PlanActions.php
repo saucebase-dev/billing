@@ -4,6 +4,7 @@ namespace Modules\Billing\Services;
 
 use Illuminate\Support\Collection;
 use Modules\Billing\Contracts\BillingOwner;
+use Modules\Billing\Enums\PlanAction;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\PurchaseRefusal;
 use Modules\Billing\Models\Product;
@@ -22,53 +23,61 @@ class PlanActions
 
     /**
      * @param  Collection<int, Product>  $plans  With their displayed prices loaded.
-     * @return array{priceActions: array<int, string>, productActions: array<int, string>}
+     * @return array{priceActions: array<int, PlanAction>, productActions: array<int, PlanAction>}
      */
     public function for(?BillingOwner $owner, Collection $plans): array
     {
         $priceActions = [];
         $productActions = [];
+        // Once per page, not once per price, and only if a trial is on offer: it is two queries.
+        $hasTrialed = $plans->contains(fn (Product $plan) => $plan->trial_days > 0)
+            && ($owner?->billingAccount()?->hasTrialed() ?? false);
 
         foreach ($plans as $plan) {
             if ($plan->kind === PlanKind::Free) {
                 $action = $this->freePlanAction($owner);
             } elseif (filled($plan->metadata['cta_url'] ?? null)) {
-                $action = 'contact';
+                $action = PlanAction::Contact;
             } else {
                 $action = null;
             }
 
             foreach ($plan->prices as $price) {
-                $priceActions[$price->id] = $action ?? $this->priceAction($this->eligibility->check($owner, $price));
+                $refusal = $this->eligibility->check($owner, $price);
+
+                // A trial is still a purchase; only the button reads differently,
+                // so eligibility stays out of it.
+                $priceActions[$price->id] = $action
+                    ?? ($refusal === null && $plan->trial_days > 0 && ! $hasTrialed ? PlanAction::Trial : $this->priceAction($refusal));
             }
 
             if ($plan->prices->isEmpty()) {
-                $productActions[$plan->id] = $action ?? 'unavailable';
+                $productActions[$plan->id] = $action ?? PlanAction::Unavailable;
             }
         }
 
         return ['priceActions' => $priceActions, 'productActions' => $productActions];
     }
 
-    private function priceAction(?PurchaseRefusal $refusal): string
+    private function priceAction(?PurchaseRefusal $refusal): PlanAction
     {
         return match ($refusal) {
-            null => 'buy',
-            PurchaseRefusal::Current => 'current',
-            PurchaseRefusal::Included => 'included',
-            PurchaseRefusal::ChangeInstead => 'change',
-            PurchaseRefusal::AfterCurrentEnds => 'later',
-            PurchaseRefusal::Unavailable, PurchaseRefusal::NotForSale => 'unavailable',
+            null => PlanAction::Buy,
+            PurchaseRefusal::Current => PlanAction::Current,
+            PurchaseRefusal::Included => PlanAction::Included,
+            PurchaseRefusal::ChangeInstead => PlanAction::Change,
+            PurchaseRefusal::AfterCurrentEnds => PlanAction::Later,
+            PurchaseRefusal::Unavailable, PurchaseRefusal::NotForSale => PlanAction::Unavailable,
         };
     }
 
     /** Everyone has the free plan: guests sign up for it, and a paid plan includes it. */
-    private function freePlanAction(?BillingOwner $owner): string
+    private function freePlanAction(?BillingOwner $owner): PlanAction
     {
         if (! $owner) {
-            return 'signup';
+            return PlanAction::Signup;
         }
 
-        return $owner->hasPaidPlan() ? 'included' : 'current';
+        return $owner->hasPaidPlan() ? PlanAction::Included : PlanAction::Current;
     }
 }

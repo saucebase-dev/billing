@@ -138,4 +138,23 @@ class PlanRulesTest extends TestCase
 
         Product::factory()->create(['entitlements' => ['features' => 'exports']]);
     }
+
+    public function test_a_trial_must_be_at_least_a_day(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        Product::factory()->create(['trial_days' => 0]);
+    }
+
+    public function test_a_trial_cannot_outlast_what_the_provider_accepts(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        Product::factory()->create(['trial_days' => 731]);
+    }
+
+    public function test_a_plan_may_have_no_trial(): void
+    {
+        $this->assertNull(Product::factory()->create(['trial_days' => null])->trial_days);
+    }
 }

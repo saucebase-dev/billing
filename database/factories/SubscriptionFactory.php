@@ -46,6 +46,7 @@ class SubscriptionFactory extends Factory
     public function onTrial(): static
     {
         return $this->state(fn (array $attributes) => [
+            'status' => SubscriptionStatus::Active,
             'trial_starts_at' => now(),
             'trial_ends_at' => now()->addDays(14),
         ]);
@@ -70,6 +71,26 @@ class SubscriptionFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'status' => SubscriptionStatus::PastDue,
+            // Behind on payment always carries the deadline it is measured against.
+            'grace_ends_at' => now()->addDays(3),
+        ]);
+    }
+
+    /** Behind on payment, and out of time: access has already stopped. */
+    public function graceExpired(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => SubscriptionStatus::PastDue,
+            'grace_ends_at' => now()->subDay(),
+        ]);
+    }
+
+    /** Swept after the grace window closed: recoverable, but granting nothing. */
+    public function suspended(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => SubscriptionStatus::Suspended,
+            'grace_ends_at' => now()->subDay(),
         ]);
     }
 

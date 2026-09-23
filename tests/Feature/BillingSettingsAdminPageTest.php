@@ -45,4 +45,25 @@ class BillingSettingsAdminPageTest extends TestCase
         $this->assertSame('stripe', $settings->gateway);
         $this->assertSame(45, $settings->checkout_abandon_after_minutes);
     }
+
+    public function test_an_admin_sets_the_grace_period_and_the_trial_rule(): void
+    {
+        $this->actingAsAdmin();
+
+        Livewire::test(BillingSettingsPage::class)
+            ->fillForm([
+                'gateway' => 'stripe',
+                'currency' => 'EUR',
+                'checkout_abandon_after_minutes' => 45,
+                'checkout_expire_after_minutes' => 120,
+                'grace_period_days' => 7,
+                'trial_requires_payment_method' => false,
+            ])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $settings = new BillingSettings;
+        $this->assertSame(7, $settings->grace_period_days);
+        $this->assertFalse($settings->trial_requires_payment_method);
+    }
 }

@@ -59,6 +59,26 @@ test.describe('Buying a plan', () => {
         await expect(billing.cancelButton).toBeVisible();
     });
 
+    test('a buyer who starts a free trial is on a trial', async ({
+        page,
+        laravel,
+        loginAs,
+        credentials,
+    }) => {
+        await loginAs(credentials.user);
+
+        const checkout = new CheckoutPage(page);
+        await checkout.startFromPricing('trial');
+        await checkout.expectProductName('Trial');
+
+        await laravel.callFunction(COMPLETE_CHECKOUT, [credentials.user.email]);
+
+        const billing = new SettingsBillingPage(page);
+        await billing.goto();
+        await billing.expectPlanName('Trial');
+        await expect(billing.trial).toBeVisible();
+    });
+
     test('shows the plan being bought', async ({
         page,
         loginAs,

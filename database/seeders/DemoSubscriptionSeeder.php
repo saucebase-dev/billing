@@ -30,6 +30,9 @@ use Modules\Billing\Models\Subscription;
  */
 class DemoSubscriptionSeeder extends Seeder
 {
+    /** Every seventeenth of those behind on payment ran out of time entirely. */
+    private const SUSPENDED_EVERY = 17;
+
     /** Every ninth customer churned, every thirteenth is behind on payment. */
     private const CANCELS_EVERY = 9;
 
@@ -128,6 +131,7 @@ class DemoSubscriptionSeeder extends Seeder
     {
         $cancelled = $index % self::CANCELS_EVERY === 0 && $index > 0;
         $behind = ! $cancelled && $index % self::FALLS_BEHIND_EVERY === 0 && $index > 0;
+        $suspended = $behind && $index % self::SUSPENDED_EVERY === 0;
 
         $periodStart = $this->currentPeriodStart($price, $startedAt);
 
@@ -139,11 +143,19 @@ class DemoSubscriptionSeeder extends Seeder
                 'payment_method_id' => $customer->paymentMethods()->value('id'),
                 'status' => match (true) {
                     $cancelled => SubscriptionStatus::Cancelled,
+                    $suspended => SubscriptionStatus::Suspended,
                     $behind => SubscriptionStatus::PastDue,
                     default => SubscriptionStatus::Active,
                 },
                 'current_period_starts_at' => $periodStart,
                 'current_period_ends_at' => $this->nextPeriod($price, $periodStart),
+                // Behind on payment always carries the deadline access ends on;
+                // a suspended one's has already passed.
+                'grace_ends_at' => match (true) {
+                    $suspended => now()->subDays(2),
+                    $behind => now()->addDays(2),
+                    default => null,
+                },
                 'cancelled_at' => $cancelled ? $periodStart : null,
                 'ends_at' => $cancelled ? $this->nextPeriod($price, $periodStart) : null,
                 'created_at' => $startedAt,
@@ -167,7 +179,7 @@ class DemoSubscriptionSeeder extends Seeder
             }
 
             $isLast = $this->nextPeriod($price, $chargedAt)->greaterThan(now());
-            $failed = $isLast && $subscription->status === SubscriptionStatus::PastDue;
+            $failed = $isLast && in_array($subscription->status, [SubscriptionStatus::PastDue, SubscriptionStatus::Suspended], true);
 
             $payment = Payment::updateOrCreate(
                 ['provider' => 'stripe', 'provider_payment_id' => "pi_demo_{$index}_{$period}"],

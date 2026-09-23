@@ -18,6 +18,28 @@ interface PaymentGatewayInterface
     /** @return string The customer's ID at the provider. */
     public function createCustomer(CustomerData $data): string;
 
+    /**
+     * The provider's own view of a subscription, as it is right now.
+     *
+     * Events are not ordered against each other, so anything that must not act
+     * on a stale picture — recovering a delinquent subscription, for one — asks
+     * here instead of believing the event it just received.
+     *
+     * @return array<string, mixed>
+     */
+    public function retrieveSubscription(string $providerSubscriptionId): array;
+
+    /**
+     * Make a hosted checkout unpayable.
+     *
+     * Marking it finished here proves nothing while the provider's page still
+     * accepts a card, so anything the app holds back for an open checkout — a
+     * trial, for one — waits on this answer.
+     *
+     * @return bool Whether the provider now refuses to take payment for it.
+     */
+    public function expireCheckoutSession(string $providerSessionId): bool;
+
     public function createCheckoutSession(CheckoutData $data): CheckoutResultData;
 
     /** Stops renewal at the end of the paid period; returns when that is. */

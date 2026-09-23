@@ -55,6 +55,22 @@ test.describe.parallel('Pricing page', () => {
         ).not.toBeVisible();
     });
 
+    test('offers the free trial on a plan that has one', async ({ page }) => {
+        await page.goto('/pricing');
+
+        const button = page
+            .getByTestId('product-card-trial')
+            .getByTestId('get-started-button');
+
+        await expect(button).toHaveAttribute('data-action', 'trial');
+        await expect(button).toBeEnabled();
+        await expect(
+            page
+                .getByTestId('product-card-pro')
+                .getByTestId('get-started-button'),
+        ).toHaveAttribute('data-action', 'buy');
+    });
+
     test('sends a guest who picks a plan to register', async ({ page }) => {
         await page.goto('/pricing');
 

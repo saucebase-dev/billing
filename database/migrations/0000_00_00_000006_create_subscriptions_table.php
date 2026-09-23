@@ -44,6 +44,14 @@ return new class extends Migration
             $table->timestamp('cancelled_at')->nullable();
             $table->timestamp('ends_at')->nullable();
 
+            // When a subscription behind on payment stops granting access. Null
+            // while nothing is owed; set once per delinquency, never extended.
+            $table->timestamp('grace_ends_at')->nullable();
+
+            // Bumped by every state change, so a provider read taken before one
+            // can tell that it is answering about an older row.
+            $table->unsignedInteger('state_revision')->default(0);
+
             // When the provider event last applied to this row happened, to drop older ones
             $table->timestamp('last_event_at')->nullable();
 

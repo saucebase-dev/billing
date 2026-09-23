@@ -35,10 +35,14 @@ class StripeGateway implements PaymentGatewayInterface
         'checkout.session.async_payment_succeeded' => WebhookEventType::CheckoutCompleted,
         'customer.subscription.updated' => WebhookEventType::SubscriptionUpdated,
         'customer.subscription.deleted' => WebhookEventType::SubscriptionDeleted,
+        'customer.subscription.trial_will_end' => WebhookEventType::SubscriptionTrialWillEnd,
         'invoice.payment_succeeded' => WebhookEventType::PaymentSucceeded,
         'invoice.payment_failed' => WebhookEventType::PaymentFailed,
         'invoice.paid' => WebhookEventType::InvoicePaid,
         'charge.refunded' => WebhookEventType::PaymentRefunded,
+        'payment_method.attached' => WebhookEventType::PaymentMethodAttached,
+        'payment_method.detached' => WebhookEventType::PaymentMethodDetached,
+        'customer.updated' => WebhookEventType::CustomerUpdated,
     ];
 
     public function __construct(
@@ -87,6 +91,17 @@ class StripeGateway implements PaymentGatewayInterface
             'cancel_url' => $data->cancelUrl,
         ];
 
+        if ($isRecurring && $data->trialDays) {
+            $params['subscription_data']['trial_period_days'] = $data->trialDays;
+
+            // Without payment details there is nothing to charge when the trial
+            // ends, so Stripe cancels rather than leaving a subscription paused.
+            if (! $data->trialRequiresPaymentMethod) {
+                $params['payment_method_collection'] = 'if_required';
+                $params['subscription_data']['trial_settings']['end_behavior']['missing_payment_method'] = 'cancel';
+            }
+        }
+
         // Stripe rejects a session that both carries a discount and invites one,
         // so a resolved code wins and everyone else gets the field on Stripe's page.
         $promotionCode = $data->coupon ? $this->resolvePromotionCode($data->coupon) : null;
@@ -106,6 +121,30 @@ class StripeGateway implements PaymentGatewayInterface
             url: $session->url,
             provider: 'stripe',
         );
+    }
+
+    public function expireCheckoutSession(string $providerSessionId): bool
+    {
+        try {
+            try {
+                $session = $this->stripe->checkout->sessions->expire($providerSessionId);
+            } catch (\Throwable) {
+                // Stripe refuses a session that is not open, which includes one
+                // an earlier call expired whose answer was lost: ask what it is.
+                $session = $this->stripe->checkout->sessions->retrieve($providerSessionId);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Could not expire checkout session at the provider', [
+                'provider_session_id' => $providerSessionId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        // A session already paid cannot be expired, and must not be treated as
+        // dead: whatever it was holding stays held.
+        return $session->status === 'expired';
     }
 
     /**

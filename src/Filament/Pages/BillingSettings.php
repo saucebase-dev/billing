@@ -89,6 +89,27 @@ class BillingSettings extends SettingsPage
                         ->extraAttributes(['data-testid' => 'admin-billing-expire-minutes']),
                 ])
                 ->columns(2),
+
+            Section::make(__('Subscriptions'))
+                ->description(__('What happens after a payment fails, and how trials start.'))
+                ->icon(Heroicon::OutlinedArrowPath)
+                ->schema([
+                    TextInput::make('grace_period_days')
+                        ->label(__('Grace period'))
+                        ->suffix(__('days'))
+                        ->integer()
+                        ->required()
+                        ->minValue(0)
+                        ->maxValue(30)
+                        ->helperText(__('How long a subscription keeps working after a failed payment. Zero suspends it at once, and a grace period already running keeps the date it was given.'))
+                        ->extraAttributes(['data-testid' => 'admin-billing-grace-period-days']),
+
+                    Toggle::make('trial_requires_payment_method')
+                        ->label(__('Require payment details to start a trial'))
+                        ->helperText(__('With this off a trial can start without a card, and is cancelled at the end if none was added. Applies to future checkouts.'))
+                        ->extraAttributes(['data-testid' => 'admin-billing-trial-requires-payment']),
+                ])
+                ->columns(2),
         ]);
     }
 

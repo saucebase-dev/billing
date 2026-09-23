@@ -45,13 +45,16 @@ export default function ProductCard({
         ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
         : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset';
 
+    const startsCheckout = action === 'buy' || action === 'trial';
+    const enabled = startsCheckout || action === 'signup';
+
     function handleGetStarted() {
         if (action === 'signup') {
             router.visit(route('register'));
             return;
         }
 
-        if (action === 'buy' && price) {
+        if (startsCheckout && price) {
             router.post(route('billing.checkout.create'), {
                 price_id: price.id,
             });
@@ -63,6 +66,9 @@ export default function ProductCard({
         included: t('Included in your plan'),
         later: t('Available when your current plan ends'),
         unavailable: t('Not available'),
+        trial: t('Start :days-day free trial', {
+            days: String(product.trial_days ?? 0),
+        }),
     };
     const buttonLabel = labels[action];
 
@@ -180,7 +186,7 @@ export default function ProductCard({
                     data-testid="get-started-button"
                     data-action={action}
                     className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${ctaClasses}`}
-                    disabled={action !== 'buy' && action !== 'signup'}
+                    disabled={!enabled}
                     onClick={handleGetStarted}
                 >
                     {buttonLabel ??

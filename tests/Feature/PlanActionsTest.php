@@ -4,6 +4,7 @@ namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Billing\Enums\PlanAction;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
@@ -77,13 +78,13 @@ class PlanActionsTest extends TestCase
     {
         $actions = $this->actions(null, $this->free, $this->pro);
 
-        $this->assertSame('signup', $actions['priceActions'][$this->priceOf($this->free)->id]);
-        $this->assertSame('buy', $actions['priceActions'][$this->priceOf($this->pro)->id]);
+        $this->assertSame(PlanAction::Signup, $actions['priceActions'][$this->priceOf($this->free)->id]);
+        $this->assertSame(PlanAction::Buy, $actions['priceActions'][$this->priceOf($this->pro)->id]);
     }
 
     public function test_a_user_with_nothing_bought_is_on_free(): void
     {
-        $this->assertSame('current', $this->actions($this->user, $this->free)['priceActions'][$this->priceOf($this->free)->id]);
+        $this->assertSame(PlanAction::Current, $this->actions($this->user, $this->free)['priceActions'][$this->priceOf($this->free)->id]);
     }
 
     public function test_a_subscriber_sees_their_plan_as_current_and_changes_to_others(): void
@@ -92,9 +93,9 @@ class PlanActionsTest extends TestCase
 
         $actions = $this->actions($this->user, $this->free, $this->pro, $this->team);
 
-        $this->assertSame('included', $actions['priceActions'][$this->priceOf($this->free)->id]);
-        $this->assertSame('current', $actions['priceActions'][$this->priceOf($this->pro)->id]);
-        $this->assertSame('change', $actions['priceActions'][$this->priceOf($this->team)->id]);
+        $this->assertSame(PlanAction::Included, $actions['priceActions'][$this->priceOf($this->free)->id]);
+        $this->assertSame(PlanAction::Current, $actions['priceActions'][$this->priceOf($this->pro)->id]);
+        $this->assertSame(PlanAction::Change, $actions['priceActions'][$this->priceOf($this->team)->id]);
     }
 
     public function test_the_plan_a_lifetime_replaces_is_included(): void
@@ -103,9 +104,9 @@ class PlanActionsTest extends TestCase
 
         $actions = $this->actions($this->user, $this->pro, $lifetime, $this->team);
 
-        $this->assertSame('included', $actions['priceActions'][$this->priceOf($this->pro)->id]);
-        $this->assertSame('current', $actions['priceActions'][$this->priceOf($lifetime)->id]);
-        $this->assertSame('buy', $actions['priceActions'][$this->priceOf($this->team)->id]);
+        $this->assertSame(PlanAction::Included, $actions['priceActions'][$this->priceOf($this->pro)->id]);
+        $this->assertSame(PlanAction::Current, $actions['priceActions'][$this->priceOf($lifetime)->id]);
+        $this->assertSame(PlanAction::Buy, $actions['priceActions'][$this->priceOf($this->team)->id]);
     }
 
     /** No overlap: another plan waits, and the ending one offers no change. */
@@ -116,8 +117,8 @@ class PlanActionsTest extends TestCase
 
         $actions = $this->actions($this->user, $this->pro, $this->team);
 
-        $this->assertSame('current', $actions['priceActions'][$this->priceOf($this->pro)->id]);
-        $this->assertSame('later', $actions['priceActions'][$this->priceOf($this->team)->id]);
+        $this->assertSame(PlanAction::Current, $actions['priceActions'][$this->priceOf($this->pro)->id]);
+        $this->assertSame(PlanAction::Later, $actions['priceActions'][$this->priceOf($this->team)->id]);
     }
 
     public function test_a_price_checkout_would_refuse_is_never_offered(): void
@@ -127,8 +128,8 @@ class PlanActionsTest extends TestCase
 
         $actions = $this->actions(null, $this->pro, $this->team);
 
-        $this->assertSame('unavailable', $actions['priceActions'][$unpushed->id]);
-        $this->assertSame('unavailable', $actions['priceActions'][$mismatched->id]);
+        $this->assertSame(PlanAction::Unavailable, $actions['priceActions'][$unpushed->id]);
+        $this->assertSame(PlanAction::Unavailable, $actions['priceActions'][$mismatched->id]);
     }
 
     public function test_plans_without_prices_get_a_plan_action(): void
@@ -139,8 +140,42 @@ class PlanActionsTest extends TestCase
 
         $actions = $this->actions($this->user, $this->free, $enterprise, $planWithoutPrices);
 
-        $this->assertSame('current', $actions['productActions'][$this->free->id]);
-        $this->assertSame('contact', $actions['productActions'][$enterprise->id]);
-        $this->assertSame('unavailable', $actions['productActions'][$planWithoutPrices->id]);
+        $this->assertSame(PlanAction::Current, $actions['productActions'][$this->free->id]);
+        $this->assertSame(PlanAction::Contact, $actions['productActions'][$enterprise->id]);
+        $this->assertSame(PlanAction::Unavailable, $actions['productActions'][$planWithoutPrices->id]);
+    }
+
+    public function test_a_plan_with_a_trial_offers_the_trial(): void
+    {
+        $plan = Product::factory()->create(['trial_days' => 14]);
+        $price = Price::factory()->create(['product_id' => $plan->id]);
+
+        $actions = $this->actions($this->createUser(), $plan);
+
+        $this->assertSame(PlanAction::Trial, $actions['priceActions'][$price->id]);
+    }
+
+    public function test_a_guest_is_offered_the_trial_too(): void
+    {
+        $plan = Product::factory()->create(['trial_days' => 14]);
+        $price = Price::factory()->create(['product_id' => $plan->id]);
+
+        $actions = $this->actions(null, $plan);
+
+        $this->assertSame(PlanAction::Trial, $actions['priceActions'][$price->id]);
+    }
+
+    public function test_a_customer_who_used_their_trial_is_offered_the_plan_as_usual(): void
+    {
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        Subscription::factory()->cancelled()->create(['customer_id' => $customer->id, 'trial_starts_at' => now()->subYear()]);
+
+        $plan = Product::factory()->create(['trial_days' => 14]);
+        $price = Price::factory()->create(['product_id' => $plan->id]);
+
+        $actions = $this->actions($user->fresh(), $plan);
+
+        $this->assertSame(PlanAction::Buy, $actions['priceActions'][$price->id]);
     }
 }

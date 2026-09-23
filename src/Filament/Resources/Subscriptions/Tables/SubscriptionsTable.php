@@ -30,12 +30,7 @@ class SubscriptionsTable
                 TextColumn::make('status')
                     ->label(__('Status'))
                     ->badge()
-                    ->color(fn (SubscriptionStatus $state): string => match ($state) {
-                        SubscriptionStatus::Active => 'success',
-                        SubscriptionStatus::PastDue => 'warning',
-                        SubscriptionStatus::Cancelled => 'danger',
-                        SubscriptionStatus::Pending => 'gray',
-                    }),
+                    ->color(fn (SubscriptionStatus $state): string => $state->getColor()),
 
                 TextColumn::make('current_period_ends_at')
                     ->label(__('Period Ends'))

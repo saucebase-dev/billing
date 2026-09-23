@@ -24,6 +24,15 @@ class BillingSettings extends Settings
     /** Minutes before a pending checkout can no longer be completed. */
     public int $checkout_expire_after_minutes;
 
+    /**
+     * Days a subscription behind on payment keeps access before it is suspended.
+     * Zero suspends at once. A window already running keeps the date it was given.
+     */
+    public int $grace_period_days;
+
+    /** Whether starting a trial collects payment details. */
+    public bool $trial_requires_payment_method;
+
     public static function group(): string
     {
         return 'billing';

@@ -23,13 +23,15 @@ use Modules\Billing\Enums\SubscriptionStatus;
  * @property Carbon|null $current_period_starts_at
  * @property Carbon|null $current_period_ends_at
  * @property Carbon|null $cancelled_at
+ * @property Carbon|null $grace_ends_at
+ * @property int $state_revision
  * @property Carbon|null $ends_at
  * @property Carbon|null $last_event_at
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  *
- * @method static Builder<Subscription> current()
+ * @method static Builder<Subscription> live()
  */
 class Subscription extends Model
 {
@@ -47,6 +49,8 @@ class Subscription extends Model
         'current_period_starts_at',
         'current_period_ends_at',
         'cancelled_at',
+        'grace_ends_at',
+        'state_revision',
         'ends_at',
         'last_event_at',
         'metadata',
@@ -64,6 +68,8 @@ class Subscription extends Model
             'current_period_starts_at' => 'datetime',
             'current_period_ends_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'grace_ends_at' => 'datetime',
+            'state_revision' => 'integer',
             'ends_at' => 'datetime',
             'last_event_at' => 'datetime',
             'metadata' => 'array',
@@ -71,15 +77,39 @@ class Subscription extends Model
     }
 
     /**
-     * Subscriptions that still grant access: paid up, or behind on a payment
-     * the provider is still retrying.
+     * Everything the customer still holds with us, whether or not it grants
+     * access now: that is `grantsAccess()`.
      *
      * @param  Builder<Subscription>  $query
      * @return Builder<Subscription>
      */
     public function scopeCurrent(Builder $query): Builder
     {
-        return $query->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue]);
+        return $query->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue, SubscriptionStatus::Suspended]);
+    }
+
+    /**
+     * Whether the provider has something to charge: this subscription's card,
+     * else the customer's default. A trial without one is cancelled when it ends.
+     */
+    public function hasPaymentMethod(): bool
+    {
+        return $this->payment_method_id !== null
+            || $this->customer->paymentMethods()->where('is_default', true)->exists();
+    }
+
+    /**
+     * Active grants access, a trial included: the provider reports a trial as
+     * active. Behind on payment grants it until the grace deadline passes, and a
+     * missing deadline grants nothing — it means a writer skipped the rule.
+     */
+    public function grantsAccess(): bool
+    {
+        return match ($this->status) {
+            SubscriptionStatus::Active => true,
+            SubscriptionStatus::PastDue => $this->grace_ends_at?->isFuture() ?? false,
+            default => false,
+        };
     }
 
     /**

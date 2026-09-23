@@ -21,13 +21,21 @@ const ctaClass = computed(() =>
         : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset',
 );
 
+const startsCheckout = computed(
+    () => props.action === 'buy' || props.action === 'trial',
+);
+
+const enabled = computed(
+    () => startsCheckout.value || props.action === 'signup',
+);
+
 function handleGetStarted() {
     if (props.action === 'signup') {
         router.visit(route('register'));
         return;
     }
 
-    if (props.action === 'buy' && props.price) {
+    if (startsCheckout.value && props.price) {
         router.post(route('billing.checkout.create'), {
             price_id: props.price.id,
         });
@@ -174,7 +182,7 @@ watch(priceKey, () => {
             :data-action="action"
             class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             :class="ctaClass"
-            :disabled="action !== 'buy' && action !== 'signup'"
+            :disabled="!enabled"
             @click="handleGetStarted"
         >
             <template v-if="action === 'current'">{{
@@ -188,6 +196,11 @@ watch(priceKey, () => {
             }}</template>
             <template v-else-if="action === 'unavailable'">{{
                 $t('Not available')
+            }}</template>
+            <template v-else-if="action === 'trial'">{{
+                $t('Start :days-day free trial', {
+                    days: String(product.trial_days ?? 0),
+                })
             }}</template>
             <template v-else>{{
                 product.metadata?.cta_label || $t('Get started')

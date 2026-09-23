@@ -202,6 +202,8 @@ class WebhookIdempotencyTest extends TestCase
         );
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
+        // Recovery is what the provider reports, not what the invoice implies.
+        $this->gateway->method('retrieveSubscription')->willReturn(['id' => 'sub_test_restore', 'status' => 'active']);
 
         $this->billingService->handleWebhook('stripe', request());
 

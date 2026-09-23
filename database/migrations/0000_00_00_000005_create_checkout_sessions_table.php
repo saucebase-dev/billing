@@ -31,6 +31,10 @@ return new class extends Migration
             $table->string('success_url')->nullable();
             $table->string('cancel_url')->nullable();
 
+            // Kept so a hand-off can be replayed under the same idempotency key:
+            // the provider refuses a replay whose parameters have changed.
+            $table->string('coupon')->nullable();
+
             // Status
             $table->string('status')->default('pending');
 
@@ -39,6 +43,14 @@ return new class extends Migration
 
             // Expiration
             $table->timestamp('expires_at')->nullable();
+
+            // The trial this checkout was issued with, and the customer's claim
+            // on it. Null means undecided; zero means decided against.
+            $table->unsignedSmallInteger('trial_days')->nullable();
+
+            // What collection this checkout was issued with, so a retry sends
+            // the same request even if the setting changed meanwhile.
+            $table->boolean('trial_requires_payment_method')->nullable();
 
             // Timestamps
             $table->timestamps();

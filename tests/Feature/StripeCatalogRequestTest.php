@@ -3,6 +3,9 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Billing\Data\CheckoutData;
+use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Stripe\ApiRequestor;
@@ -25,7 +28,7 @@ class StripeCatalogRequestTest extends TestCase
     /** @var array<int, array{method: string, url: string, params: array<string, mixed>}> */
     private array $requests = [];
 
-    /** @param  string|array<string, string>  $responseBody  One body, or one per URL path such as `/v1/prices`. */
+    /** @param  string|array<string, string|array{string, int}>  $responseBody  One body, or one per URL path such as `/v1/prices`, optionally with a status. */
     private function gateway(string|array $responseBody = '{"id": "prod_new"}'): StripeGateway
     {
         $client = new class($this->requests, $responseBody) implements ClientInterface
@@ -36,7 +39,9 @@ class StripeCatalogRequestTest extends TestCase
             {
                 $this->requests[] = ['method' => $method, 'url' => $absUrl, 'params' => $params];
 
-                return [is_array($this->body) ? $this->body[parse_url($absUrl, PHP_URL_PATH)] : $this->body, 200, []];
+                $response = is_array($this->body) ? $this->body[parse_url($absUrl, PHP_URL_PATH)] : $this->body;
+
+                return is_array($response) ? [$response[0], $response[1], []] : [$response, 200, []];
             }
         };
 
@@ -129,5 +134,79 @@ class StripeCatalogRequestTest extends TestCase
         $this->assertSame('prod_sales', $catalog[0]->providerProductId);
         $this->assertSame('enterprise', $catalog[0]->slug);
         $this->assertSame([], $catalog[0]->prices);
+    }
+
+    /** @param array<string, mixed> $params */
+    private function checkoutParams(?int $trialDays, bool $requiresPaymentMethod = true): array
+    {
+        $price = Price::factory()->create(['provider_price_id' => 'price_wire', 'interval' => 'month']);
+
+        $this->gateway('{"id": "cs_wire", "url": "https://provider.test/cs_wire"}')->createCheckoutSession(new CheckoutData(
+            customer: Customer::factory()->create(['provider_customer_id' => 'cus_wire']),
+            price: $price,
+            successUrl: 'https://app.test/ok',
+            cancelUrl: 'https://app.test/no',
+            trialDays: $trialDays,
+            trialRequiresPaymentMethod: $requiresPaymentMethod,
+        ));
+
+        return $this->requests[0]['params'];
+    }
+
+    public function test_a_granted_trial_is_sent_as_trial_period_days(): void
+    {
+        $params = $this->checkoutParams(14);
+
+        $this->assertSame(14, $params['subscription_data']['trial_period_days']);
+    }
+
+    public function test_a_checkout_with_no_trial_sends_no_trial_fields(): void
+    {
+        $params = $this->checkoutParams(null);
+
+        $this->assertArrayNotHasKey('subscription_data', $params);
+        $this->assertArrayNotHasKey('payment_method_collection', $params);
+    }
+
+    /** Payment details are collected unless the merchant turned that off. */
+    public function test_a_trial_collects_payment_details_by_default(): void
+    {
+        $params = $this->checkoutParams(14);
+
+        $this->assertArrayNotHasKey('payment_method_collection', $params);
+        $this->assertArrayNotHasKey('trial_settings', $params['subscription_data']);
+    }
+
+    /** No details means the trial has to end somewhere: it cancels. */
+    public function test_an_optional_payment_trial_asks_stripe_to_cancel_when_none_arrives(): void
+    {
+        $params = $this->checkoutParams(14, requiresPaymentMethod: false);
+
+        $this->assertSame('if_required', $params['payment_method_collection']);
+        $this->assertSame('cancel', $params['subscription_data']['trial_settings']['end_behavior']['missing_payment_method']);
+    }
+
+    /**
+     * Stripe refuses to expire a session that already is, including one an
+     * earlier call expired whose answer was lost.
+     */
+    public function test_a_checkout_already_expired_counts_as_expired(): void
+    {
+        $gateway = $this->gateway([
+            '/v1/checkout/sessions/cs_gone/expire' => ['{"error": {"type": "invalid_request_error", "message": "Session is not open"}}', 400],
+            '/v1/checkout/sessions/cs_gone' => '{"id": "cs_gone", "object": "checkout.session", "status": "expired"}',
+        ]);
+
+        $this->assertTrue($gateway->expireCheckoutSession('cs_gone'));
+    }
+
+    public function test_a_paid_checkout_that_cannot_be_expired_is_not_expired(): void
+    {
+        $gateway = $this->gateway([
+            '/v1/checkout/sessions/cs_paid/expire' => ['{"error": {"type": "invalid_request_error", "message": "Session is not open"}}', 400],
+            '/v1/checkout/sessions/cs_paid' => '{"id": "cs_paid", "object": "checkout.session", "status": "complete"}',
+        ]);
+
+        $this->assertFalse($gateway->expireCheckoutSession('cs_paid'));
     }
 }

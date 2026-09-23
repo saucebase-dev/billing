@@ -7,4 +7,7 @@ setup('seed billing subscriber fixtures', async ({ laravel }) => {
     await laravel.callFunction(
         'Modules\\Billing\\Tests\\Support\\BillingTestHelper::createPricingFixtures',
     );
+    await laravel.callFunction(
+        'Modules\\Billing\\Tests\\Support\\BillingTestHelper::createLifecycleFixtures',
+    );
 });

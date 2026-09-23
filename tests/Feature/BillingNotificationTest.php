@@ -18,7 +18,7 @@ use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Notifications\PaymentFailedNotification;
+use Modules\Billing\Notifications\GraceStartedNotification;
 use Modules\Billing\Notifications\PaymentSucceededNotification;
 use Modules\Billing\Notifications\SubscriptionCancelledNotification;
 use Modules\Billing\Notifications\SubscriptionCreatedNotification;
@@ -288,48 +288,14 @@ class BillingNotificationTest extends TestCase
         $this->assertEquals('Go to Billing', $mail->actionText);
     }
 
-    public function test_payment_failed_sends_notification(): void
+    /** The grace email says this, and names the date; a second mail would repeat it. */
+    public function test_a_failed_payment_sends_no_mail_of_its_own(): void
     {
-        $payment = Payment::factory()->failed()->create([
-            'customer_id' => $this->customer->id,
-        ]);
+        $payment = Payment::factory()->failed()->create(['customer_id' => $this->customer->id]);
 
         event(new PaymentFailed($payment));
 
-        Notification::assertSentTo($this->user, PaymentFailedNotification::class);
-    }
-
-    public function test_payment_failed_email_contains_amount_and_reason(): void
-    {
-        $payment = Payment::factory()->create([
-            'customer_id' => $this->customer->id,
-            'amount' => 4999,
-            'currency' => Currency::USD,
-            'failure_message' => 'Your card was declined.',
-        ]);
-
-        $notification = new PaymentFailedNotification($payment);
-        $mail = $notification->toMail($this->user);
-
-        $this->assertEquals('Payment Failed', $mail->subject);
-        $this->assertStringContainsString('$49.99', $mail->introLines[0]);
-        $this->assertStringContainsString('Your card was declined.', $mail->introLines[1]);
-        $this->assertEquals('Update Payment Method', $mail->actionText);
-    }
-
-    public function test_payment_failed_email_omits_reason_when_null(): void
-    {
-        $payment = Payment::factory()->create([
-            'customer_id' => $this->customer->id,
-            'amount' => 4999,
-            'currency' => Currency::USD,
-            'failure_message' => null,
-        ]);
-
-        $notification = new PaymentFailedNotification($payment);
-        $mail = $notification->toMail($this->user);
-
-        $this->assertCount(2, $mail->introLines);
+        Notification::assertNothingSent();
     }
 
     public function test_subscription_resumed_sends_notification(): void
@@ -404,21 +370,23 @@ class BillingNotificationTest extends TestCase
         $this->assertStringContainsString($endsAt->format('F j, Y'), $mail->introLines[0]);
     }
 
-    public function test_subscription_updated_email_shows_past_due(): void
+    /** Falling behind is the grace mail's subject now, and it names the deadline. */
+    public function test_the_grace_email_names_the_plan_and_the_deadline(): void
     {
         $product = Product::factory()->create(['name' => 'Pro Plan']);
         $price = Price::factory()->create(['product_id' => $product->id]);
+        $deadline = now()->addDays(3);
         $subscription = Subscription::factory()->pastDue()->create([
             'customer_id' => $this->customer->id,
             'price_id' => $price->id,
+            'grace_ends_at' => $deadline,
         ]);
 
-        $notification = new SubscriptionUpdatedNotification($subscription);
-        $mail = $notification->toMail($this->user);
+        $mail = (new GraceStartedNotification($subscription))->toMail($this->user);
 
-        $this->assertEquals('Subscription Past Due', $mail->subject);
+        $this->assertEquals('Your payment did not go through', $mail->subject);
         $this->assertStringContainsString('Pro Plan', $mail->introLines[0]);
-        $this->assertStringContainsString('past due', $mail->introLines[0]);
+        $this->assertStringContainsString($deadline->format('F j, Y'), $mail->introLines[1]);
     }
 
     public function test_notifications_use_mail_channel(): void
@@ -431,6 +399,5 @@ class BillingNotificationTest extends TestCase
         $this->assertEquals(['mail'], (new SubscriptionResumedNotification($subscription))->via($this->user));
         $this->assertEquals(['mail'], (new SubscriptionUpdatedNotification($subscription))->via($this->user));
         $this->assertEquals(['mail'], (new PaymentSucceededNotification($payment))->via($this->user));
-        $this->assertEquals(['mail'], (new PaymentFailedNotification($payment))->via($this->user));
     }
 }

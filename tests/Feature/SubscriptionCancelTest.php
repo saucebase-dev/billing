@@ -111,4 +111,39 @@ class SubscriptionCancelTest extends TestCase
 
         $response->assertNotFound();
     }
+
+    /** Suspended is still theirs: they can stop it rather than wait for the provider to give up. */
+    public function test_a_suspended_subscription_can_be_cancelled(): void
+    {
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'status' => SubscriptionStatus::Suspended,
+            'grace_ends_at' => now()->subDay(),
+            'current_period_ends_at' => now()->addWeek(),
+        ]);
+
+        $this->gateway->expects($this->once())->method('cancelSubscription');
+
+        $this->actingAs($user)->post(route('billing.subscription.cancel'))->assertRedirect();
+
+        $this->assertNotNull($subscription->fresh()->cancelled_at);
+    }
+
+    /** Moving to a plan they can pay for is one way out of suspension. */
+    public function test_a_suspended_subscriber_can_change_plan(): void
+    {
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'status' => SubscriptionStatus::Suspended,
+            'grace_ends_at' => now()->subDay(),
+        ]);
+
+        $this->gateway->method('getPlanChangeUrl')->willReturn('https://provider.test/change');
+
+        $this->actingAs($user)->get(route('billing.plan.change'))->assertRedirect('https://provider.test/change');
+    }
 }

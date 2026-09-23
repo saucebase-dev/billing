@@ -50,6 +50,7 @@ class PurchaseEligibility
         }
 
         $replaced = $lifetimePlans->pluck('replaces_product_id')->filter()->all();
+        // Live, not access-granting: a suspended subscription is still one subscription.
         $subscribedPlanId = $account->currentSubscription()?->price?->product_id;
 
         return match (true) {

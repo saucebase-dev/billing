@@ -35,13 +35,20 @@ class EntitlementResolutionTest extends TestCase
         $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
     }
 
-    private function subscribeTo(Product $plan, SubscriptionStatus $status = SubscriptionStatus::Active): Subscription
+    /** @param  array<string, mixed>  $attributes */
+    private function subscribeTo(Product $plan, SubscriptionStatus $status = SubscriptionStatus::Active, array $attributes = []): Subscription
     {
         return Subscription::factory()->create([
             'customer_id' => $this->customer->id,
             'price_id' => Price::factory()->create(['product_id' => $plan->id])->id,
             'status' => $status,
+            ...$attributes,
         ]);
+    }
+
+    private function paidPlan(): Product
+    {
+        return Product::factory()->create(['entitlements' => ['features' => ['exports' => true]]]);
     }
 
     private function buy(Product $plan, PaymentStatus $status = PaymentStatus::Succeeded): Payment
@@ -72,11 +79,46 @@ class EntitlementResolutionTest extends TestCase
         $this->assertNull($this->user->planLimit('projects'));
     }
 
-    public function test_a_subscription_behind_on_payment_still_counts(): void
+    /** A failed payment is a few days to fix a card, not the end of the plan. */
+    public function test_a_subscription_behind_on_payment_counts_inside_its_grace_window(): void
     {
-        $this->subscribeTo(Product::factory()->create(['entitlements' => ['features' => ['exports' => true]]]), SubscriptionStatus::PastDue);
+        $this->subscribeTo($this->paidPlan(), SubscriptionStatus::PastDue, ['grace_ends_at' => now()->addDay()]);
 
         $this->assertTrue($this->user->canUseFeature('exports'));
+    }
+
+    public function test_a_subscription_stops_counting_when_its_grace_window_closes(): void
+    {
+        $this->subscribeTo($this->paidPlan(), SubscriptionStatus::PastDue, ['grace_ends_at' => now()->subMinute()]);
+
+        $this->assertFalse($this->user->canUseFeature('exports'));
+    }
+
+    /** Fail closed: a missing deadline is a bug, not permission to keep going. */
+    public function test_a_subscription_behind_on_payment_with_no_deadline_counts_for_nothing(): void
+    {
+        $this->subscribeTo($this->paidPlan(), SubscriptionStatus::PastDue, ['grace_ends_at' => null]);
+
+        $this->assertFalse($this->user->canUseFeature('exports'));
+    }
+
+    public function test_a_suspended_subscription_counts_for_nothing(): void
+    {
+        $this->subscribeTo($this->paidPlan(), SubscriptionStatus::Suspended, ['grace_ends_at' => now()->subDay()]);
+
+        $this->assertFalse($this->user->canUseFeature('exports'));
+    }
+
+    /** The provider reports a trial as active, and it grants what it sells. */
+    public function test_a_trialing_subscription_counts(): void
+    {
+        $this->subscribeTo($this->paidPlan(), SubscriptionStatus::Active, [
+            'trial_starts_at' => now()->subDay(),
+            'trial_ends_at' => now()->addDays(13),
+        ]);
+
+        $this->assertTrue($this->user->canUseFeature('exports'));
+        $this->assertTrue($this->user->hasPaidPlan());
     }
 
     public function test_a_cancelled_subscription_does_not_count(): void

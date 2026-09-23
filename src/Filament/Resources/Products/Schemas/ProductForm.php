@@ -144,6 +144,15 @@ class ProductForm
                                     ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Lifetime))
                                     ->disabled(fn (?Product $record) => $record?->isSold() ?? false),
 
+                                TextInput::make('trial_days')
+                                    ->label(__('Free trial'))
+                                    ->suffix(__('days'))
+                                    ->integer()
+                                    ->minValue(1)
+                                    ->maxValue(730)
+                                    ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Subscription))
+                                    ->helperText(__('Each customer gets one trial, ever. Whether payment details are collected first is a billing setting.')),
+
                                 Repeater::make('entitlements')
                                     ->label(__('Entitlements'))
                                     ->helperText(__('Features the plan turns on and limits the app enforces. Changes apply to existing customers straight away.'))

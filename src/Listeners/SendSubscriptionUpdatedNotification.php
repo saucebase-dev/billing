@@ -13,10 +13,9 @@ class SendSubscriptionUpdatedNotification implements ShouldQueue
     {
         $subscription = $event->subscription;
 
-        $isCancellationPending = $subscription->cancelled_at && $subscription->status === SubscriptionStatus::Active;
-        $isPastDue = $subscription->status === SubscriptionStatus::PastDue;
-
-        if (! $isCancellationPending && ! $isPastDue) {
+        // Only a cancellation scheduled for the period end is news here. Falling
+        // behind on payment has its own mail, which names the date access ends.
+        if (! $subscription->cancelled_at || $subscription->status !== SubscriptionStatus::Active) {
             return;
         }
 

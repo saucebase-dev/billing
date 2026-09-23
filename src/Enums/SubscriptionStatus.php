@@ -12,6 +12,7 @@ enum SubscriptionStatus: string implements HasColor, HasLabel
     case Pending = 'pending';
     case Active = 'active';
     case PastDue = 'past_due';
+    case Suspended = 'suspended';
     case Cancelled = 'cancelled';
 
     public function getLabel(): string
@@ -20,6 +21,7 @@ enum SubscriptionStatus: string implements HasColor, HasLabel
             self::Pending => __('Pending'),
             self::Active => __('Active'),
             self::PastDue => __('Past Due'),
+            self::Suspended => __('Suspended'),
             self::Cancelled => __('Cancelled'),
         };
     }
@@ -30,6 +32,7 @@ enum SubscriptionStatus: string implements HasColor, HasLabel
             self::Pending => 'warning',
             self::Active => 'success',
             self::PastDue => 'danger',
+            self::Suspended => 'danger',
             self::Cancelled => 'gray',
         };
     }

@@ -9,13 +9,16 @@ use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\Currency;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Tests\Support\TestFixtures;
 
 class BillingTestHelper
 {
@@ -143,6 +146,119 @@ class BillingTestHelper
     }
 
     /**
+     * One subscriber per state the billing panel draws differently: on a trial
+     * with no card, inside a grace window, and suspended. Plus a plan with a
+     * trial for the pricing page. Rows are written straight in: the webhook
+     * rules that produce them are asserted in PHP.
+     */
+    public static function createLifecycleFixtures(): void
+    {
+        if (! config('app.debug')) {
+            return;
+        }
+
+        $trialPlan = Product::firstOrCreate(
+            ['slug' => 'trial'],
+            ['sku' => 'trial', 'name' => 'Trial', 'display_order' => 5, 'is_visible' => true, 'is_active' => true, 'trial_days' => 14],
+        );
+
+        Price::firstOrCreate(
+            ['provider_price_id' => 'price_e2e_trial_monthly'],
+            [
+                'product_id' => $trialPlan->id,
+                'currency' => Currency::default(),
+                'amount' => 1900,
+                'billing_scheme' => BillingScheme::FlatRate,
+                'interval' => 'month',
+                'interval_count' => 1,
+                'is_active' => true,
+            ],
+        );
+
+        $pro = Price::where('provider_price_id', 'price_e2e_pro_monthly')->firstOrFail();
+
+        $states = [
+            'trialing' => ['status' => SubscriptionStatus::Active, 'trial_starts_at' => now(), 'trial_ends_at' => now()->addDays(10)],
+            'pastdue' => ['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->addDays(3)],
+            'suspended' => ['status' => SubscriptionStatus::Suspended, 'grace_ends_at' => now()->subDay()],
+        ];
+
+        foreach ($states as $state => $attributes) {
+            $user = User::firstOrCreate(
+                ['email' => "{$state}@example.com"],
+                ['name' => ucfirst($state).' User', 'password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()],
+            );
+
+            $user->assignRole('user');
+
+            $customer = Customer::firstOrCreate(
+                ['user_id' => $user->id],
+                ['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => "cus_test_{$state}"],
+            );
+
+            Subscription::firstOrCreate(
+                ['provider' => 'stripe', 'provider_subscription_id' => "sub_test_{$state}"],
+                [
+                    'customer_id' => $customer->id,
+                    'price_id' => $pro->id,
+                    'current_period_starts_at' => now()->subDays(20),
+                    'current_period_ends_at' => now()->addDays(10),
+                    ...$attributes,
+                ],
+            );
+        }
+    }
+
+    /**
+     * @return array<string, array{email: string, password: string}>
+     */
+    public static function lifecycleCredentials(): array
+    {
+        return collect(['trialing', 'pastdue', 'suspended'])
+            ->mapWithKeys(fn (string $state) => [$state => ['email' => "{$state}@example.com", 'password' => TestFixtures::SHARED_PASSWORD]])
+            ->all();
+    }
+
+    /**
+     * A fresh subscriber whose grace window closed an hour ago and whom the
+     * sweeper has not reached yet. Fresh per call, so a spec can run the sweeper
+     * on it without touching anybody else's rows.
+     *
+     * @return array{email: string, password: string}
+     */
+    public static function subscriberPastTheirDeadline(): array
+    {
+        $user = User::factory()->create(['password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()]);
+        $user->assignRole('user');
+
+        $customer = Customer::create(['user_id' => $user->id, 'email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id]);
+
+        Subscription::create([
+            'customer_id' => $customer->id,
+            'price_id' => Price::where('provider_price_id', 'price_e2e_pro_monthly')->value('id'),
+            'provider' => 'stripe',
+            'provider_subscription_id' => 'sub_e2e_'.$user->id,
+            'status' => SubscriptionStatus::PastDue,
+            'grace_ends_at' => now()->subHour(),
+            'current_period_starts_at' => now()->subDays(20),
+            'current_period_ends_at' => now()->addDays(10),
+        ]);
+
+        return ['email' => $user->email, 'password' => TestFixtures::SHARED_PASSWORD];
+    }
+
+    /** The provider reporting this user's subscription paid up again. */
+    public static function recover(string $email): void
+    {
+        $user = User::where('email', $email)->firstOrFail();
+
+        self::handleFakeWebhook(WebhookEventType::SubscriptionUpdated, [
+            'id' => 'sub_e2e_'.$user->id,
+            'status' => 'active',
+        ], 'evt_e2e_recover_'.$user->id);
+    }
+
+    /**
      * Finish the checkout this user just started, the way the provider's webhook
      * would. The hand-off itself needs Stripe; everything after it does not.
      */
@@ -176,6 +292,18 @@ class BillingTestHelper
             'currency' => 'eur',
             'amount_total' => 2900,
         ], 'evt_e2e_'.$session->id);
+
+        // A plan with a trial starts trialing, which Stripe reports on the subscription.
+        $trialDays = $session->price->product->trial_days;
+
+        if ($trialDays) {
+            self::handleFakeWebhook(WebhookEventType::SubscriptionUpdated, [
+                'id' => 'sub_e2e_'.$session->id,
+                'status' => 'trialing',
+                'trial_start' => now()->timestamp,
+                'trial_end' => now()->addDays($trialDays)->timestamp,
+            ], 'evt_e2e_trial_'.$session->id);
+        }
     }
 
     private static function handleFakeWebhook(WebhookEventType $type, array $payload, string $eventId): void

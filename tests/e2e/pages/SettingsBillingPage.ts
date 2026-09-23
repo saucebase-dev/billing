@@ -11,6 +11,10 @@ export class SettingsBillingPage {
     readonly cancelDialogCancel: Locator;
     readonly noSubscription: Locator;
     readonly panel: Locator;
+    readonly trial: Locator;
+    readonly grace: Locator;
+    readonly suspended: Locator;
+    readonly addPaymentMethod: Locator;
 
     constructor(page: Page) {
         this.page = page;
@@ -23,6 +27,10 @@ export class SettingsBillingPage {
         this.cancelDialogCancel = page.getByTestId('confirm-dialog-cancel');
         this.noSubscription = page.getByTestId('no-subscription');
         this.panel = page.getByTestId('settings-billing-panel');
+        this.trial = page.getByTestId('subscription-trial');
+        this.grace = page.getByTestId('subscription-grace');
+        this.suspended = page.getByTestId('subscription-suspended');
+        this.addPaymentMethod = page.getByTestId('add-payment-method');
     }
 
     /**
@@ -32,6 +40,12 @@ export class SettingsBillingPage {
      */
     async goto() {
         await this.page.goto('/dashboard#settings/billing');
+        await this.panel.waitFor();
+    }
+
+    /** `goto()` again would only move the fragment; this fetches the panel afresh. */
+    async reload() {
+        await this.page.reload();
         await this.panel.waitFor();
     }
 

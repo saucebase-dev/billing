@@ -9,6 +9,7 @@ use Inertia\Testing\AssertableInertia;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
@@ -286,5 +287,23 @@ class PlanAccessTest extends TestCase
         ]);
 
         $this->assertSame(PaymentStatus::Succeeded, $unrelated->fresh()->status);
+    }
+
+    /**
+     * A suspended subscription is still alive at the provider, which keeps
+     * retrying its invoice. Lifetime must end it, or a successful retry bills
+     * the customer for a plan they already own for good.
+     */
+    public function test_buying_lifetime_ends_a_suspended_subscription_it_replaces(): void
+    {
+        $pro = Product::factory()->create();
+        $subscription = $this->subscribe($pro);
+        $subscription->update(['status' => SubscriptionStatus::Suspended, 'grace_ends_at' => now()->subDay()]);
+
+        $this->gateway->expects($this->once())->method('cancelSubscription')->willReturn($subscription->current_period_ends_at);
+
+        $this->completeLifetimeCheckout($this->lifetimePlan($pro));
+
+        $this->assertNotNull($subscription->fresh()->cancelled_at);
     }
 }

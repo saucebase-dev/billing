@@ -4,6 +4,7 @@ namespace Modules\Billing\Settings;
 
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Enums\InvoiceStatus;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Settings\SettingsSection;
@@ -77,6 +78,10 @@ class BillingSection extends SettingsSection
             ->limit(20)
             ->get();
 
+        // A lifetime plan covers it, so there is no card to chase.
+        $replacedByLifetime = $subscription?->cancelled_at !== null
+            && $this->eligibility->isReplacedByLifetime($subscription);
+
         // TODO: move it to a resource?
 
         return [
@@ -91,8 +96,17 @@ class BillingSection extends SettingsSection
                 'interval' => $subscription->price?->interval,
                 // Only once the provider accepted the cancellation: until then
                 // it still renews, and the panel says so.
-                'replaced_by_lifetime' => $subscription->cancelled_at !== null
-                    && $this->eligibility->isReplacedByLifetime($subscription),
+                'trial_ends_at' => $subscription->trial_ends_at?->toISOString(),
+                'on_trial' => $subscription->trial_ends_at?->isFuture() ?? false,
+                // Only while it is running: a suspended plan says so instead.
+                'grace_ends_at' => $subscription->status === SubscriptionStatus::PastDue && ! $replacedByLifetime
+                    ? $subscription->grace_ends_at?->toISOString()
+                    : null,
+                'suspended' => $subscription->status === SubscriptionStatus::Suspended && ! $replacedByLifetime,
+                // A nudge, never a decision: the provider decides what a trial
+                // without payment details does when it ends.
+                'needs_payment_method' => ! $subscription->hasPaymentMethod(),
+                'replaced_by_lifetime' => $replacedByLifetime,
             ] : null,
             'lifetimePlans' => $customer->lifetimePurchases()
                 ->map(fn ($payment) => ['name' => $payment->price?->plan?->name])

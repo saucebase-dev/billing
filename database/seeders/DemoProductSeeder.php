@@ -45,6 +45,7 @@ class DemoProductSeeder extends Seeder
                     'is_visible' => true,
                     'is_highlighted' => $plan['slug'] === 'pro',
                     'is_active' => true,
+                    'trial_days' => $plan['trial_days'] ?? null,
                     'features' => $plan['features'],
                     'metadata' => $plan['metadata'],
                     'kind' => $plan['kind'],
@@ -71,7 +72,7 @@ class DemoProductSeeder extends Seeder
     }
 
     /**
-     * @return list<array{slug: string, name: string, kind: PlanKind, entitlements: array<string, mixed>, replaces?: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
+     * @return list<array{slug: string, name: string, kind: PlanKind, trial_days?: int, entitlements: array<string, mixed>, replaces?: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
      */
     private function plans(): array
     {
@@ -97,6 +98,7 @@ class DemoProductSeeder extends Seeder
                 'slug' => 'pro',
                 'name' => 'Pro',
                 'kind' => PlanKind::Subscription,
+                'trial_days' => 14,
                 'entitlements' => self::PRO_ENTITLEMENTS,
                 'description' => 'No limits on projects, and the tools to run them in production.',
                 'features' => ['Unlimited projects', '1M API requests / month', 'Custom domains', 'Webhooks', 'Priority email support'],

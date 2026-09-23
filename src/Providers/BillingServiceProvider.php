@@ -37,6 +37,7 @@ class BillingServiceProvider extends ModuleServiceProvider
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
             $schedule->command('billing:sync-catalog')->daily();
+            $schedule->command('billing:end-grace-periods')->hourly();
         });
     }
 

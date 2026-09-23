@@ -69,6 +69,6 @@ test.describe.parallel('Settings Billing Basics', () => {
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
         await expect(billingPage.resumeButton).toBeVisible();
-        await expect(page.getByText('Cancels on')).toBeVisible();
+        await expect(page.getByTestId('subscription-cancels-on')).toBeVisible();
     });
 });

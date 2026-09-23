@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanKind;
 
@@ -77,6 +78,14 @@ class Customer extends Model
     }
 
     /**
+     * @return HasMany<CheckoutSession, $this>
+     */
+    public function checkoutSessions(): HasMany
+    {
+        return $this->hasMany(CheckoutSession::class);
+    }
+
+    /**
      * @return HasMany<Payment, $this>
      */
     public function payments(): HasMany
@@ -85,12 +94,29 @@ class Customer extends Model
     }
 
     /**
-     * The subscription that grants access now. A customer holds at most one,
-     * which checkout enforces; the newest wins should that ever break.
+     * The subscription the customer holds, access or not — ask `grantsAccess()`
+     * for that. A customer holds at most one, which checkout enforces; the
+     * newest wins should that ever break.
      */
     public function currentSubscription(): ?Subscription
     {
         return $this->subscriptions()->current()->latest('id')->first();
+    }
+
+    /**
+     * Whether this customer has used their one trial, ever.
+     *
+     * Two things count: a subscription that has trialed, and a checkout still
+     * holding a trial it was issued with. The second is what stops two open
+     * checkouts from both being trials — history alone is written too late.
+     */
+    public function hasTrialed(): bool
+    {
+        return $this->subscriptions()->whereNotNull('trial_starts_at')->exists()
+            || $this->checkoutSessions()
+                ->whereIn('status', [CheckoutSessionStatus::Pending, CheckoutSessionStatus::Completed])
+                ->where('trial_days', '>', 0)
+                ->exists();
     }
 
     /**

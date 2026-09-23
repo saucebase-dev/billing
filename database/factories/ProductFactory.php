@@ -50,6 +50,12 @@ class ProductFactory extends Factory
         ];
     }
 
+    /** A plan that lets a customer try it first. */
+    public function withTrial(int $days = 14): static
+    {
+        return $this->state(fn (array $attributes) => ['trial_days' => $days]);
+    }
+
     public function free(): static
     {
         return $this->state(['kind' => PlanKind::Free]);

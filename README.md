@@ -26,6 +26,8 @@ Adds a pricing page, a checkout, a billing settings page, and an admin panel for
 - **Customer portal** — one click to Stripe's portal, where customers update their card and download invoices
 - **Plan changes** — subscribers switch plans in Stripe's portal, and the app follows
 - **One plan per customer** — checkout refuses a second subscription
+- **Free trials** — set a trial length per plan; each customer gets one trial ever, with or without payment details up front
+- **Grace period** — a failed payment keeps the subscription working for a few days, then suspends it, with an email at each step
 - **Entitlements** — each plan turns features on and sets limits your app checks
 - **Plan kinds** — free, subscription, lifetime and one-off plans
 - **Lifetime deals** — a one-time plan that replaces a subscription plan for good; a full refund takes it back
@@ -98,10 +100,14 @@ checkout.session.completed
 checkout.session.async_payment_succeeded
 customer.subscription.updated
 customer.subscription.deleted
+customer.subscription.trial_will_end
 invoice.paid
 invoice.payment_succeeded
 invoice.payment_failed
 charge.refunded
+payment_method.attached
+payment_method.detached
+customer.updated
 ```
 
 Stripe gives you a signing secret. That is the `STRIPE_WEBHOOK_SECRET` above.
@@ -109,7 +115,7 @@ Stripe gives you a signing secret. That is the `STRIPE_WEBHOOK_SECRET` above.
 For local development, forward the events instead:
 
 ```bash
-stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.updated,customer.subscription.deleted,invoice.paid,invoice.payment_succeeded,invoice.payment_failed,charge.refunded \
+stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.paid,invoice.payment_succeeded,invoice.payment_failed,charge.refunded,payment_method.attached,payment_method.detached,customer.updated \
   --forward-to localhost/billing/webhooks/stripe
 ```
 
@@ -132,6 +138,22 @@ If you drafted your plans in the admin first, `php artisan billing:push-catalog`
 Subscribers change plan in Stripe's customer portal, so Stripe needs to know what they can switch to.
 
 In Stripe, go to **Settings → Billing → Customer portal**, turn on *Customers can switch plans*, and add the products they can pick.
+
+### 6. Run the scheduler
+
+The module schedules its own jobs, but Laravel only runs them if the scheduler is running. On a server, add the usual cron entry:
+
+```
+* * * * * cd /path-to-your-app && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Locally, run `php artisan schedule:work`.
+
+| Command | Runs | What happens if it doesn't |
+| --- | --- | --- |
+| `billing:end-grace-periods` | hourly | A customer who never pays keeps their subscription after the grace period |
+| `billing:expire-checkout-sessions` | every 30 minutes | Abandoned checkouts stay pending and keep holding the customer's trial |
+| `billing:sync-catalog` | daily | Price changes made in Stripe only arrive when you sync by hand |
 
 ### Block double subscriptions (optional)
 
@@ -183,7 +205,9 @@ Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `S
 
 ## Configuration
 
-Everything else is in the admin, at **`/admin` → Settings → Billing**: which gateway to use, your currency, whether checkout goes straight to Stripe, and how long an unfinished checkout stays open. Only your Stripe keys live in `.env`.
+Everything else is in the admin, at **`/admin` → Settings → Billing**: which gateway to use, your currency, whether checkout goes straight to Stripe, how long an unfinished checkout stays open, how many days of grace a failed payment gets, and whether a trial collects payment details first. Only your Stripe keys live in `.env`.
+
+A plan's trial length is set on the plan itself, under **Products → Plan → Free trial**.
 
 For anything beyond this — adding a gateway, customising the checkout and pricing pages, how webhooks and syncing work — see the [documentation](https://saucebase-dev.github.io/docs/modules/billing).
 

@@ -14,6 +14,8 @@ class CheckoutData extends Data
         public string $successUrl,
         public string $cancelUrl,
         public ?string $coupon = null,
+        public ?int $trialDays = null,
+        public bool $trialRequiresPaymentMethod = true,
         public ?string $idempotencyKey = null,
     ) {}
 }

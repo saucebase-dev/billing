@@ -211,7 +211,54 @@ export default function SettingsBilling({
                             </p>
                             <p className="text-muted-foreground text-sm">
                                 {formatInterval(subscription.interval)}
-                                {subscription.cancelled_at ? (
+                                {/* Trial, then trouble, then the ordinary dates */}
+                                {subscription.suspended ? (
+                                    <>
+                                        {' '}
+                                        &middot;{' '}
+                                        <span
+                                            className="text-destructive"
+                                            data-testid="subscription-suspended"
+                                        >
+                                            {t(
+                                                'Suspended — update your payment details to start it again',
+                                            )}
+                                        </span>
+                                    </>
+                                ) : subscription.grace_ends_at ? (
+                                    <>
+                                        {' '}
+                                        &middot;{' '}
+                                        <span
+                                            className="text-destructive"
+                                            data-testid="subscription-grace"
+                                        >
+                                            {t(
+                                                'Payment failed — update your card by',
+                                            )}{' '}
+                                            {formatDate(
+                                                subscription.grace_ends_at,
+                                                locale,
+                                                longDate,
+                                            )}{' '}
+                                            {t('to keep this subscription')}
+                                        </span>
+                                    </>
+                                ) : subscription.on_trial &&
+                                  !subscription.cancelled_at ? (
+                                    <>
+                                        {' '}
+                                        &middot;{' '}
+                                        <span data-testid="subscription-trial">
+                                            {t('Trial ends on')}{' '}
+                                            {formatDate(
+                                                subscription.trial_ends_at,
+                                                locale,
+                                                longDate,
+                                            )}
+                                        </span>
+                                    </>
+                                ) : subscription.cancelled_at ? (
                                     <>
                                         {' '}
                                         &middot;{' '}
@@ -229,7 +276,10 @@ export default function SettingsBilling({
                                                 )}
                                             </span>
                                         ) : (
-                                            <span className="text-destructive">
+                                            <span
+                                                className="text-destructive"
+                                                data-testid="subscription-cancels-on"
+                                            >
                                                 {t('Cancels on')}{' '}
                                                 {formatDate(
                                                     subscription.ends_at,
@@ -255,9 +305,18 @@ export default function SettingsBilling({
                             </p>
                         </div>
                         <a href={billingPortalUrl}>
-                            <Button variant="outline" size="sm">
-                                {t('Adjust plan')}
-                            </Button>
+                            {subscription.needs_payment_method ? (
+                                <Button
+                                    size="sm"
+                                    data-testid="add-payment-method"
+                                >
+                                    {t('Add payment method')}
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="sm">
+                                    {t('Adjust plan')}
+                                </Button>
+                            )}
                         </a>
                     </div>
 
