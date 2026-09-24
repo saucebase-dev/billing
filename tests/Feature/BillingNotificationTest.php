@@ -41,7 +41,7 @@ class BillingNotificationTest extends TestCase
         Notification::fake();
 
         $this->user = User::factory()->create();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create();
     }
 
     public function test_subscription_created_sends_notification(): void

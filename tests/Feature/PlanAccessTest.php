@@ -56,7 +56,7 @@ class PlanAccessTest extends TestCase
 
         $this->billing = app(BillingService::class);
         $this->user = $this->createUser();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create();
     }
 
     private function subscribe(?Product $plan = null): Subscription

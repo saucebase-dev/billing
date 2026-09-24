@@ -2,11 +2,12 @@
 
 namespace Modules\Billing\Providers;
 
+use App\Models\User;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
-use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
+use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Saucebase\Core\Providers\ModuleServiceProvider;
@@ -24,6 +25,7 @@ class BillingServiceProvider extends ModuleServiceProvider
         });
 
         $this->app->singleton(BillingService::class);
+        $this->app->singleton(BillingOwners::class);
     }
 
     public function boot(): void
@@ -32,7 +34,8 @@ class BillingServiceProvider extends ModuleServiceProvider
 
         $this->loadViewsFrom(module_path('billing', 'resources/views'), 'billing');
 
-        Inertia::share('billing.plan', fn () => Auth::user() instanceof BillingOwner ? Auth::user()->planName() : null);
+        Inertia::share('billing.plan', fn () => $this->app->make(BillingOwners::class)
+            ->for(Auth::user() instanceof User ? Auth::user() : null)?->planName());
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();

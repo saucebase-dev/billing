@@ -20,8 +20,8 @@ class CustomerInfolist
                     ->schema([
                         Section::make(__('Customer Details'))
                             ->schema([
-                                TextEntry::make('user.name')
-                                    ->label(__('User'))
+                                TextEntry::make('owner.name')
+                                    ->label(__('Owner'))
                                     ->placeholder(__('Account deleted')),
 
                                 TextEntry::make('name')

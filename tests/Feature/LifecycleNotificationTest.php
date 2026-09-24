@@ -65,7 +65,7 @@ class LifecycleNotificationTest extends TestCase
 
         $this->user = User::factory()->create();
         $this->subscription = Subscription::factory()->create([
-            'customer_id' => Customer::factory()->create(['user_id' => $this->user->id])->id,
+            'customer_id' => Customer::factory()->for($this->user, 'owner')->create()->id,
             'provider' => 'stripe',
             'provider_subscription_id' => 'sub_mail',
         ]);

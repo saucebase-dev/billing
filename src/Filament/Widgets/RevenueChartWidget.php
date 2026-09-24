@@ -6,10 +6,13 @@ use Carbon\Carbon;
 use Filament\Widgets\ChartWidget;
 use Livewire\Attributes\On;
 use Modules\Billing\Enums\PaymentStatus;
+use Modules\Billing\Filament\Traits\GroupsByMonth;
 use Modules\Billing\Models\Payment;
 
 class RevenueChartWidget extends ChartWidget
 {
+    use GroupsByMonth;
+
     protected static bool $isDiscovered = false;
 
     protected ?string $pollingInterval = null;
@@ -57,12 +60,14 @@ class RevenueChartWidget extends ChartWidget
      */
     protected function getData(): array
     {
-        $buckets = $this->buildMonthlyBuckets();
+        $buckets = $this->monthlyBuckets();
 
         try {
-            $rows = Payment::where('status', PaymentStatus::Succeeded)
+            $query = Payment::query();
+
+            $rows = $query->where('status', PaymentStatus::Succeeded)
                 ->whereBetween('created_at', [$this->startDate, $this->endDate])
-                ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month, SUM(amount) as total')
+                ->selectRaw($this->monthOf($query).' as month, SUM(amount) as total')
                 ->groupBy('month')
                 ->orderBy('month')
                 ->get();
@@ -95,22 +100,5 @@ class RevenueChartWidget extends ChartWidget
             ],
             'labels' => $labels,
         ];
-    }
-
-    /**
-     * @return array<string, int>
-     */
-    private function buildMonthlyBuckets(): array
-    {
-        $buckets = [];
-        $cursor = Carbon::parse($this->startDate)->startOfMonth();
-        $end = Carbon::parse($this->endDate)->endOfMonth();
-
-        while ($cursor <= $end) {
-            $buckets[$cursor->format('Y-m')] = 0;
-            $cursor->addMonth();
-        }
-
-        return $buckets;
     }
 }

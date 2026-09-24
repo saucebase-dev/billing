@@ -10,8 +10,6 @@ class SendSubscriptionCreatedNotification implements ShouldQueue
 {
     public function handle(SubscriptionCreated $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new SubscriptionCreatedNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new SubscriptionCreatedNotification($event->subscription));
     }
 }

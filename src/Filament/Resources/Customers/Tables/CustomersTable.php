@@ -13,11 +13,11 @@ class CustomersTable
     {
         return $table
             ->columns([
-                TextColumn::make('user.name')
-                    ->label(__('User'))
-                    ->placeholder(__('Account deleted'))
-                    ->searchable()
-                    ->sortable(),
+                // A polymorphic owner cannot be searched or sorted in SQL; the
+                // customer's own name and email can.
+                TextColumn::make('owner.name')
+                    ->label(__('Owner'))
+                    ->placeholder(__('Account deleted')),
 
                 TextColumn::make('email')
                     ->label(__('Email'))

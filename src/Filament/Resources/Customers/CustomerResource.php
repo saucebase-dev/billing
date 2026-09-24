@@ -25,7 +25,7 @@ class CustomerResource extends Resource
 
     public static function getGloballySearchableAttributes(): array
     {
-        return ['email', 'name', 'user.name'];
+        return ['email', 'name'];
     }
 
     public static function getGlobalSearchResultTitle(Model $record): string|Htmlable

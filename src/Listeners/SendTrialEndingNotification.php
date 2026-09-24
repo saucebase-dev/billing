@@ -10,8 +10,6 @@ class SendTrialEndingNotification implements ShouldQueue
 {
     public function handle(TrialEnding $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new TrialEndingNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new TrialEndingNotification($event->subscription));
     }
 }

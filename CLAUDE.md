@@ -17,7 +17,7 @@ Subscription management, checkout sessions, payment processing, and webhook hand
 | Commands | `EndGracePeriodsCommand` (`billing:end-grace-periods`, hourly, suspends subscriptions whose grace window closed), `ExpireCheckoutSessionsCommand` (every 30 min, marks abandoned/expired sessions and releases the trials they hold), `SyncCatalogCommand` (`billing:sync-catalog`, daily and on the admin's *Sync* button), `PushCatalogCommand` (`billing:push-catalog`, on the admin's *Push new* button). Both in `src/Console/Commands/`, which is where internachi discovers them |
 | Middleware | `RedirectToRegister` — redirects guests on checkout pages, stores intended URL |
 | Filament | `BillingPlugin`, `BillingDashboard` (date range stats), `ProductResource`, `SubscriptionResource`, `CustomerResource` |
-| Owner | `Contracts\BillingOwner` + `Traits\Billable` on the User model (`billingCustomer()`, entitlements, `hasPaidPlan()`); `patches/user.patch` adds both |
+| Owner | `Contracts\BillingOwner` + `Traits\Billable` on the User model (`billingCustomer()`, entitlements, `hasPaidPlan()`, `canManageBilling()`); `patches/user.patch` adds both. `Services\BillingOwners` says which owner a user acts for |
 | Pages | `SettingsBilling`, `Checkout` |
 
 ## Frontend
@@ -125,7 +125,15 @@ Entitlements are `{features: {key: true}, limits: {key: int|null}}` on the plan 
 - `kind`, `slug` and `replaces_product_id` are frozen once the plan is sold (`isSold()`: a Pending or Completed checkout session, a payment, or a subscription on its prices). Checkout creates the session under a `lockForUpdate` on the plan row, and `EditProduct` saves under the same lock in a transaction, so an edit cannot slip in between handoff and payment.
 - Entitlement keys are snake_case; limits are whole numbers ≥ 0 or null.
 
-**Who owns plans.** `Contracts\BillingOwner` (`billingAccount()`, `entitlements()`, `hasPaidPlan()`, `canUseFeature()`, `planLimit()`), implemented by `User` through `Billable`. Everything that decides access or purchases takes a `BillingOwner`, so a workspace can become the owner without touching the rules. The *Upgrade* menu item shows while `hasPaidPlan()` is false. There is no subscriber role: check entitlements.
+**Who owns plans.** `Contracts\BillingOwner` (`billingCustomer()`, `billingAccount()`, `entitlements()`, `hasPaidPlan()`, `canUseFeature()`, `planLimit()`, `canManageBilling()`, `notify()`), implemented by `User` through `Billable`. `customers` points at its owner through a polymorphic `owner_type`/`owner_id`, both strings so integer users and ULID workspaces share one column; `Billable::billingCustomer()` is `Models\Relations\OwnerAccount`, a `MorphOne` that binds the owner's key as a string (lazy, eager and create) so MySQL keeps the index, while `whereHas`/`withCount` compare the real columns. On PostgreSQL that column comparison (varchar = bigint) has no operator, so `OwnerAccount` casts the owner's key to text there. There is no subscriber role: check entitlements.
+
+**Whose billing a user acts on** is `Services\BillingOwners`, a singleton: the user by default, or whatever an app registers with `resolveUsing(fn (User $user) => ...)` — with tenancy, the current workspace (the glue is the app's; billing never names tenancy). Two questions, kept apart:
+- `for($user)` — whose plan the user sees: pricing buttons, the shared `billing.plan`, the *Upgrade* item. It checks nothing itself, so **a resolver must only return an owner the user may see**, from validated context (a membership-checked current tenant), never request input. It returns null for a guest or anyone turned away, and resolves on every call — nothing is cached, so a removed member is out on their next request.
+- `managedBy($user)` — whose billing the user may change: `for()` plus the owner's `canManageBilling($user)` (default: the user themself), else 403. Checkout, retry, cancel, resume, the portal, plan changes and the return URL all go through it; the billing panel is hidden (`visible()`) from anyone it refuses. A guest still starts a checkout without an owner and is asked once signed in.
+
+App code checks features through the owner too, failing closed: `app(BillingOwners::class)->for($user)?->canUseFeature('exports') ?? false`. `$user->canUseFeature()` is only the user's own plans, which in a workspace app is usually not what you mean.
+
+A new account takes the buyer's name and email; after that its details change only when the buyer types new ones into checkout, so one manager cannot replace a workspace's billing contact. Billing emails go to the owner (`notify()`): an owner with no `email` needs a mail route.
 
 **Purchases.** `PurchaseEligibility::check(?BillingOwner, Price)` is the single rule, returning a `PurchaseRefusal` or null:
 - the price: inactive, not pushed, or not the kind's type (a one-time price on a Subscription plan) → `Unavailable`; the Free plan → `NotForSale`;
@@ -239,6 +247,8 @@ purpose allows it by pattern, e.g.
 
 ## Gotchas
 
+- **Runs on SQLite, MySQL and PostgreSQL.** Raw SQL that differs between them goes through one place: month grouping is `Filament\Traits\GroupsByMonth::monthOf()`, and counting matches is `SUM(CASE WHEN … THEN 1 ELSE 0 END)` (PostgreSQL cannot `SUM` a boolean). Any value typed into a URL that reaches a `uuid` column must be checked first (`whereUuid()` on routes, `Str::isUuid()` otherwise): PostgreSQL rejects a malformed UUID with an error, not an empty result. The suite passes on PostgreSQL with `DB_CONNECTION=pgsql` and the usual `DB_*` variables
+
 - `CheckoutSession` uses `uuid` as the route key (not `id`) — always resolve via UUID in URLs
 - Every `provider_*_id` is namespaced by a `provider` column (the gateway driver slug). Look rows up with both, never by the provider ID alone; uniqueness is `(provider, provider_x_id)`
 - `subscriptions.last_event_at` is when the last applied provider event happened. `SubscriptionUpdated`/`Deleted` skip events older than it, so a late delivery cannot roll state back
@@ -247,9 +257,9 @@ purpose allows it by pattern, e.g.
 - Webhook tests build deliveries with `Tests\Support\StripeWebhook::make()`, which runs Stripe-shaped fixtures through the real mapper — mapper + service integration, not Stripe end to end. It defaults a completed checkout to `payment_status: paid`, as Stripe always sends one
 - One card arrives in several webhooks at once (`payment_method.attached`, `customer.updated`, `checkout.session.completed`). `ensurePaymentMethod()` inserts inside a savepoint and, on `UniqueConstraintViolationException`, re-reads the winner with a locking read; a plain read could miss it under MySQL's repeatable-read snapshot
 - `Price::amount` is stored in minor currency units (cents) — always divide by 100 for display; `Currency::formatAmount()` handles this
-- The User model needs `implements BillingOwner` and `use Billable` (`patches/user.patch`, same pattern as Auth's `Sociable`) — entitlement checks and `$user->billingCustomer` fail without them
+- The User model needs `implements BillingOwner` and `use Billable` (`patches/user.patch`, same pattern as Auth's `Sociable`) — entitlement checks and `$user->billingAccount()` fail without them
 - Products use SoftDeletes; always scope to `active()` or `displayable()` when listing plans
-- **Billing history outlives the account.** `customers.user_id` is `nullOnDelete`, so deleting a user detaches the customer and its subscriptions, payments and invoices stay put. `Customer::$user_id` is nullable and every notification listener uses `$user?->notify()`; the admin shows *Account deleted* where the name would be
+- **Billing history outlives the account.** A polymorphic owner can't have a foreign key, so `Billable` clears `owner_type`/`owner_id` when its owner is deleted (a soft delete keeps the link; only a force delete lets go) and the subscriptions, payments and invoices stay put. That hook needs model events: **delete owners through the model** — a query-builder or bulk delete leaves a dangling `owner_id`. Listeners use `$customer->owner?->notify()`; the admin shows *Account deleted* where the name would be
 - `subscriptions.price_id` is `restrictOnDelete`, not cascade: products cascade to prices and the admin can force-delete a product, so cascading would take paid subscriptions with it. Archive the plan instead
 - `Product` refuses a **force** delete while any of its prices has a `provider_price_id`. Prices cascade from products in the database, and a cascade does not fire the price's own model event, so without this the provider would be silently desynced
 - `Price` refuses deletion while `provider_price_id` is set — the provider's prices are immutable and subscriptions bill on them, so archive there and sync

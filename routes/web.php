@@ -16,9 +16,11 @@ Route::middleware('web')->group(function (): void {
     Route::middleware([RedirectToRegister::class, 'throttle:10,1'])->group(function (): void {
         Route::get('/billing/checkout/{checkout_session}', [CheckoutController::class, 'show'])
             ->name('billing.checkout')
+            ->whereUuid('checkout_session')
             ->missing(fn () => auth()->guest() ? redirect()->route('register') : abort(404));
         Route::post('/billing/checkout/{checkout_session}', [CheckoutController::class, 'store'])
             ->name('billing.checkout.store')
+            ->whereUuid('checkout_session')
             ->missing(fn () => auth()->guest() ? redirect()->route('register') : abort(404));
     });
 
@@ -26,7 +28,10 @@ Route::middleware('web')->group(function (): void {
         Route::get('/billing/portal', BillingPortalController::class)->name('billing.portal');
         Route::get('/billing/plan/change', [BillingPortalController::class, 'changePlan'])->middleware('throttle:10,1')->name('billing.plan.change');
         // A failed hand-off retried for this same checkout: same request, same idempotency key.
-        Route::post('/billing/checkout/{checkout_session}/retry', [CheckoutController::class, 'retry'])->middleware('throttle:10,1')->name('billing.checkout.retry');
+        Route::post('/billing/checkout/{checkout_session}/retry', [CheckoutController::class, 'retry'])
+            ->whereUuid('checkout_session')
+            ->middleware('throttle:10,1')
+            ->name('billing.checkout.retry');
         Route::post('/billing/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('billing.subscription.cancel');
         Route::post('/billing/subscription/resume', [SubscriptionController::class, 'resume'])->name('billing.subscription.resume');
 

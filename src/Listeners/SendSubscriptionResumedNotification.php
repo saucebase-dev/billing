@@ -10,8 +10,6 @@ class SendSubscriptionResumedNotification implements ShouldQueue
 {
     public function handle(SubscriptionResumed $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new SubscriptionResumedNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new SubscriptionResumedNotification($event->subscription));
     }
 }

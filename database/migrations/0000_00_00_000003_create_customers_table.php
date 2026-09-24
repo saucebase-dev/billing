@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\User;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -15,11 +14,12 @@ return new class extends Migration
         Schema::create('customers', function (Blueprint $table) {
             $table->id();
 
-            // Foreign keys
-            // Billing history outlives the account. Deleting a user detaches the
-            // customer rather than deleting it, so the subscriptions, payments and
-            // invoices hanging off it survive for reconciliation and audit.
-            $table->foreignIdFor(User::class)->nullable()->constrained()->nullOnDelete();
+            // Whoever pays: a user, or anything else implementing BillingOwner.
+            // Strings, because owners' keys differ (integer users, ULID
+            // workspaces). No foreign key can span types, so `Billable` detaches
+            // the customer when its owner is deleted, keeping the history.
+            $table->string('owner_type')->nullable();
+            $table->string('owner_id')->nullable();
 
             // Provider identifiers
             $table->string('provider');
@@ -41,7 +41,7 @@ return new class extends Migration
 
             // Indexes
             $table->index(['provider', 'provider_customer_id']);
-            $table->unique('user_id');
+            $table->unique(['owner_type', 'owner_id']);
         });
     }
 

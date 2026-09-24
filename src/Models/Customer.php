@@ -2,21 +2,23 @@
 
 namespace Modules\Billing\Models;
 
-use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanKind;
 
 /**
  * @property int $id
- * @property int|null $user_id
+ * @property string|null $owner_type
+ * @property string|null $owner_id
+ * @property-read (BillingOwner&Model)|null $owner
  * @property string $provider
  * @property string|null $provider_customer_id
  * @property string|null $email
@@ -32,7 +34,8 @@ class Customer extends Model
     use HasFactory;
 
     protected $fillable = [
-        'user_id',
+        'owner_type',
+        'owner_id',
         'provider',
         'provider_customer_id',
         'email',
@@ -54,11 +57,13 @@ class Customer extends Model
     }
 
     /**
-     * @return BelongsTo<User, $this>
+     * Null once the owner is deleted: the account and its history stay.
+     *
+     * @return MorphTo<Model, $this>
      */
-    public function user(): BelongsTo
+    public function owner(): MorphTo
     {
-        return $this->belongsTo(User::class);
+        return $this->morphTo();
     }
 
     /**

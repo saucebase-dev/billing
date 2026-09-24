@@ -7,7 +7,6 @@ use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
-use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Saucebase\Core\Settings\SettingsSection;
@@ -104,9 +103,8 @@ class CheckoutSessionValidationTest extends TestCase
         $owner = $this->createUser();
         $attacker = $this->createUser();
 
-        $customer = Customer::create([
+        $customer = $owner->billingCustomer()->create([
             'provider' => 'stripe',
-            'user_id' => $owner->id,
             'provider_customer_id' => 'cus_owner',
             'name' => $owner->name,
             'email' => $owner->email,

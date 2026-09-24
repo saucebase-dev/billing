@@ -2,13 +2,13 @@
 
 namespace Modules\Billing\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Helpers\Toast;
@@ -17,14 +17,12 @@ class SubscriptionController
 {
     public function __construct(
         private BillingService $billingService,
+        private BillingOwners $owners,
     ) {}
 
-    public function cancel(): RedirectResponse
+    public function cancel(Request $request): RedirectResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
-
-        $subscription = $user->billingCustomer?->currentSubscription();
+        $subscription = $this->owners->managedBy($request->user())->billingAccount()?->currentSubscription();
 
         if (! $subscription) {
             abort(404);
@@ -42,12 +40,9 @@ class SubscriptionController
         ]);
     }
 
-    public function resume(PurchaseEligibility $eligibility): RedirectResponse
+    public function resume(Request $request, PurchaseEligibility $eligibility): RedirectResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
-
-        $subscription = $user->billingCustomer
+        $subscription = $this->owners->managedBy($request->user())->billingAccount()
             ?->subscriptions()
             ->where('status', SubscriptionStatus::Active)
             ->whereNotNull('cancelled_at')

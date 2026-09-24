@@ -118,7 +118,7 @@ test.describe('Buying a plan', () => {
             });
 
             const sessions = await laravel.select(
-                'SELECT COUNT(*) AS n FROM checkout_sessions cs JOIN customers c ON c.id = cs.customer_id JOIN users u ON u.id = c.user_id WHERE u.email = :email',
+                'SELECT COUNT(*) AS n FROM checkout_sessions cs JOIN customers c ON c.id = cs.customer_id JOIN users u ON u.id = c.owner_id WHERE u.email = :email',
                 { email: buyer.email },
             );
             expect(Number(sessions[0].n)).toBe(1);

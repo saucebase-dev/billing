@@ -107,13 +107,13 @@ class BillingServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel', $billingDetails);
+        $result = $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', $billingDetails);
 
         $this->assertEquals('cs_guest_123', $result->sessionId);
         $this->assertEquals('https://stripe.com/checkout', $result->url);
 
         $this->assertDatabaseHas('customers', [
-            'user_id' => $user->id,
+            'owner_id' => $user->id,
             'provider_customer_id' => 'cus_test_123',
             'name' => 'Billing Name',
             'email' => 'billing@example.com',
@@ -535,8 +535,8 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_first', url: 'https://stripe.com/first', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel');
-        $again = $this->billingService->processCheckout($session->fresh(), $user, 'https://example.com/success', 'https://example.com/other', coupon: 'SAVE10');
+        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
+        $again = $this->billingService->processCheckout($session->fresh(), $user, $user, 'https://example.com/success', 'https://example.com/other', coupon: 'SAVE10');
 
         $this->assertSame('cs_first', $again->sessionId);
         $this->assertSame('https://stripe.com/first', $again->url);
@@ -1338,9 +1338,8 @@ class BillingServiceTest extends TestCase
     public function test_process_checkout_updates_existing_customer(): void
     {
         $user = User::factory()->create();
-        $existingCustomer = Customer::create([
+        $existingCustomer = $user->billingCustomer()->create([
             'provider' => 'stripe',
-            'user_id' => $user->id,
             'provider_customer_id' => 'cus_existing',
             'name' => 'Old Name',
             'email' => 'old@example.com',
@@ -1356,7 +1355,7 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_update', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel', [
+        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', [
             'name' => 'New Name',
             'email' => 'new@example.com',
         ]);
@@ -1370,7 +1369,7 @@ class BillingServiceTest extends TestCase
     public function test_process_checkout_gives_an_existing_customer_without_a_provider_id_one(): void
     {
         $user = User::factory()->create();
-        $customer = Customer::factory()->withoutProvider()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->withoutProvider()->for($user, 'owner')->create();
         $price = Price::factory()->create();
         $session = CheckoutSession::create([
             'price_id' => $price->id,
@@ -1383,7 +1382,7 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_created', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, 'https://example.com/success', 'https://example.com/cancel');
+        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertSame('cus_created', $customer->refresh()->provider_customer_id);
         $this->assertDatabaseCount('customers', 1);

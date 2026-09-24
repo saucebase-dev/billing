@@ -10,8 +10,6 @@ class SendGraceStartedNotification implements ShouldQueue
 {
     public function handle(GraceStarted $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new GraceStartedNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new GraceStartedNotification($event->subscription));
     }
 }

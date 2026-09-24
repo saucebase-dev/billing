@@ -43,6 +43,15 @@ class CheckoutControllerTest extends TestCase
         app()->instance(PaymentGatewayManager::class, $manager);
     }
 
+    /** Any text can be typed into the address; only a real checkout ID reaches the database. */
+    public function test_a_checkout_address_that_is_not_an_id_is_not_found(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->get('/billing/checkout/not-a-real-uuid')->assertNotFound();
+        $this->actingAs($user)->post('/billing/checkout/not-a-real-uuid/retry')->assertNotFound();
+    }
+
     public function test_checkout_requires_authentication(): void
     {
         $response = $this->post(route('billing.checkout.store', $this->session), [
@@ -73,9 +82,7 @@ class CheckoutControllerTest extends TestCase
         $response->assertRedirect('https://stripe.com/checkout');
 
         $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseHas('customers', [
-            'user_id' => $user->id,
-        ]);
+        $this->assertTrue($user->fresh()->billingAccount() !== null);
     }
 
     /**
@@ -93,7 +100,7 @@ class CheckoutControllerTest extends TestCase
         $response->assertRedirect('https://stripe.com/checkout');
 
         $this->assertDatabaseHas('customers', [
-            'user_id' => $user->id,
+            'owner_id' => $user->id,
             'name' => $user->name,
             'email' => 'billing@example.com',
         ]);
@@ -169,8 +176,8 @@ class CheckoutControllerTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(
-            $owner->id,
-            $this->session->fresh()->customer->user_id,
+            (string) $owner->id,
+            $this->session->fresh()->customer->owner_id,
         );
     }
 

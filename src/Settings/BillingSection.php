@@ -2,24 +2,44 @@
 
 namespace Modules\Billing\Settings;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\InvoiceStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Invoice;
+use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Settings\SettingsSection;
 
 /**
- * Subscription, payment method and invoices for the signed-in user.
- *
- * User-scoped rather than workspace-scoped, so it is offered everywhere — there
- * is no `visible()` override.
+ * Subscription, payment method and invoices of the owner the signed-in user
+ * manages: themself by default. Hidden from anyone who cannot manage it.
  */
 class BillingSection extends SettingsSection
 {
     public function __construct(
         private PurchaseEligibility $eligibility,
+        private BillingOwners $owners,
     ) {}
+
+    public function visible(): bool
+    {
+        return $this->managedOwner() !== null;
+    }
+
+    private function managedOwner(): ?BillingOwner
+    {
+        $user = Auth::user();
+
+        if (! $user instanceof User) {
+            return null;
+        }
+
+        $owner = $this->owners->for($user);
+
+        return $owner?->canManageBilling($user) ? $owner : null;
+    }
 
     public function slug(): string
     {
@@ -51,9 +71,7 @@ class BillingSection extends SettingsSection
      */
     public function props(): array
     {
-        $user = Auth::user();
-
-        $customer = $user->billingCustomer;
+        $customer = $this->managedOwner()?->billingAccount();
 
         if (! $customer) {
             return [

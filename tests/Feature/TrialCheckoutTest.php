@@ -72,7 +72,7 @@ class TrialCheckoutTest extends TestCase
             'expires_at' => now()->addDay(),
         ]);
 
-        $this->billing->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no');
+        $this->billing->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
 
         return $session->fresh();
     }
@@ -104,7 +104,7 @@ class TrialCheckoutTest extends TestCase
 
     public function test_a_customer_who_already_trialed_pays_from_the_start(): void
     {
-        $customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $customer = Customer::factory()->for($this->user, 'owner')->create();
         // A trial they took last year and have since cancelled.
         Subscription::factory()->cancelled()->create([
             'customer_id' => $customer->id,
@@ -135,7 +135,7 @@ class TrialCheckoutTest extends TestCase
         $session = $this->checkout();
         $session->update(['provider_url' => null, 'provider_session_id' => null]);
 
-        $this->billing->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no');
+        $this->billing->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
 
         $this->assertSame(14, $this->lastSent()->trialDays);
     }
@@ -163,7 +163,7 @@ class TrialCheckoutTest extends TestCase
         $session->update(['provider_url' => null, 'provider_session_id' => null]);
 
         app(BillingSettings::class)->fill(['trial_requires_payment_method' => false])->save();
-        $this->billing->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no');
+        $this->billing->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
 
         $this->assertTrue($this->lastSent()->trialRequiresPaymentMethod);
     }
@@ -185,7 +185,7 @@ class TrialCheckoutTest extends TestCase
         app()->forgetInstance(BillingService::class);
 
         try {
-            app(BillingService::class)->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no', coupon: 'SAVE10');
+            app(BillingService::class)->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no', coupon: 'SAVE10');
         } catch (\RuntimeException) {
         }
 
@@ -205,8 +205,8 @@ class TrialCheckoutTest extends TestCase
         ]);
         $stale = $session->fresh();
 
-        $this->billing->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no');
-        $this->billing->processCheckout($stale, $this->user, 'https://app.test/ok', 'https://app.test/no');
+        $this->billing->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
+        $this->billing->processCheckout($stale, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
 
         $this->assertSame(14, $session->fresh()->trial_days);
         $this->assertSame(14, $this->lastSent()->trialDays);
@@ -220,10 +220,10 @@ class TrialCheckoutTest extends TestCase
             'status' => CheckoutSessionStatus::Pending,
             'expires_at' => now()->addDay(),
         ]);
-        $this->billing->processCheckout($session, $this->user, 'https://app.test/ok', 'https://app.test/no', coupon: 'FIRST');
+        $this->billing->processCheckout($session, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no', coupon: 'FIRST');
         $session->update(['provider_url' => null, 'provider_session_id' => null]);
 
-        $this->billing->processCheckout($session->fresh(), $this->user, 'https://app.test/other', 'https://app.test/other', coupon: 'SECOND');
+        $this->billing->processCheckout($session->fresh(), $this->user, $this->user, 'https://app.test/other', 'https://app.test/other', coupon: 'SECOND');
 
         $this->assertSame('FIRST', $this->lastSent()->coupon);
         $this->assertSame('https://app.test/ok', $this->lastSent()->successUrl);
@@ -242,7 +242,7 @@ class TrialCheckoutTest extends TestCase
         $session->update(['status' => CheckoutSessionStatus::Expired]);
 
         try {
-            $this->billing->processCheckout($stale, $this->user, 'https://app.test/ok', 'https://app.test/no');
+            $this->billing->processCheckout($stale, $this->user, $this->user, 'https://app.test/ok', 'https://app.test/no');
             $this->fail('An expired checkout was handed off.');
         } catch (AuthorizationException) {
         }

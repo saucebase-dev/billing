@@ -119,7 +119,7 @@ class BillingPlansPageTest extends TestCase
         $product = $this->plan('Mine');
         $user = User::factory()->create();
         Subscription::factory()->create([
-            'customer_id' => Customer::factory()->create(['user_id' => $user->id])->id,
+            'customer_id' => Customer::factory()->for($user, 'owner')->create()->id,
             'price_id' => $product->prices()->first()->id,
         ]);
 

@@ -21,7 +21,8 @@ class CustomerFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => User::factory(),
+            'owner_type' => (new User)->getMorphClass(),
+            'owner_id' => User::factory(),
             'provider' => 'stripe',
             'provider_customer_id' => 'cus_'.fake()->regexify('[A-Za-z0-9]{14}'),
             'email' => fake()->safeEmail(),

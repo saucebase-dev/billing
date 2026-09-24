@@ -10,8 +10,6 @@ class SendSubscriptionCancelledNotification implements ShouldQueue
 {
     public function handle(SubscriptionCancelled $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new SubscriptionCancelledNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new SubscriptionCancelledNotification($event->subscription));
     }
 }

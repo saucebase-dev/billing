@@ -70,7 +70,7 @@ class SubscriptionLifecycleTest extends TestCase
         app(BillingSettings::class)->fill(['grace_period_days' => 3])->save();
 
         $this->user = $this->createUser();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create();
         $this->plan = Product::factory()->create([
             'trial_days' => 14,
             'entitlements' => ['features' => ['exports' => true]],

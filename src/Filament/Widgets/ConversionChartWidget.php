@@ -7,10 +7,13 @@ use Filament\Support\RawJs;
 use Filament\Widgets\ChartWidget;
 use Livewire\Attributes\On;
 use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Filament\Traits\GroupsByMonth;
 use Modules\Billing\Models\CheckoutSession;
 
 class ConversionChartWidget extends ChartWidget
 {
+    use GroupsByMonth;
+
     protected static bool $isDiscovered = false;
 
     protected ?string $pollingInterval = null;
@@ -75,17 +78,19 @@ class ConversionChartWidget extends ChartWidget
      */
     protected function getData(): array
     {
-        $buckets = $this->buildMonthlyBuckets();
+        $buckets = $this->monthlyBuckets(0.0);
 
         try {
-            $rows = CheckoutSession::whereBetween('created_at', [$this->startDate, $this->endDate])
+            $query = CheckoutSession::query();
+
+            $rows = $query->whereBetween('created_at', [$this->startDate, $this->endDate])
                 ->whereIn('status', [
                     CheckoutSessionStatus::Completed->value,
                     CheckoutSessionStatus::Abandoned->value,
                     CheckoutSessionStatus::Expired->value,
                 ])
                 ->selectRaw(
-                    'DATE_FORMAT(created_at, "%Y-%m") as month, SUM(status = ?) as completed, COUNT(*) as total',
+                    $this->monthOf($query).' as month, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed, COUNT(*) as total',
                     [CheckoutSessionStatus::Completed->value]
                 )
                 ->groupBy('month')
@@ -122,22 +127,5 @@ class ConversionChartWidget extends ChartWidget
             ],
             'labels' => $labels,
         ];
-    }
-
-    /**
-     * @return array<string, float>
-     */
-    private function buildMonthlyBuckets(): array
-    {
-        $buckets = [];
-        $cursor = Carbon::parse($this->startDate)->startOfMonth();
-        $end = Carbon::parse($this->endDate)->endOfMonth();
-
-        while ($cursor <= $end) {
-            $buckets[$cursor->format('Y-m')] = 0.0;
-            $cursor->addMonth();
-        }
-
-        return $buckets;
     }
 }

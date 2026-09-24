@@ -36,7 +36,7 @@ class PlanActionsTest extends TestCase
         parent::setUp();
 
         $this->user = $this->createUser();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create();
         $this->free = Product::factory()->free()->create();
         Price::factory()->create(['product_id' => $this->free->id, 'amount' => 0]);
         $this->pro = Product::factory()->create();
@@ -168,7 +168,7 @@ class PlanActionsTest extends TestCase
     public function test_a_customer_who_used_their_trial_is_offered_the_plan_as_usual(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->cancelled()->create(['customer_id' => $customer->id, 'trial_starts_at' => now()->subYear()]);
 
         $plan = Product::factory()->create(['trial_days' => 14]);

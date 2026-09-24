@@ -2,26 +2,54 @@
 
 namespace Modules\Billing\Traits;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Modules\Billing\Data\Entitlements;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Relations\OwnerAccount;
 use Modules\Billing\Models\Subscription;
 
 /**
- * Makes a model a billing owner. Pair it with `implements BillingOwner`.
+ * Makes an Eloquent model a billing owner. Pair it with `implements BillingOwner`.
+ *
+ * @property-read Customer|null $billingCustomer
  */
 trait Billable
 {
     /**
-     * @return HasOne<Customer, $this>
+     * Billing history outlives its owner: deleting one detaches its account
+     * instead. Only deletes that fire model events reach this; a query-builder
+     * delete leaves a dangling `owner_id`. A soft delete keeps the link, since
+     * the owner may be restored.
      */
-    public function billingCustomer(): HasOne
+    public static function bootBillable(): void
     {
-        return $this->hasOne(Customer::class);
+        static::deleted(function (self $owner): void {
+            if (method_exists($owner, 'isForceDeleting') && ! $owner->isForceDeleting()) {
+                return;
+            }
+
+            $owner->billingCustomer()->getQuery()->update(['owner_type' => null, 'owner_id' => null]);
+        });
+    }
+
+    /**
+     * @return OwnerAccount<$this>
+     */
+    public function billingCustomer(): MorphOne
+    {
+        $customers = (new Customer)->getTable();
+
+        return new OwnerAccount((new Customer)->newQuery(), $this, "{$customers}.owner_type", "{$customers}.owner_id", $this->getKeyName());
+    }
+
+    public function canManageBilling(User $user): bool
+    {
+        return $user->is($this);
     }
 
     public function billingAccount(): ?Customer

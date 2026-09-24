@@ -42,7 +42,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_cancel_subscription_calls_billing_service(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -60,7 +60,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_cancel_subscription_updates_local_state(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -85,7 +85,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_cancel_uses_gateway_period_end_when_local_is_null(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -108,7 +108,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_cancel_returns_404_when_no_active_subscription(): void
     {
         $user = $this->createUser();
-        Customer::factory()->create(['user_id' => $user->id]);
+        Customer::factory()->for($user, 'owner')->create();
 
         $response = $this->actingAs($user)->post(route('billing.subscription.cancel'));
 
@@ -119,7 +119,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_a_suspended_subscription_can_be_cancelled(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Suspended,
@@ -138,7 +138,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_a_suspended_subscriber_can_change_plan(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Suspended,
@@ -155,7 +155,7 @@ class SubscriptionCancelTest extends TestCase
     {
         Exceptions::fake();
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
         $this->gateway->method('cancelSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'cancel a subscription'));
 
@@ -170,7 +170,7 @@ class SubscriptionCancelTest extends TestCase
     public function test_a_programming_error_on_cancel_is_not_disguised(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
         $this->gateway->method('cancelSubscription')->willThrowException(new \TypeError('bug'));
 

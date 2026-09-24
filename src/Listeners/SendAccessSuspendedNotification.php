@@ -10,8 +10,6 @@ class SendAccessSuspendedNotification implements ShouldQueue
 {
     public function handle(AccessSuspended $event): void
     {
-        $user = $event->subscription->customer->user;
-
-        $user?->notify(new AccessSuspendedNotification($event->subscription));
+        $event->subscription->customer->owner?->notify(new AccessSuspendedNotification($event->subscription));
     }
 }

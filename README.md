@@ -204,6 +204,27 @@ Event::listen(SubscriptionCreated::class, function (SubscriptionCreated $event) 
 
 Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `InvoicePaid`, `TrialEnding`, `GraceStarted`, `AccessSuspended`.
 
+**Bill a workspace instead of a user.** Tell billing which owner a user acts for, and make that model an owner:
+
+```php
+use Modules\Billing\Services\BillingOwners;
+
+// In a service provider. Return only an owner the user may see.
+app(BillingOwners::class)->resolveUsing(fn (User $user) => $user->currentWorkspace());
+
+class Workspace extends Model implements BillingOwner
+{
+    use Billable, Notifiable;
+
+    public function canManageBilling(User $user): bool
+    {
+        return $user->ownsWorkspace($this);
+    }
+}
+```
+
+Members then share the workspace's plan. Check features through it: `app(BillingOwners::class)->for($user)?->canUseFeature('exports') ?? false`.
+
 **Change the screens.** The pricing page, checkout and billing settings are normal Vue and React pages in `resources/js/`. Edit them like any other page in your app.
 
 **Add a gateway.** Stripe is the only one shipped. Another provider is a class implementing `PaymentGatewayInterface`, which turns that provider's webhooks into the module's own data — the billing logic never sees provider JSON. Features only some providers have, like a customer portal or plan changes, have no opt-out yet, so a provider without them is not a drop-in.

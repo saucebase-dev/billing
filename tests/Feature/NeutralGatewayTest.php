@@ -74,7 +74,7 @@ class NeutralGatewayTest extends TestCase
 
         $this->billing = app(BillingService::class);
         $this->user = $this->createUser();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id, 'provider' => 'fake', 'provider_customer_id' => 'fcus_1']);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create(['provider' => 'fake', 'provider_customer_id' => 'fcus_1']);
         $this->price = Price::factory()->create(['product_id' => Product::factory()->create()->id]);
     }
 

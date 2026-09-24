@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Services\BillingOwners;
 use Saucebase\Core\Facades\Navigation;
 use Saucebase\Core\Navigation\Section;
 
@@ -31,7 +33,13 @@ Navigation::addWhen(
 
 // User menu - Upgrade
 Navigation::addWhen(
-    fn () => Auth::check() && ! Auth::user()->hasPaidPlan(),
+    // The plan of whoever pays for this user: a workspace member is not asked to
+    // upgrade, and someone with no owner at all has nothing to upgrade.
+    function () {
+        $owner = Auth::user() instanceof User ? app(BillingOwners::class)->for(Auth::user()) : null;
+
+        return $owner !== null && ! $owner->hasPaidPlan();
+    },
     'Upgrade',
     fn () => route('billing.plans'),
     function (Section $section) {

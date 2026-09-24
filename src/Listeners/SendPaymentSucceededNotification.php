@@ -10,8 +10,6 @@ class SendPaymentSucceededNotification implements ShouldQueue
 {
     public function handle(PaymentSucceeded $event): void
     {
-        $user = $event->payment->customer->user;
-
-        $user?->notify(new PaymentSucceededNotification($event->payment));
+        $event->payment->customer->owner?->notify(new PaymentSucceededNotification($event->payment));
     }
 }

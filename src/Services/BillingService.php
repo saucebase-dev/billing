@@ -64,9 +64,9 @@ class BillingService
     /**
      * @param  array<string, mixed>  $billingDetails
      */
-    public function processCheckout(CheckoutSession $session, User $user, string $successUrl, string $cancelUrl, array $billingDetails = [], ?string $coupon = null): CheckoutResultData
+    public function processCheckout(CheckoutSession $session, BillingOwner $owner, User $buyer, string $successUrl, string $cancelUrl, array $billingDetails = [], ?string $coupon = null): CheckoutResultData
     {
-        $customer = $this->ensureCustomer($user, billingDetails: $billingDetails);
+        $customer = $this->ensureCustomer($owner, $buyer, billingDetails: $billingDetails);
 
         // The first hand-off is the only one: a second provider session would
         // replace the stored ID, and paying the first would then go unrecognised.
@@ -82,7 +82,7 @@ class BillingService
 
         $price = $session->price()->purchasable()->with('product')->firstOrFail();
 
-        $this->assertCanBuy($user, $price);
+        $this->assertCanBuy($owner, $price);
 
         // One statement, so two requests cannot both bind a fresh session.
         $claimed = CheckoutSession::whereKey($session->id)
@@ -294,21 +294,22 @@ class BillingService
         return $this->manager->driver($subscription->provider)->getPlanChangeUrl($subscription);
     }
 
-    public function getManagementUrl(User $user): string
+    public function getManagementUrl(Customer $customer): string
     {
-        $customer = Customer::where('user_id', $user->id)->firstOrFail();
-
         return $this->manager->driver()->getManagementUrl($customer);
     }
 
     /**
+     * The owner's account at the provider, created on its first purchase.
+     *
+     * The buyer's name and email only seed a new account. After that the
+     * account keeps its details unless the buyer types new ones in, so one
+     * manager's checkout cannot replace a workspace's billing contact.
+     *
      * @param  array<string, mixed>  $billingDetails
      */
-    private function ensureCustomer(User $user, ?string $provider = null, array $billingDetails = []): Customer
+    private function ensureCustomer(BillingOwner $owner, User $buyer, ?string $provider = null, array $billingDetails = []): Customer
     {
-        $name = $billingDetails['name'] ?? $user->name;
-        $email = $billingDetails['email'] ?? $user->email;
-        $phone = $billingDetails['phone'] ?? null;
         /** @var array<string, string>|null $rawAddress */
         $rawAddress = $billingDetails['address'] ?? null;
 
@@ -323,48 +324,54 @@ class BillingService
             )
             : null;
 
-        $customerData = new CustomerData(
-            user: $user,
-            name: $name,
-            email: $email,
-            phone: $phone,
-            address: $addressData,
-        );
+        $typed = array_filter([
+            'name' => $billingDetails['name'] ?? null,
+            'email' => $billingDetails['email'] ?? null,
+            'phone' => $billingDetails['phone'] ?? null,
+        ], fn ($v) => $v !== null);
 
-        $customer = Customer::where('user_id', $user->id)->first();
+        if ($addressData) {
+            $typed['address'] = $addressData->toArray();
+        }
+
+        $customer = $owner->billingAccount();
 
         if ($customer) {
-            $updates = array_filter([
-                'name' => $name,
-                'email' => $email,
-                'phone' => $phone,
-            ], fn ($v) => $v !== null);
-
-            if ($addressData) {
-                $updates['address'] = $addressData->toArray();
+            if ($typed) {
+                $customer->update($typed);
             }
 
             if (blank($customer->provider_customer_id)) {
-                $updates['provider_customer_id'] = $this->manager->driver($customer->provider)
-                    ->createCustomer($customerData);
+                $customer->update(['provider_customer_id' => $this->manager->driver($customer->provider)->createCustomer(new CustomerData(
+                    name: $customer->name ?? $buyer->name,
+                    email: $customer->email ?? $buyer->email,
+                    phone: $customer->phone,
+                    address: $addressData,
+                ))]);
             }
-
-            $customer->update($updates);
 
             return $customer;
         }
 
         $provider ??= $this->manager->getDefaultDriver();
+        $details = ['name' => $buyer->name, 'email' => $buyer->email, 'phone' => null, ...$typed];
 
-        return Customer::create([
-            'user_id' => $user->id,
+        $relation = $owner->billingCustomer();
+        $customer = $relation->create([
+            ...$details,
             'provider' => $provider,
-            'provider_customer_id' => $this->manager->driver($provider)->createCustomer($customerData),
-            'email' => $email,
-            'name' => $name,
-            'phone' => $phone,
-            'address' => $addressData?->toArray(),
+            'provider_customer_id' => $this->manager->driver($provider)->createCustomer(new CustomerData(
+                name: $details['name'],
+                email: $details['email'],
+                phone: $details['phone'],
+                address: $addressData,
+            )),
         ]);
+
+        // The owner may have read its account already, as null.
+        $relation->getParent()->setRelation('billingCustomer', $customer);
+
+        return $customer;
     }
 
     private function ensurePaymentMethod(Customer $customer, string $reference, string $provider, bool $makeDefault = true): ?PaymentMethod

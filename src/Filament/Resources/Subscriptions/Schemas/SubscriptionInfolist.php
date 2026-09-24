@@ -86,7 +86,7 @@ class SubscriptionInfolist
                     ->schema([
                         Section::make(__('Customer'))
                             ->schema([
-                                TextEntry::make('customer.user.name')
+                                TextEntry::make('customer.name')
                                     ->label(__('Name')),
 
                                 TextEntry::make('customer.email')

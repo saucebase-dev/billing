@@ -15,7 +15,7 @@ class SubscriptionsTable
     {
         return $table
             ->columns([
-                TextColumn::make('customer.user.name')
+                TextColumn::make('customer.name')
                     ->label(__('Customer'))
                     ->searchable()
                     ->sortable(),

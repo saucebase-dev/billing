@@ -32,7 +32,7 @@ class EntitlementResolutionTest extends TestCase
         Product::factory()->free()->create(['entitlements' => ['limits' => ['projects' => 3]]]);
 
         $this->user = $this->createUser();
-        $this->customer = Customer::factory()->create(['user_id' => $this->user->id]);
+        $this->customer = Customer::factory()->for($this->user, 'owner')->create();
     }
 
     /** @param  array<string, mixed>  $attributes */

@@ -2,11 +2,10 @@
 
 namespace Modules\Billing\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
-use Modules\Billing\Models\Customer;
+use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Helpers\Toast;
@@ -16,11 +15,12 @@ class BillingPortalController
 {
     public function __construct(
         private BillingService $billingService,
+        private BillingOwners $owners,
     ) {}
 
-    public function __invoke(): RedirectResponse
+    public function __invoke(Request $request): RedirectResponse
     {
-        $customer = Customer::where('user_id', Auth::id())->first();
+        $customer = $this->owners->managedBy($request->user())->billingAccount();
 
         if (! $customer) {
             Toast::error(__('No billing account found. Please subscribe to a plan first.'));
@@ -29,7 +29,7 @@ class BillingPortalController
         }
 
         try {
-            $url = $this->billingService->getManagementUrl(Auth::user());
+            $url = $this->billingService->getManagementUrl($customer);
         } catch (GatewayOperationFailed $e) {
             report($e);
 
@@ -42,15 +42,12 @@ class BillingPortalController
     }
 
     /**
-     * Only the signed-in user's own subscription: nothing in the request says
-     * which one, so there is nobody else's to reach.
+     * Only the subscription of the owner the user manages: nothing in the
+     * request says which one, so there is nobody else's to reach.
      */
-    public function changePlan(PurchaseEligibility $eligibility): RedirectResponse
+    public function changePlan(Request $request, PurchaseEligibility $eligibility): RedirectResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
-
-        $subscription = $user->billingCustomer?->currentSubscription();
+        $subscription = $this->owners->managedBy($request->user())->billingAccount()?->currentSubscription();
 
         if (! $subscription || $eligibility->isReplacedByLifetime($subscription)) {
             abort(404);

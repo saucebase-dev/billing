@@ -5,10 +5,13 @@ namespace Modules\Billing\Filament\Widgets;
 use Carbon\Carbon;
 use Filament\Widgets\ChartWidget;
 use Livewire\Attributes\On;
+use Modules\Billing\Filament\Traits\GroupsByMonth;
 use Modules\Billing\Models\Subscription;
 
 class SubscriptionsChartWidget extends ChartWidget
 {
+    use GroupsByMonth;
+
     protected static bool $isDiscovered = false;
 
     protected ?string $pollingInterval = null;
@@ -56,11 +59,13 @@ class SubscriptionsChartWidget extends ChartWidget
      */
     protected function getData(): array
     {
-        $buckets = $this->buildMonthlyBuckets();
+        $buckets = $this->monthlyBuckets();
 
         try {
-            $rows = Subscription::whereBetween('created_at', [$this->startDate, $this->endDate])
-                ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month, COUNT(*) as total')
+            $query = Subscription::query();
+
+            $rows = $query->whereBetween('created_at', [$this->startDate, $this->endDate])
+                ->selectRaw($this->monthOf($query).' as month, COUNT(*) as total')
                 ->groupBy('month')
                 ->orderBy('month')
                 ->get();
@@ -93,22 +98,5 @@ class SubscriptionsChartWidget extends ChartWidget
             ],
             'labels' => $labels,
         ];
-    }
-
-    /**
-     * @return array<string, int>
-     */
-    private function buildMonthlyBuckets(): array
-    {
-        $buckets = [];
-        $cursor = Carbon::parse($this->startDate)->startOfMonth();
-        $end = Carbon::parse($this->endDate)->endOfMonth();
-
-        while ($cursor <= $end) {
-            $buckets[$cursor->format('Y-m')] = 0;
-            $cursor->addMonth();
-        }
-
-        return $buckets;
     }
 }

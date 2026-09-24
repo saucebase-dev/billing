@@ -108,7 +108,7 @@ class BillingSaasStatsWidget extends BaseWidget
                 CheckoutSessionStatus::Abandoned->value,
                 CheckoutSessionStatus::Expired->value,
             ])
-            ->selectRaw('SUM(status = ?) as completed, COUNT(*) as total', [CheckoutSessionStatus::Completed->value])
+            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed, COUNT(*) as total', [CheckoutSessionStatus::Completed->value])
             ->first();
 
         $total = $result ? (int) $result->getAttribute('total') : 0;

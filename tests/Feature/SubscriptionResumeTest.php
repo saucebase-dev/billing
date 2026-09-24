@@ -41,7 +41,7 @@ class SubscriptionResumeTest extends TestCase
     public function test_resume_subscription_calls_billing_service(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -60,7 +60,7 @@ class SubscriptionResumeTest extends TestCase
     public function test_resume_subscription_updates_local_state(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -83,7 +83,7 @@ class SubscriptionResumeTest extends TestCase
     public function test_resume_returns_404_when_no_pending_cancellation(): void
     {
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,
@@ -99,7 +99,7 @@ class SubscriptionResumeTest extends TestCase
     {
         Exceptions::fake();
         $user = $this->createUser();
-        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create([
             'customer_id' => $customer->id,
             'status' => SubscriptionStatus::Active,

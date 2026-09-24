@@ -19,6 +19,6 @@ class SendSubscriptionUpdatedNotification implements ShouldQueue
             return;
         }
 
-        $subscription->customer->user?->notify(new SubscriptionUpdatedNotification($subscription));
+        $subscription->customer->owner?->notify(new SubscriptionUpdatedNotification($subscription));
     }
 }

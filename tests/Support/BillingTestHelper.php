@@ -58,8 +58,8 @@ class BillingTestHelper
 
         $subscriber->assignRole('user');
 
-        $subscriberCustomer = Customer::firstOrCreate(
-            ['user_id' => $subscriber->id],
+        $subscriberCustomer = $subscriber->billingCustomer()->firstOrCreate(
+            [],
             ['email' => $subscriber->email, 'name' => $subscriber->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_test_subscriber'],
         );
 
@@ -83,8 +83,8 @@ class BillingTestHelper
 
         $cancelled->assignRole('user');
 
-        $cancelledCustomer = Customer::firstOrCreate(
-            ['user_id' => $cancelled->id],
+        $cancelledCustomer = $cancelled->billingCustomer()->firstOrCreate(
+            [],
             ['email' => $cancelled->email, 'name' => $cancelled->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_test_cancelled'],
         );
 
@@ -193,8 +193,8 @@ class BillingTestHelper
 
             $user->assignRole('user');
 
-            $customer = Customer::firstOrCreate(
-                ['user_id' => $user->id],
+            $customer = $user->billingCustomer()->firstOrCreate(
+                [],
                 ['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => "cus_test_{$state}"],
             );
 
@@ -233,7 +233,7 @@ class BillingTestHelper
         $user = User::factory()->create(['password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()]);
         $user->assignRole('user');
 
-        $customer = Customer::create(['user_id' => $user->id, 'email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id]);
+        $customer = $user->billingCustomer()->create(['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id]);
 
         Subscription::create([
             'customer_id' => $customer->id,
@@ -260,7 +260,7 @@ class BillingTestHelper
         $user = User::factory()->create(['password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()]);
         $user->assignRole('user');
 
-        Customer::create(['user_id' => $user->id, 'email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_known_'.$user->id]);
+        $user->billingCustomer()->create(['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_known_'.$user->id]);
 
         return ['email' => $user->email, 'password' => TestFixtures::SHARED_PASSWORD];
     }
@@ -288,8 +288,8 @@ class BillingTestHelper
 
         $user = User::where('email', $email)->firstOrFail();
 
-        $customer = Customer::firstOrCreate(
-            ['user_id' => $user->id],
+        $customer = $user->billingCustomer()->firstOrCreate(
+            [],
             ['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id],
         );
 
