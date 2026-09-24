@@ -28,6 +28,9 @@ Adds a pricing page, a checkout, a billing settings page, and an admin panel for
 - **One plan per customer** — checkout refuses a second subscription
 - **Free trials** — set a trial length per plan; each customer gets one trial ever, with or without payment details up front
 - **Grace period** — a failed payment keeps the subscription working for a few days, then suspends it, with an email at each step
+- **Saved cards** — cards added or removed in Stripe's portal show up in the app, and a trial without a card is asked to add one
+- **Emails** — subscription started, changed, cancelled and resumed, payment received, trial ending, grace started and access suspended
+- **Checkout retry** — if Stripe cannot be reached, the checkout is kept and the buyer can try again without starting over
 - **Entitlements** — each plan turns features on and sets limits your app checks
 - **Plan kinds** — free, subscription, lifetime and one-off plans
 - **Lifetime deals** — a one-time plan that replaces a subscription plan for good; a full refund takes it back
@@ -139,6 +142,8 @@ Subscribers change plan in Stripe's customer portal, so Stripe needs to know wha
 
 In Stripe, go to **Settings → Billing → Customer portal**, turn on *Customers can switch plans*, and add the products they can pick.
 
+Set how a switch is billed there too. With proration off, a customer who moves from monthly to yearly keeps the new plan until the next renewal without paying the difference. Most apps choose *prorate and invoice immediately*.
+
 ### 6. Run the scheduler
 
 The module schedules its own jobs, but Laravel only runs them if the scheduler is running. On a server, add the usual cron entry:
@@ -197,7 +202,7 @@ Event::listen(SubscriptionCreated::class, function (SubscriptionCreated $event) 
 });
 ```
 
-Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `InvoicePaid`.
+Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `InvoicePaid`, `TrialEnding`, `GraceStarted`, `AccessSuspended`.
 
 **Change the screens.** The pricing page, checkout and billing settings are normal Vue and React pages in `resources/js/`. Edit them like any other page in your app.
 
