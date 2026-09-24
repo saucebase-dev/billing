@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Event;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
-use Modules\Billing\Data\WebhookData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentMethodType;
 use Modules\Billing\Enums\PaymentStatus;
@@ -30,8 +30,10 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Models\WebhookEvent;
 use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
@@ -45,11 +47,17 @@ class BillingServiceTest extends TestCase
     /** @var StripeGateway&MockObject */
     private StripeGateway $gateway;
 
+    private ?SubscriptionStateData $remoteSubscription = null;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->gateway = $this->createMock(StripeGateway::class);
+        // What the provider says about a subscription when asked; a test that cares sets it.
+        $this->gateway->method('retrieveSubscription')->willReturnCallback(
+            fn (string $id) => $this->remoteSubscription ?? new SubscriptionStateData($id, null, null),
+        );
         $this->gateway->method('resolvePaymentMethod')->willReturn(
             new PaymentMethodData(
                 providerPaymentMethodId: 'pm_test_123',
@@ -159,7 +167,7 @@ class BillingServiceTest extends TestCase
             'provider_session_id' => 'cs_test_789',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_1',
@@ -207,19 +215,19 @@ class BillingServiceTest extends TestCase
         $periodStart = 1770827927;
         $periodEnd = 1773247127;
 
-        $this->gateway->method('retrieveSubscription')->willReturn([
+        $this->remoteSubscription = (StripeEventMapper::subscription([
             'id' => 'sub_test_period',
             'items' => ['data' => [[
                 'current_period_start' => $periodStart,
                 'current_period_end' => $periodEnd,
             ]]],
-        ]);
+        ]));
 
         $session = CheckoutSession::factory()->create([
             'provider_session_id' => 'cs_test_period',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_period',
@@ -253,7 +261,7 @@ class BillingServiceTest extends TestCase
             'provider_session_id' => 'cs_test_onetime',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_onetime',
@@ -295,7 +303,7 @@ class BillingServiceTest extends TestCase
             'provider_session_id' => 'cs_test_sub_pay',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_sub_pay',
@@ -336,7 +344,7 @@ class BillingServiceTest extends TestCase
 
         $customer = Customer::factory()->create(['provider_customer_id' => 'cus_test_early']);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_test_early',
@@ -386,7 +394,7 @@ class BillingServiceTest extends TestCase
     {
         Event::fake([SubscriptionUpdated::class]);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_stranger',
@@ -411,7 +419,7 @@ class BillingServiceTest extends TestCase
     {
         Customer::factory()->create(['provider_customer_id' => 'cus_test_early_sub']);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_early_sub',
@@ -456,8 +464,8 @@ class BillingServiceTest extends TestCase
         ];
 
         $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
-            new WebhookData(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_retry_1', payload: $invoice),
-            new WebhookData(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_retry_2', payload: $invoice),
+            StripeWebhook::make(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_retry_1', payload: $invoice),
+            StripeWebhook::make(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_retry_2', payload: $invoice),
         );
 
         $this->billingService->handleWebhook('stripe', request());
@@ -498,8 +506,8 @@ class BillingServiceTest extends TestCase
         ];
 
         $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
-            new WebhookData(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_late_1', payload: $invoice),
-            new WebhookData(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_late_2', payload: $invoice),
+            StripeWebhook::make(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_late_1', payload: $invoice),
+            StripeWebhook::make(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_late_2', payload: $invoice),
         );
 
         $this->billingService->handleWebhook('stripe', request());
@@ -552,8 +560,8 @@ class BillingServiceTest extends TestCase
         ];
 
         $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
-            new WebhookData(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_1', payload: $payload + ['payment_status' => 'unpaid']),
-            new WebhookData(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_2', payload: $payload + ['payment_status' => 'paid']),
+            StripeWebhook::make(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_1', payload: $payload + ['payment_status' => 'unpaid']),
+            StripeWebhook::make(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_2', payload: $payload + ['payment_status' => 'paid']),
         );
 
         $this->billingService->handleWebhook('stripe', request());
@@ -576,7 +584,7 @@ class BillingServiceTest extends TestCase
 
         $session = CheckoutSession::factory()->create(['provider_session_id' => 'cs_test_trial']);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_trial',
@@ -604,7 +612,7 @@ class BillingServiceTest extends TestCase
         ]);
 
         // Step 1: Process checkout.session.completed (creates subscription + payment)
-        $checkoutWebhook = new WebhookData(
+        $checkoutWebhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_merge_checkout',
@@ -617,7 +625,7 @@ class BillingServiceTest extends TestCase
         );
 
         // Step 2: invoice.payment_succeeded (should merge, not create duplicate)
-        $invoiceWebhook = new WebhookData(
+        $invoiceWebhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_test_merge_invoice',
@@ -668,7 +676,7 @@ class BillingServiceTest extends TestCase
             'status' => SubscriptionStatus::Active,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_2',
@@ -706,7 +714,7 @@ class BillingServiceTest extends TestCase
 
         $cancelAt = now()->addYear()->getTimestamp();
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_cancel_at',
@@ -742,7 +750,7 @@ class BillingServiceTest extends TestCase
 
         $cancelAt = now()->addMonth()->getTimestamp();
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_cancel_fallback',
@@ -777,7 +785,7 @@ class BillingServiceTest extends TestCase
             'status' => SubscriptionStatus::Active,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_test_status',
@@ -823,7 +831,7 @@ class BillingServiceTest extends TestCase
             'status' => SubscriptionStatus::Cancelled,
         ]);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_late',
@@ -847,7 +855,7 @@ class BillingServiceTest extends TestCase
             'last_event_at' => now(),
         ]);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_order_old',
@@ -870,7 +878,7 @@ class BillingServiceTest extends TestCase
             'provider_subscription_id' => 'sub_shared',
         ]);
 
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_scoped',
@@ -891,7 +899,7 @@ class BillingServiceTest extends TestCase
             'status' => SubscriptionStatus::Active,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::SubscriptionDeleted,
             provider: 'stripe',
             providerEventId: 'evt_test_3',
@@ -923,7 +931,7 @@ class BillingServiceTest extends TestCase
             'provider_subscription_id' => 'sub_test_pay',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_test_4',
@@ -973,7 +981,7 @@ class BillingServiceTest extends TestCase
             'status' => SubscriptionStatus::Active,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentFailed,
             provider: 'stripe',
             providerEventId: 'evt_test_5',
@@ -1018,7 +1026,7 @@ class BillingServiceTest extends TestCase
             'provider_customer_id' => 'cus_test_inv',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::InvoicePaid,
             provider: 'stripe',
             providerEventId: 'evt_test_6',
@@ -1067,7 +1075,7 @@ class BillingServiceTest extends TestCase
         $periodStart = 1770827927;
         $periodEnd = 1773247127;
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::InvoicePaid,
             provider: 'stripe',
             providerEventId: 'evt_test_inv_period',
@@ -1126,7 +1134,7 @@ class BillingServiceTest extends TestCase
         $periodStart = 1770827927;
         $periodEnd = 1773247127;
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::InvoicePaid,
             provider: 'stripe',
             providerEventId: 'evt_test_inv_parent',
@@ -1179,7 +1187,7 @@ class BillingServiceTest extends TestCase
     {
         Event::fake([PaymentSucceeded::class]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_no_customer',
@@ -1203,7 +1211,7 @@ class BillingServiceTest extends TestCase
     {
         Event::fake([PaymentFailed::class]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentFailed,
             provider: 'stripe',
             providerEventId: 'evt_no_customer_fail',
@@ -1227,7 +1235,7 @@ class BillingServiceTest extends TestCase
     {
         Event::fake([InvoicePaid::class]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::InvoicePaid,
             provider: 'stripe',
             providerEventId: 'evt_no_customer_inv',
@@ -1253,7 +1261,7 @@ class BillingServiceTest extends TestCase
     {
         Event::fake([CheckoutCompleted::class]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_unknown_session',
@@ -1273,7 +1281,7 @@ class BillingServiceTest extends TestCase
 
     public function test_webhook_unmapped_type_does_nothing(): void
     {
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: null,
             provider: 'stripe',
             providerEventId: 'evt_unmapped',
@@ -1308,7 +1316,7 @@ class BillingServiceTest extends TestCase
             'invoice_pdf' => 'https://stripe.com/invoice/idem/pdf',
         ];
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::InvoicePaid,
             provider: 'stripe',
             providerEventId: 'evt_idem_1',
@@ -1396,7 +1404,7 @@ class BillingServiceTest extends TestCase
             'is_default' => true,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_pm_reuse',
@@ -1435,7 +1443,7 @@ class BillingServiceTest extends TestCase
             'is_default' => true,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_pm_swap',
@@ -1467,7 +1475,7 @@ class BillingServiceTest extends TestCase
 
         Customer::factory()->create(['provider_customer_id' => 'cus_zero']);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_zero',

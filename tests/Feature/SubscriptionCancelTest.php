@@ -3,8 +3,11 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
+use Inertia\Testing\AssertableInertia;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -145,5 +148,32 @@ class SubscriptionCancelTest extends TestCase
         $this->gateway->method('getPlanChangeUrl')->willReturn('https://provider.test/change');
 
         $this->actingAs($user)->get(route('billing.plan.change'))->assertRedirect('https://provider.test/change');
+    }
+
+    /** The provider is down: the subscriber is told, nothing changes here, and it is reported once. */
+    public function test_a_provider_failure_on_cancel_is_explained_not_a_crash(): void
+    {
+        Exceptions::fake();
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $subscription = Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
+        $this->gateway->method('cancelSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'cancel a subscription'));
+
+        $this->actingAs($user)->from(route('dashboard'))->post(route('billing.subscription.cancel'))->assertRedirect(route('dashboard'));
+
+        $this->assertNull($subscription->fresh()->cancelled_at);
+        Exceptions::assertReportedCount(1);
+        $this->get(route('dashboard'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
+    }
+
+    /** A bug is not a provider outage: it reaches the error handler as one. */
+    public function test_a_programming_error_on_cancel_is_not_disguised(): void
+    {
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
+        $this->gateway->method('cancelSubscription')->willThrowException(new \TypeError('bug'));
+
+        $this->actingAs($user)->post(route('billing.subscription.cancel'))->assertStatus(500);
     }
 }

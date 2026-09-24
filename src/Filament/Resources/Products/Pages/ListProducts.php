@@ -7,6 +7,7 @@ use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -36,9 +37,11 @@ class ListProducts extends ListRecords
                     try {
                         $report = $sync->run();
                     } catch (\Throwable $e) {
+                        report($e);
+
                         Notification::make()
                             ->title(__('Sync failed'))
-                            ->body($e->getMessage())
+                            ->body(self::failureMessage($e))
                             ->danger()
                             ->send();
 
@@ -69,9 +72,11 @@ class ListProducts extends ListRecords
                     try {
                         $report = $push->run();
                     } catch (\Throwable $e) {
+                        report($e);
+
                         Notification::make()
                             ->title(__('Push failed'))
-                            ->body($e->getMessage())
+                            ->body(self::failureMessage($e))
                             ->danger()
                             ->send();
 
@@ -88,5 +93,16 @@ class ListProducts extends ListRecords
                 ->extraAttributes(['data-testid' => 'admin-products-push']),
             CreateAction::make(),
         ];
+    }
+
+    /**
+     * Ours to show; a provider's raw text or an internal error's is not, even
+     * to an admin. The report has the details.
+     */
+    private static function failureMessage(\Throwable $e): string
+    {
+        return $e instanceof GatewayOperationFailed
+            ? $e->getMessage()
+            : __('Something went wrong. The error has been reported.');
     }
 }

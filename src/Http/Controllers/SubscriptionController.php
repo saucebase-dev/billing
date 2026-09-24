@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PurchaseEligibility;
+use Saucebase\Core\Helpers\Toast;
 
 class SubscriptionController
 {
@@ -28,7 +30,11 @@ class SubscriptionController
             abort(404);
         }
 
-        $this->billingService->cancelAtPeriodEnd($subscription);
+        try {
+            $this->billingService->cancelAtPeriodEnd($subscription);
+        } catch (GatewayOperationFailed $e) {
+            return $this->unavailable($e);
+        }
 
         return back()->with('toast', [
             'type' => 'success',
@@ -58,7 +64,11 @@ class SubscriptionController
             ]);
         }
 
-        $this->billingService->resume($subscription);
+        try {
+            $this->billingService->resume($subscription);
+        } catch (GatewayOperationFailed $e) {
+            return $this->unavailable($e);
+        }
 
         $subscription->update([
             'cancelled_at' => null,
@@ -71,5 +81,15 @@ class SubscriptionController
             'type' => 'success',
             'message' => __('Your subscription has been resumed.'),
         ]);
+    }
+
+    /** The provider did not answer: nothing changed, so say so and let them try again. */
+    private function unavailable(GatewayOperationFailed $e): RedirectResponse
+    {
+        report($e);
+
+        Toast::error(__('We could not reach the payment provider. Nothing was changed; please try again in a moment.'));
+
+        return back();
     }
 }

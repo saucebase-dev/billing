@@ -6,7 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
-use Modules\Billing\Data\WebhookData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentMethodType;
 use Modules\Billing\Enums\PaymentStatus;
@@ -20,8 +20,10 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Models\WebhookEvent;
 use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -34,11 +36,17 @@ class WebhookIdempotencyTest extends TestCase
     /** @var StripeGateway&MockObject */
     private StripeGateway $gateway;
 
+    private ?SubscriptionStateData $remoteSubscription = null;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->gateway = $this->createMock(StripeGateway::class);
+        // What the provider says about a subscription when asked; a test that cares sets it.
+        $this->gateway->method('retrieveSubscription')->willReturnCallback(
+            fn (string $id) => $this->remoteSubscription ?? new SubscriptionStateData($id, null, null),
+        );
         $this->gateway->method('resolvePaymentMethod')->willReturn(
             new PaymentMethodData(
                 providerPaymentMethodId: 'pm_test_123',
@@ -67,7 +75,7 @@ class WebhookIdempotencyTest extends TestCase
             'provider_session_id' => 'cs_test_idempotent',
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_duplicate_test',
@@ -105,7 +113,7 @@ class WebhookIdempotencyTest extends TestCase
 
         Customer::factory()->create(['provider_customer_id' => 'cus_test_record']);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_record_test',
@@ -138,7 +146,7 @@ class WebhookIdempotencyTest extends TestCase
 
         Customer::factory()->create(['provider_customer_id' => 'cus_test_separate']);
 
-        $webhook1 = new WebhookData(
+        $webhook1 = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_separate_1',
@@ -151,7 +159,7 @@ class WebhookIdempotencyTest extends TestCase
             ],
         );
 
-        $webhook2 = new WebhookData(
+        $webhook2 = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_separate_2',
@@ -187,7 +195,7 @@ class WebhookIdempotencyTest extends TestCase
             'status' => SubscriptionStatus::PastDue,
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_restore',
@@ -203,7 +211,7 @@ class WebhookIdempotencyTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
         // Recovery is what the provider reports, not what the invoice implies.
-        $this->gateway->method('retrieveSubscription')->willReturn(['id' => 'sub_test_restore', 'status' => 'active']);
+        $this->remoteSubscription = (StripeEventMapper::subscription(['id' => 'sub_test_restore', 'status' => 'active']));
 
         $this->billingService->handleWebhook('stripe', request());
 
@@ -236,7 +244,7 @@ class WebhookIdempotencyTest extends TestCase
             'current_period_starts_at' => now(),
         ]);
 
-        $webhook = new WebhookData(
+        $webhook = StripeWebhook::make(
             type: WebhookEventType::CheckoutCompleted,
             provider: 'stripe',
             providerEventId: 'evt_test_foc',

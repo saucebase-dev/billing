@@ -12,6 +12,8 @@ import IconLock from '~icons/heroicons/lock-closed';
 
 const props = defineProps<{
     session: CheckoutSession;
+    /** The provider could not be reached; trying again resends this same checkout. */
+    handoffFailed?: boolean;
 }>();
 
 const page = usePage();
@@ -36,6 +38,12 @@ function formatPrice(amount: number, currency?: string): string {
 
 function handleCheckout() {
     form.post(route('billing.checkout.store', props.session.uuid));
+}
+
+const retry = useForm({});
+
+function handleRetry() {
+    retry.post(route('billing.checkout.retry', props.session.uuid));
 }
 </script>
 
@@ -158,76 +166,103 @@ function handleCheckout() {
             </div>
         </template>
 
-        <!-- Right: what we need from you -->
-        <h2 class="text-foreground text-lg font-semibold">
-            {{ $t('Billing information') }}
-        </h2>
-
-        <form
-            data-testid="checkout-form"
-            @submit.prevent="handleCheckout"
-            class="mt-6 space-y-4"
+        <!-- Right: the hand-off failed, or what we need from you -->
+        <div
+            v-if="handoffFailed"
+            data-testid="checkout-handoff-failed"
+            class="space-y-4"
         >
-            <InputField
-                name="email"
-                data-testid="checkout-email"
-                type="email"
-                :label="$t('Email')"
-                :placeholder="$t('Enter your email')"
-                autocomplete="email"
-                required
-                v-model="form.email"
-            />
-
-            <p class="text-foreground/50 text-xs">
+            <h2 class="text-foreground text-lg font-semibold">
+                {{ $t('We could not reach the payment provider') }}
+            </h2>
+            <p class="text-foreground/70 text-sm">
                 {{
                     $t(
-                        'Your billing address is collected on the payment page when it is needed.',
+                        'Nothing has been charged. Try again in a moment; your checkout is kept.',
                     )
                 }}
             </p>
-
             <Button
-                type="submit"
-                data-testid="checkout-submit"
-                class="mt-6 w-full text-base"
-                :disabled="form.processing"
+                data-testid="checkout-retry"
+                class="w-full text-base"
+                :disabled="retry.processing"
+                @click="handleRetry"
             >
-                {{
-                    form.processing
-                        ? $t('Redirecting...')
-                        : $t('Proceed to Payment')
-                }}
+                {{ retry.processing ? $t('Redirecting...') : $t('Try again') }}
             </Button>
+        </div>
 
-            <div
-                class="text-foreground/50 flex items-center justify-center gap-1.5 text-xs"
+        <template v-else>
+            <h2 class="text-foreground text-lg font-semibold">
+                {{ $t('Billing information') }}
+            </h2>
+
+            <form
+                data-testid="checkout-form"
+                @submit.prevent="handleCheckout"
+                class="mt-6 space-y-4"
             >
-                <IconLock class="size-3.5" />
-                {{ $t('Payments are secure and encrypted') }}
-            </div>
+                <InputField
+                    name="email"
+                    data-testid="checkout-email"
+                    type="email"
+                    :label="$t('Email')"
+                    :placeholder="$t('Enter your email')"
+                    autocomplete="email"
+                    required
+                    v-model="form.email"
+                />
 
-            <!-- Guarded: both routes belong to the host app, and a site without
+                <p class="text-foreground/50 text-xs">
+                    {{
+                        $t(
+                            'Your billing address is collected on the payment page when it is needed.',
+                        )
+                    }}
+                </p>
+
+                <Button
+                    type="submit"
+                    data-testid="checkout-submit"
+                    class="mt-6 w-full text-base"
+                    :disabled="form.processing"
+                >
+                    {{
+                        form.processing
+                            ? $t('Redirecting...')
+                            : $t('Proceed to Payment')
+                    }}
+                </Button>
+
+                <div
+                    class="text-foreground/50 flex items-center justify-center gap-1.5 text-xs"
+                >
+                    <IconLock class="size-3.5" />
+                    {{ $t('Payments are secure and encrypted') }}
+                </div>
+
+                <!-- Guarded: both routes belong to the host app, and a site without
                  them would otherwise take the whole checkout page down. -->
-            <p
-                v-if="route().has('terms') && route().has('privacy')"
-                class="text-foreground/50 text-center text-xs"
-            >
-                {{ $t('By continuing you agree to our') }}
-                <a
-                    :href="route('terms')"
-                    class="hover:text-foreground underline underline-offset-4"
+                <p
+                    v-if="route().has('terms') && route().has('privacy')"
+                    class="text-foreground/50 text-center text-xs"
                 >
-                    {{ $t('Terms of Service') }}
-                </a>
-                {{ $t('and') }}
-                <a
-                    :href="route('privacy')"
-                    class="hover:text-foreground underline underline-offset-4"
-                >
-                    {{ $t('Privacy Policy') }}
-                </a>
-            </p>
-        </form>
+                    {{ $t('By continuing you agree to our') }}
+                    <a
+                        :href="route('terms')"
+                        class="hover:text-foreground underline underline-offset-4"
+                    >
+                        {{ $t('Terms of Service') }}
+                    </a>
+                    {{ $t('and') }}
+                    <a
+                        :href="route('privacy')"
+                        class="hover:text-foreground underline underline-offset-4"
+                    >
+                        {{ $t('Privacy Policy') }}
+                    </a>
+                </p>
+            </form>
+        </template>
     </CheckoutLayout>
 </template>

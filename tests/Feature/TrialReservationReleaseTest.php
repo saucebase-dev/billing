@@ -3,9 +3,12 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
+use Modules\Billing\Enums\CheckoutExpiry;
 use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
@@ -81,7 +84,7 @@ class TrialReservationReleaseTest extends TestCase
     public function test_a_trial_is_released_once_the_provider_expires_the_checkout(): void
     {
         $session = $this->heldTrial();
-        $this->gateway->expects($this->once())->method('expireCheckoutSession')->with('cs_held')->willReturn(true);
+        $this->gateway->expects($this->once())->method('expireCheckoutSession')->with('cs_held')->willReturn(CheckoutExpiry::Expired);
 
         $this->artisan('billing:expire-checkout-sessions');
 
@@ -89,11 +92,11 @@ class TrialReservationReleaseTest extends TestCase
         $this->assertFalse($this->customer->hasTrialed());
     }
 
-    /** The hosted page may still be paid, so the claim stands. */
-    public function test_a_trial_stays_held_when_the_provider_will_not_expire_it(): void
+    /** The buyer paid it: the claim stands, and that is not a failure. */
+    public function test_a_trial_stays_held_when_the_checkout_was_completed(): void
     {
         $session = $this->heldTrial();
-        $this->gateway->method('expireCheckoutSession')->willReturn(false);
+        $this->gateway->method('expireCheckoutSession')->willReturn(CheckoutExpiry::Completed);
 
         $this->artisan('billing:expire-checkout-sessions');
 
@@ -112,7 +115,7 @@ class TrialReservationReleaseTest extends TestCase
         $this->gateway->expects($this->once())->method('createCheckoutSession')
             ->with($this->callback(fn (CheckoutData $data) => $data->idempotencyKey === 'checkout_'.$session->uuid))
             ->willReturn(new CheckoutResultData(sessionId: 'cs_recovered', url: 'https://provider.test/cs_recovered', provider: 'stripe'));
-        $this->gateway->expects($this->once())->method('expireCheckoutSession')->with('cs_recovered')->willReturn(true);
+        $this->gateway->expects($this->once())->method('expireCheckoutSession')->with('cs_recovered')->willReturn(CheckoutExpiry::Expired);
 
         $this->artisan('billing:expire-checkout-sessions');
 
@@ -154,7 +157,7 @@ class TrialReservationReleaseTest extends TestCase
             'expires_at' => now()->addDay(),
             'created_at' => now()->subHours(3),
         ]);
-        $this->gateway->method('expireCheckoutSession')->willReturn(true);
+        $this->gateway->method('expireCheckoutSession')->willReturn(CheckoutExpiry::Expired);
 
         $this->artisan('billing:expire-checkout-sessions');
 
@@ -168,10 +171,60 @@ class TrialReservationReleaseTest extends TestCase
         $session = $this->heldTrial(['provider_session_id' => null, 'provider_url' => null]);
         $this->gateway->method('createCheckoutSession')
             ->willReturn(new CheckoutResultData(sessionId: 'cs_recovered', url: 'https://provider.test/cs_recovered', provider: 'stripe'));
-        $this->gateway->method('expireCheckoutSession')->willReturn(false);
+        $this->gateway->method('expireCheckoutSession')->willReturn(CheckoutExpiry::Completed);
 
         $this->artisan('billing:expire-checkout-sessions');
 
         $this->assertSame('cs_recovered', $session->fresh()->provider_session_id);
+    }
+
+    /** The provider could not say: the claim stands, the failure is reported, and the run fails. */
+    public function test_an_unknown_outcome_keeps_the_trial_and_fails_the_run(): void
+    {
+        Exceptions::fake();
+        $session = $this->heldTrial();
+        $this->gateway->method('expireCheckoutSession')->willThrowException(new GatewayOperationFailed('stripe', 'expire a checkout session'));
+
+        $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
+
+        $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
+        Exceptions::assertReported(GatewayOperationFailed::class);
+    }
+
+    public function test_a_completed_checkout_is_not_a_failed_run(): void
+    {
+        $this->heldTrial();
+        $this->gateway->method('expireCheckoutSession')->willReturn(CheckoutExpiry::Completed);
+
+        $this->artisan('billing:expire-checkout-sessions')->assertExitCode(0);
+    }
+
+    /** One checkout the provider cannot answer for does not stop the rest being released. */
+    public function test_one_unknown_outcome_does_not_stop_the_others(): void
+    {
+        Exceptions::fake();
+        $stuck = $this->heldTrial(['provider_session_id' => 'cs_stuck']);
+        $free = $this->heldTrial(['provider_session_id' => 'cs_free', 'customer_id' => Customer::factory()->create()->id]);
+        $this->gateway->method('expireCheckoutSession')->willReturnCallback(fn (string $id) => $id === 'cs_stuck'
+            ? throw new GatewayOperationFailed('stripe', 'expire a checkout session')
+            : CheckoutExpiry::Expired);
+
+        $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
+
+        $this->assertSame(CheckoutSessionStatus::Pending, $stuck->fresh()->status);
+        $this->assertSame(CheckoutSessionStatus::Expired, $free->fresh()->status);
+    }
+
+    /** The replay of a crashed hand-off failing is just as unknown. */
+    public function test_a_failed_replay_keeps_the_trial_and_is_reported(): void
+    {
+        Exceptions::fake();
+        $session = $this->heldTrial(['provider_session_id' => null, 'provider_url' => null]);
+        $this->gateway->method('createCheckoutSession')->willThrowException(new GatewayOperationFailed('stripe', 'create a checkout session'));
+
+        $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
+
+        $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
+        Exceptions::assertReported(GatewayOperationFailed::class);
     }
 }

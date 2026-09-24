@@ -69,17 +69,17 @@ POST  /billing/webhooks/{provider}   → billing.webhooks
 4. Updates `CheckoutSession` with `provider_session_id`
 5. Redirects via `Inertia::location()` to the Stripe-hosted page
 
-On return, `SettingsBillingController::show()` checks for a `session_id` query param and calls `BillingService::fulfillCheckoutIfNeeded()` as a fallback (redirect-based completion in case the webhook hasn't fired yet). A session whose `payment_status` is `unpaid` (delayed payment method) is not fulfilled until `checkout.session.async_payment_succeeded` arrives; `no_payment_required` (trial, 100% discount) is fulfilled.
+On return, the provider sends the buyer to `settings.billing?checkout_session={our uuid}` — our ID, not a provider template. `SettingsBillingController::show()` looks it up **scoped to the signed-in user's customer** (an unguessable ID is not permission) and calls `BillingService::fulfillCheckoutIfNeeded()` as a fallback in case the webhook hasn't fired yet. Only a `fulfillable` checkout completes: paid, or validly owing nothing (trial, 100% discount). Open, expired or unsettled delayed payments are not; the webhook completes those once they settle.
 
 ### Webhook Processing
 `BillingService::handleWebhook()`:
-1. Calls `gateway->verifyAndParseWebhook()` — signature verification, maps Stripe event type to `WebhookEventType` enum
+1. Calls `gateway->verifyAndParseWebhook()` — signature verification, then the gateway translates the event into a `WebhookEventType` and its typed data (`src/Data/Webhook/*`, one class per type: `WebhookEventType::dataClass()`). Handlers read it with `$webhook->dataAs(SubscriptionStateData::class)`, which throws on a mismatch. `BillingService` never reads provider JSON
 2. Deduplicates by `(provider, provider_event_id)` in `webhook_events` — one atomic `UPDATE … WHERE processed_at IS NULL` claims the event, so concurrent deliveries cannot both run. A handler that throws hands the claim back (`processed_at` null), `WebhookController` answers 500, and Stripe's retry is processed rather than skipped. This is also how out-of-order delivery recovers: an invoice for a subscription that does not exist locally yet throws and is retried.
 
    Retrying only helps when the missing row is still on its way, so `subscriptionForEvent()` splits the two cases: a subscription the app cannot find **under a customer it knows** throws and lets the provider retry, while one whose customer is also unknown is logged and acknowledged. Nothing here ever described that subscription — a foreign account, or a database rebuilt without it — so a 500 would have the provider retry forever.
 3. Routes to private handlers via match on `WebhookEventType`:
    - `CheckoutCompleted` → locks and re-reads the session, then creates Subscription, Payment and PaymentMethod **inside the same transaction** (a retry is a no-op once the session is Completed, so nothing after commit may be the only record of what was bought; entitlements are read from those rows). Also mapped from `checkout.session.async_payment_succeeded`
-   - `SubscriptionUpdated` → maps Stripe status to `SubscriptionStatus` (active/trialing → Active, past_due → PastDue, unpaid → Suspended, canceled → Cancelled), syncs period and trial dates, and runs the delinquency rules inside the lock. Applied through `applyIfCurrent()`: under a row lock, skipped if older than `last_event_at` or if the row is already Cancelled (Stripe never reactivates one). Provider calls happen before the lock
+   - `SubscriptionUpdated` → the gateway has already mapped the provider's status to `SubscriptionStatus` (for Stripe: active/trialing → Active, past_due → PastDue, unpaid → Suspended, canceled → Cancelled; unknown → null, which leaves the row alone), syncs period and trial dates, and runs the delinquency rules inside the lock. Applied through `applyIfCurrent()`: under a row lock, skipped if older than `last_event_at` or if the row is already Cancelled (Stripe never reactivates one). Provider calls happen before the lock
    - `SubscriptionDeleted` → marks Cancelled, fires `SubscriptionCancelled`. Like `SubscriptionUpdated`, it resolves the row through `subscriptionForEvent()` and acknowledges rather than fails when the customer is unknown
    - `PaymentSucceeded` → creates Payment, then **asks the provider** what the subscription is now if it is PastDue or Suspended (`retrieveSubscription()`), since invoice events are not ordered against each other. The read runs before the already-recorded early return, carries `state_revision` so a newer write cannot be overwritten, retries once when overtaken and then throws so the delivery is retried
    - `PaymentFailed` → creates Payment only. The subscription's own event moves it; inferring the status here would race with that
@@ -143,7 +143,11 @@ Entitlements are `{features: {key: true}, limits: {key: int|null}}` on the plan 
 **Plan changes happen at the provider.** `GET /billing/plan/change` (`billing.plan.change`) sends the subscriber to `PaymentGatewayInterface::getPlanChangeUrl()` — Stripe's billing portal opened on its plan picker. Only the user's own current subscription is used; nothing in the request names one. The change comes back as `customer.subscription.updated`, and `onSubscriptionUpdated()` moves the row to the local price with that provider ID. A price not pulled yet is logged and skipped: the daily catalog sync and the next event put it right. Which plans the portal offers, and whether downgrades wait for the period end, is the portal's configuration in the Stripe dashboard.
 
 ### Gateway Driver Pattern
-`PaymentGatewayManager` extends Laravel's `Manager`. The default driver is `billing.default_gateway` config. Adding a new gateway means implementing `PaymentGatewayInterface` and adding a `createXxxDriver()` method. The gateway talks to the provider and returns identifiers; `BillingService` owns every local row (`createCustomer()` returns the provider's customer ID, the service creates the `Customer`). `BillingService` is not yet provider-neutral: the webhook handlers read Stripe payload keys directly, and `fulfillCheckoutIfNeeded()`, `ensurePaymentMethod()` and `syncSubscriptionPeriod()` branch on `instanceof StripeGateway`. A second provider needs those moved behind the interface first.
+`PaymentGatewayManager` extends Laravel's `Manager`. The default driver is `billing.default_gateway` config. Adding a new gateway means implementing `PaymentGatewayInterface` and adding a `createXxxDriver()` method. The gateway talks to the provider and returns identifiers; `BillingService` owns every local row (`createCustomer()` returns the provider's customer ID, the service creates the `Customer`).
+
+The **data contract is provider-neutral**: incoming webhooks, `retrieveSubscription()` and `retrieveCheckoutSession()` all come back as the module's typed data, and `BillingService` holds no provider class and reads no provider JSON. Stripe's side of that is `StripeEventMapper` — pure, array in, data out — which is where every Stripe quirk lives (status names, the period on the item since API 2025-03-31, how a cancellation is spelled, invoice line spans). A new provider writes its own mapper. `…Reference` fields are opaque: a gateway must resolve every reference it emits through `resolvePaymentMethod()`, whatever kind of ID it is. `Optional` in the data means "not mentioned, leave it"; `null` means "cleared".
+
+It is **not** a drop-in for any provider yet: optional operations (portal, plan change) have no capability flags, payment identity across checkout/payment/refund is Stripe-shaped (an invoice ID stands in when there is no payment intent), and running two providers at once is sc-788. `NeutralGatewayTest` is the proof of the contract — a fake provider that speaks only the module's data.
 
 ### Payment Correlation
 Payments are matched by provider identity, never by time. `createPaymentFromWebhook()` looks for an existing row by `provider_payment_id` (so a failed invoice that later succeeds updates the same record), then for the subscription's checkout-created payment that has no intent yet. An invoice whose subscription does not exist locally throws, and the retry lands after `CheckoutCompleted` has created it.
@@ -199,6 +203,27 @@ and runs `describe.configure({ mode: 'serial' })`. The runner is `fullyParallel`
 — across files as well as tests — so a second file flipping the same setting
 fails both.
 
+## Errors
+
+Billing failures are `src/Exceptions/*`, all extending `BillingException`. Each has a stable `id()` that every report carries as `billing_error_id`, and a `context()` built from named fields only — never provider arrays, request bodies, URLs or payment details. Business refusals stay Laravel's own (`ValidationException`, `AuthorizationException`, `abort(404/410/403)`).
+
+| `billing_error_id` | Thrown by | Handled |
+| --- | --- | --- |
+| `billing.gateway_operation_failed` | `StripeGateway::call()`, around every SDK call — **only** for Stripe's `ApiErrorException`; SDK misuse and `TypeError` pass through untranslated | Interactive: reported once, safe toast, nothing changed. Checkout hand-off: reported, `Billing::Checkout` rendered with `handoffFailed` and a **Try again** that `POST`s `billing.checkout.retry` for the **same** session (same stored request, same idempotency key). Return fulfilment and post-checkout period sync: reported, the webhook completes it. Webhook: reported, 500 |
+| `billing.provider_error` | never thrown; the `previous` of the above | Keeps SDK class, provider code, HTTP status, request ID and a **redacted** message (keys, card-like numbers, emails) — the raw SDK exception is not chained, because the reporter writes every previous message |
+| `billing.invalid_webhook_signature` | `verifyAndParseWebhook()` | Empty 400, warning log, not reported |
+| `billing.invalid_webhook_data` | `WebhookData::dataAs()` | Reported, empty 500 — a gateway defect |
+| `billing.webhook_dependency_not_ready` | a known customer's subscription or payment not here yet | Empty 500, info log, **not** reported — the resend recovers it; context names the `provider_event_id` |
+| `billing.subscription_reconciliation_conflict` | `reconcileDelinquency()` overtaken on every read | Reported, empty 500, claim released for the resend |
+
+Unsupported events are acknowledged (200). Events for unknown customers are acknowledged, as before.
+
+**Checkout expiry is explicit.** `expireCheckoutSession()` returns `CheckoutExpiry::Expired` or `Completed`, or throws. Only a read-back `expired` releases a trial; `resource_missing`, auth errors and outages are *unknown* and keep it held.
+
+**Commands.** `billing:expire-checkout-sessions` prints expired / abandoned / kept / unresolved and exits 1 when anything is unresolved (each reported with its checkout). *Kept* means the buyer completed it — not a failure. A crashed hand-off past the 24-hour replay window is logged, not counted, so it cannot fail every run forever; that is sc-787's reconciliation. `billing:end-grace-periods` isolates rows, reports a failed one, exits 1 when any failed.
+
+**Debugging.** Search logs for `billing_error_id`; `provider_request_id` finds the call in Stripe's dashboard (Developers → Logs). A burst of `webhook_dependency_not_ready` at info level is normal event reordering; one that never clears means the creating event is not subscribed to (check the `stripe listen --events` list).
+
 ## Debugging Billing Issues
 
 Before diving into code, verify the external dependencies are running:
@@ -217,9 +242,9 @@ purpose allows it by pattern, e.g.
 - `CheckoutSession` uses `uuid` as the route key (not `id`) — always resolve via UUID in URLs
 - Every `provider_*_id` is namespaced by a `provider` column (the gateway driver slug). Look rows up with both, never by the provider ID alone; uniqueness is `(provider, provider_x_id)`
 - `subscriptions.last_event_at` is when the last applied provider event happened. `SubscriptionUpdated`/`Deleted` skip events older than it, so a late delivery cannot roll state back
-- `fulfillCheckoutIfNeeded()` only works with Stripe (calls `StripeGateway::retrieveCheckoutSession()` directly); other gateways need their own redirect-completion logic
-- Webhook signature verification happens inside `StripeGateway::verifyAndParseWebhook()` before deduplication — a bad signature throws an HttpException (400), which `WebhookController` returns as a 400 response. Any other exception is a 500 so Stripe retries; do not catch and acknowledge
-- Stripe API versions from 2025-03-31 keep `current_period_start/end` on the subscription **item**, not the subscription. Read periods through `BillingService::subscriptionPeriod()`, which checks both
+- Webhook signature verification happens inside `StripeGateway::verifyAndParseWebhook()` before deduplication — a bad signature throws `InvalidWebhookSignature`, which `WebhookController` answers with an empty 400. Any other exception is an empty 500 so Stripe retries; do not catch and acknowledge (see *Errors*)
+- Stripe API versions from 2025-03-31 keep `current_period_start/end` on the subscription **item**, not the subscription. `StripeEventMapper::subscription()` checks both; nothing else reads periods from Stripe
+- Webhook tests build deliveries with `Tests\Support\StripeWebhook::make()`, which runs Stripe-shaped fixtures through the real mapper — mapper + service integration, not Stripe end to end. It defaults a completed checkout to `payment_status: paid`, as Stripe always sends one
 - `Price::amount` is stored in minor currency units (cents) — always divide by 100 for display; `Currency::formatAmount()` handles this
 - The User model needs `implements BillingOwner` and `use Billable` (`patches/user.patch`, same pattern as Auth's `Sociable`) — entitlement checks and `$user->billingCustomer` fail without them
 - Products use SoftDeletes; always scope to `active()` or `displayable()` when listing plans
@@ -228,7 +253,7 @@ purpose allows it by pattern, e.g.
 - `Product` refuses a **force** delete while any of its prices has a `provider_price_id`. Prices cascade from products in the database, and a cascade does not fire the price's own model event, so without this the provider would be silently desynced
 - `Price` refuses deletion while `provider_price_id` is set — the provider's prices are immutable and subscriptions bill on them, so archive there and sync
 - **`currentSubscription()` is membership, not access.** It returns what the customer holds — Active, PastDue or Suspended — so a suspended customer still sees their plan, reaches the portal and cannot buy a second one. Access is `Subscription::grantsAccess()`, asked in one place: `Billable`'s entitlements, plan name and `hasPaidPlan()`
-- `SubscriptionStatus::Suspended` (Stripe's `unpaid`, translated only in `providerStatus()`) is recoverable; `Cancelled` is absorbing in `applyIfCurrent()`. Never let the sweeper write `Cancelled`, or a later recovery could never apply
+- `SubscriptionStatus::Suspended` (Stripe's `unpaid`, translated only in `StripeEventMapper`) is recoverable; `Cancelled` is absorbing in `applyIfCurrent()`. Never let the sweeper write `Cancelled`, or a later recovery could never apply
 - A grace deadline never extends within an episode, though a suspension may shorten it. An unresolved trial reservation is held rather than released: handing out a second trial is worse than withholding one
 - `Product` carries an `ordered` global scope — every query comes back by `display_order`, then `id` to break ties. Callers never add their own `orderBy`; the admin table is `reorderable('display_order')`, so dragging a row there is what changes the pricing page
 - `BillingSettings::$currency` is the ISO code as a **string**, because `Currency::default()` does `Currency::from()` on it. A Filament `Select` fed the enum class would hand back a `Currency` instance and fail to assign — pass an array of values instead

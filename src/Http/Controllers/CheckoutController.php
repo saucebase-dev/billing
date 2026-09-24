@@ -9,11 +9,13 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Settings\BillingSettings;
+use Saucebase\Core\Helpers\Toast;
 use Symfony\Component\HttpFoundation\Response;
 
 class CheckoutController
@@ -23,7 +25,7 @@ class CheckoutController
         private BillingSettings $settings,
     ) {}
 
-    public function create(Request $request): Response
+    public function create(Request $request): Response|InertiaResponse
     {
         $validated = $request->validate([
             'price_id' => ['required', 'integer'],
@@ -96,14 +98,23 @@ class CheckoutController
             'coupon' => ['nullable', 'string', 'max:64'],
         ]);
 
-        $result = $this->billingService->processCheckout(
-            session: $checkoutSession,
-            user: $request->user(),
-            successUrl: route('settings.billing').'?session_id={CHECKOUT_SESSION_ID}',
-            cancelUrl: route('billing.checkout', $checkoutSession),
-            billingDetails: ['email' => $validated['email']],
-            coupon: $validated['coupon'] ?? null,
-        );
+        try {
+            $result = $this->billingService->processCheckout(
+                session: $checkoutSession,
+                user: $request->user(),
+                successUrl: $this->returnUrl($checkoutSession),
+                cancelUrl: route('billing.checkout', $checkoutSession),
+                billingDetails: ['email' => $validated['email']],
+                coupon: $validated['coupon'] ?? null,
+            );
+        } catch (GatewayOperationFailed $e) {
+            report($e);
+
+            // Back to this checkout's own page: submitting again reuses the session.
+            Toast::error(__('We could not reach the payment provider. Please try again.'));
+
+            return back();
+        }
 
         return Inertia::location($result->url);
     }
@@ -126,17 +137,46 @@ class CheckoutController
      * an ordinary redirect. A plain redirect would be followed over XHR and
      * blocked by the provider's CORS policy.
      */
-    private function sendToGateway(CheckoutSession $session, User $user): Response
+    private function sendToGateway(CheckoutSession $session, User $user): Response|InertiaResponse
     {
-        $result = $this->billingService->processCheckout(
-            session: $session,
-            user: $user,
-            successUrl: route('settings.billing').'?session_id={CHECKOUT_SESSION_ID}',
-            // Not back here: this route hands off to the gateway, so cancelling
-            // would bounce the buyer straight back to the payment page.
-            cancelUrl: route('billing.plans'),
-        );
+        try {
+            $result = $this->billingService->processCheckout(
+                session: $session,
+                user: $user,
+                successUrl: $this->returnUrl($session),
+                // Not back here: this route hands off to the gateway, so cancelling
+                // would bounce the buyer straight back to the payment page.
+                cancelUrl: route('billing.plans'),
+            );
+        } catch (GatewayOperationFailed $e) {
+            report($e);
+
+            // Rendered, not redirected: the checkout URL hands off again on its
+            // own, so a redirect there would loop. Trying again posts this same
+            // session, so the provider sees the same request and idempotency key.
+            return Inertia::render('Billing::Checkout', [
+                'session' => $session->load('price.product'),
+                'handoffFailed' => true,
+            ]);
+        }
 
         return Inertia::location($result->url);
+    }
+
+    /** Try the hand-off again, for this checkout only. */
+    public function retry(Request $request, CheckoutSession $checkoutSession): Response|InertiaResponse
+    {
+        abort_if($checkoutSession->status !== CheckoutSessionStatus::Pending, 410);
+        abort_if($checkoutSession->expires_at?->isPast(), 410);
+
+        $this->assertBelongsTo($checkoutSession, $request->user());
+
+        return $this->sendToGateway($checkoutSession, $request->user());
+    }
+
+    /** Names our checkout, which any provider can carry back; no provider's template. */
+    private function returnUrl(CheckoutSession $session): string
+    {
+        return route('settings.billing', ['checkout_session' => $session->uuid]);
     }
 }

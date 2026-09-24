@@ -25,6 +25,8 @@ Route::middleware('web')->group(function (): void {
     Route::middleware('auth')->group(function (): void {
         Route::get('/billing/portal', BillingPortalController::class)->name('billing.portal');
         Route::get('/billing/plan/change', [BillingPortalController::class, 'changePlan'])->middleware('throttle:10,1')->name('billing.plan.change');
+        // A failed hand-off retried for this same checkout: same request, same idempotency key.
+        Route::post('/billing/checkout/{checkout_session}/retry', [CheckoutController::class, 'retry'])->middleware('throttle:10,1')->name('billing.checkout.retry');
         Route::post('/billing/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('billing.subscription.cancel');
         Route::post('/billing/subscription/resume', [SubscriptionController::class, 'resume'])->name('billing.subscription.resume');
 

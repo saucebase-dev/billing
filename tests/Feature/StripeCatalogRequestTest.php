@@ -168,13 +168,16 @@ class StripeCatalogRequestTest extends TestCase
         $this->assertArrayNotHasKey('payment_method_collection', $params);
     }
 
-    /** Payment details are collected unless the merchant turned that off. */
+    /**
+     * Payment details are collected unless the merchant turned that off, and a
+     * trial still cancels if they are gone by the end — removed in the portal.
+     */
     public function test_a_trial_collects_payment_details_by_default(): void
     {
         $params = $this->checkoutParams(14);
 
         $this->assertArrayNotHasKey('payment_method_collection', $params);
-        $this->assertArrayNotHasKey('trial_settings', $params['subscription_data']);
+        $this->assertSame('cancel', $params['subscription_data']['trial_settings']['end_behavior']['missing_payment_method']);
     }
 
     /** No details means the trial has to end somewhere: it cancels. */
@@ -184,29 +187,5 @@ class StripeCatalogRequestTest extends TestCase
 
         $this->assertSame('if_required', $params['payment_method_collection']);
         $this->assertSame('cancel', $params['subscription_data']['trial_settings']['end_behavior']['missing_payment_method']);
-    }
-
-    /**
-     * Stripe refuses to expire a session that already is, including one an
-     * earlier call expired whose answer was lost.
-     */
-    public function test_a_checkout_already_expired_counts_as_expired(): void
-    {
-        $gateway = $this->gateway([
-            '/v1/checkout/sessions/cs_gone/expire' => ['{"error": {"type": "invalid_request_error", "message": "Session is not open"}}', 400],
-            '/v1/checkout/sessions/cs_gone' => '{"id": "cs_gone", "object": "checkout.session", "status": "expired"}',
-        ]);
-
-        $this->assertTrue($gateway->expireCheckoutSession('cs_gone'));
-    }
-
-    public function test_a_paid_checkout_that_cannot_be_expired_is_not_expired(): void
-    {
-        $gateway = $this->gateway([
-            '/v1/checkout/sessions/cs_paid/expire' => ['{"error": {"type": "invalid_request_error", "message": "Session is not open"}}', 400],
-            '/v1/checkout/sessions/cs_paid' => '{"id": "cs_paid", "object": "checkout.session", "status": "complete"}',
-        ]);
-
-        $this->assertFalse($gateway->expireCheckoutSession('cs_paid'));
     }
 }

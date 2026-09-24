@@ -4,6 +4,7 @@ namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
@@ -14,9 +15,11 @@ use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -71,7 +74,7 @@ class DelinquencyEpisodeTest extends TestCase
     /** One delivery of `customer.subscription.updated` carrying trial dates. */
     private function providerReportsTrial(int $startsAt, int $endsAt): void
     {
-        $this->deliveries[] = new WebhookData(
+        $this->deliveries[] = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_'.++$this->delivered,
@@ -84,7 +87,7 @@ class DelinquencyEpisodeTest extends TestCase
     /** One delivery of `invoice.payment_succeeded` for this subscription. */
     private function invoicePaid(string $providerPaymentId = 'pi_recovery'): void
     {
-        $this->deliveries[] = new WebhookData(
+        $this->deliveries[] = StripeWebhook::make(
             type: WebhookEventType::PaymentSucceeded,
             provider: 'stripe',
             providerEventId: 'evt_'.++$this->delivered,
@@ -104,19 +107,19 @@ class DelinquencyEpisodeTest extends TestCase
     /** What the provider says when the app asks it directly. */
     private function providerSnapshot(string $status, ?callable $before = null): void
     {
-        $this->gateway->expects($this->atLeastOnce())->method('retrieveSubscription')->willReturnCallback(function () use ($status, $before): array {
+        $this->gateway->expects($this->atLeastOnce())->method('retrieveSubscription')->willReturnCallback(function () use ($status, $before): SubscriptionStateData {
             if ($before) {
                 $before();
             }
 
-            return ['id' => 'sub_episode', 'status' => $status];
+            return StripeEventMapper::subscription(['id' => 'sub_episode', 'status' => $status]);
         });
     }
 
     /** One delivery of `customer.subscription.updated` saying what the provider thinks. */
     private function providerReports(string $status): void
     {
-        $this->deliveries[] = new WebhookData(
+        $this->deliveries[] = StripeWebhook::make(
             type: WebhookEventType::SubscriptionUpdated,
             provider: 'stripe',
             providerEventId: 'evt_'.++$this->delivered,

@@ -5,6 +5,8 @@ namespace Modules\Billing\Tests\Support;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Modules\Billing\Data\PaymentMethodData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\CheckoutSessionStatus;
@@ -247,6 +249,22 @@ class BillingTestHelper
         return ['email' => $user->email, 'password' => TestFixtures::SHARED_PASSWORD];
     }
 
+    /**
+     * A buyer the provider already knows, with nothing bought: handing them off
+     * never creates a customer at the provider.
+     *
+     * @return array{email: string, password: string}
+     */
+    public static function knownBuyer(): array
+    {
+        $user = User::factory()->create(['password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()]);
+        $user->assignRole('user');
+
+        Customer::create(['user_id' => $user->id, 'email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_known_'.$user->id]);
+
+        return ['email' => $user->email, 'password' => TestFixtures::SHARED_PASSWORD];
+    }
+
     /** The provider reporting this user's subscription paid up again. */
     public static function recover(string $email): void
     {
@@ -308,7 +326,7 @@ class BillingTestHelper
 
     private static function handleFakeWebhook(WebhookEventType $type, array $payload, string $eventId): void
     {
-        $webhookData = new WebhookData(
+        $webhookData = StripeWebhook::make(
             type: $type,
             provider: 'stripe',
             providerEventId: $eventId,
@@ -322,6 +340,18 @@ class BillingTestHelper
             public function verifyAndParseWebhook(Request $request): WebhookData
             {
                 return $this->data;
+            }
+
+            /** No card on file: e2e never reaches Stripe. */
+            public function resolvePaymentMethod(string $reference): ?PaymentMethodData
+            {
+                return null;
+            }
+
+            /** Nothing more to tell than the webhook already did. */
+            public function retrieveSubscription(string $providerSubscriptionId): SubscriptionStateData
+            {
+                return new SubscriptionStateData($providerSubscriptionId, null, null);
             }
         };
 

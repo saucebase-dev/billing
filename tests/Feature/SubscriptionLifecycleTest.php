@@ -4,6 +4,7 @@ namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\PlanAction;
 use Modules\Billing\Enums\SubscriptionStatus;
@@ -13,10 +14,12 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PlanActions;
 use Modules\Billing\Settings\BillingSettings;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -56,7 +59,7 @@ class SubscriptionLifecycleTest extends TestCase
 
         $this->gateway = $this->createMock(StripeGateway::class);
         $this->gateway->method('verifyAndParseWebhook')->willReturnCallback(fn (): WebhookData => array_shift($this->deliveries));
-        $this->gateway->method('retrieveSubscription')->willReturnCallback(fn (): array => ['id' => 'sub_story', 'status' => $this->providerSays]);
+        $this->gateway->method('retrieveSubscription')->willReturnCallback(fn (): SubscriptionStateData => StripeEventMapper::subscription(['id' => 'sub_story', 'status' => $this->providerSays]));
 
         $manager = $this->createMock(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
@@ -83,7 +86,7 @@ class SubscriptionLifecycleTest extends TestCase
     /** @param  array<string, mixed>  $payload */
     private function provider(WebhookEventType $type, array $payload = []): void
     {
-        $this->deliveries[] = new WebhookData(
+        $this->deliveries[] = StripeWebhook::make(
             type: $type,
             provider: 'stripe',
             providerEventId: 'evt_'.++$this->delivered,
@@ -194,14 +197,14 @@ class SubscriptionLifecycleTest extends TestCase
         $cancelled = false;
         $gateway = $this->gateway;
         $gateway->method('verifyAndParseWebhook')->willReturnCallback(fn (): WebhookData => array_shift($this->deliveries));
-        $gateway->method('retrieveSubscription')->willReturnCallback(function () use (&$cancelled): array {
+        $gateway->method('retrieveSubscription')->willReturnCallback(function () use (&$cancelled): SubscriptionStateData {
             // The customer cancels while the app waits on the provider.
             if (! $cancelled) {
                 $cancelled = true;
                 $this->provider(WebhookEventType::SubscriptionDeleted, ['status' => 'canceled']);
             }
 
-            return ['id' => 'sub_story', 'status' => 'active'];
+            return StripeEventMapper::subscription(['id' => 'sub_story', 'status' => 'active']);
         });
         $manager = $this->createMock(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');

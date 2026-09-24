@@ -3,9 +3,9 @@
 namespace Modules\Billing\Http\Controllers;
 
 use App\Models\User;
-use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PurchaseEligibility;
@@ -28,7 +28,15 @@ class BillingPortalController
             return redirect()->to(SettingsSection::url('billing'));
         }
 
-        $url = $this->billingService->getManagementUrl(Auth::user());
+        try {
+            $url = $this->billingService->getManagementUrl(Auth::user());
+        } catch (GatewayOperationFailed $e) {
+            report($e);
+
+            Toast::error(__('Billing management is not available right now. Please try again later.'));
+
+            return redirect()->to(SettingsSection::url('billing'));
+        }
 
         return redirect()->away($url);
     }
@@ -50,7 +58,7 @@ class BillingPortalController
 
         try {
             return redirect()->away($this->billingService->getPlanChangeUrl($subscription));
-        } catch (Exception $e) {
+        } catch (GatewayOperationFailed $e) {
             report($e);
 
             Toast::error(__('Plan changes are not available right now. Please try again later.'));

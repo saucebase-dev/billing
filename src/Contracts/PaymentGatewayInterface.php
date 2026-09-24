@@ -7,7 +7,12 @@ use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
+use Modules\Billing\Data\PaymentMethodData;
+use Modules\Billing\Data\Webhook\CheckoutSessionData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
+use Modules\Billing\Enums\CheckoutExpiry;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -24,10 +29,23 @@ interface PaymentGatewayInterface
      * Events are not ordered against each other, so anything that must not act
      * on a stale picture — recovering a delinquent subscription, for one — asks
      * here instead of believing the event it just received.
-     *
-     * @return array<string, mixed>
      */
-    public function retrieveSubscription(string $providerSubscriptionId): array;
+    public function retrieveSubscription(string $providerSubscriptionId): SubscriptionStateData;
+
+    /**
+     * A checkout read back when the buyer returns, in case its webhook has not
+     * arrived. The module fulfils it only when it is `fulfillable`.
+     */
+    public function retrieveCheckoutSession(string $providerSessionId): CheckoutSessionData;
+
+    /**
+     * The payment method behind a reference this gateway put in its own data.
+     *
+     * A gateway must resolve every `paymentMethodReference` it emits, whatever
+     * kind of ID it is — for Stripe a card, a subscription or a payment. The
+     * module treats the reference as opaque. Null when there is no method.
+     */
+    public function resolvePaymentMethod(string $reference): ?PaymentMethodData;
 
     /**
      * Make a hosted checkout unpayable.
@@ -36,9 +54,13 @@ interface PaymentGatewayInterface
      * accepts a card, so anything the app holds back for an open checkout — a
      * trial, for one — waits on this answer.
      *
-     * @return bool Whether the provider now refuses to take payment for it.
+     * Only a confirmed `Expired` may release what the checkout holds. Anything
+     * the provider cannot confirm — unreachable, not found under these keys —
+     * throws `GatewayOperationFailed`, and the hold stays.
+     *
+     * @throws GatewayOperationFailed
      */
-    public function expireCheckoutSession(string $providerSessionId): bool;
+    public function expireCheckoutSession(string $providerSessionId): CheckoutExpiry;
 
     public function createCheckoutSession(CheckoutData $data): CheckoutResultData;
 
@@ -52,6 +74,11 @@ interface PaymentGatewayInterface
     /** Where the customer picks another plan for this subscription at the provider. */
     public function getPlanChangeUrl(Subscription $subscription): string;
 
+    /**
+     * Verify a delivery and translate it: `type` from the module's event list,
+     * `data` the matching class (`WebhookEventType::dataClass()`). Anything else
+     * the provider sends comes back with a null type and is acknowledged.
+     */
     public function verifyAndParseWebhook(Request $request): WebhookData;
 
     /**

@@ -79,6 +79,54 @@ test.describe('Buying a plan', () => {
         await expect(billing.trial).toBeVisible();
     });
 
+    /**
+     * The e2e price is unknown to Stripe, so a real hand-off fails there before
+     * anything is created. The buyer stays on this checkout, and trying again
+     * resends it rather than starting another.
+     */
+    test('a failed hand-off keeps the checkout and offers to try again', async ({
+        page,
+        laravel,
+        loginAs,
+    }) => {
+        const buyer = await laravel.callFunction<{
+            email: string;
+            password: string;
+        }>('Modules\\Billing\\Tests\\Support\\BillingTestHelper::knownBuyer');
+        await loginAs(buyer);
+        await setRedirect(laravel, 'true');
+
+        try {
+            await page.goto('/pricing');
+            await page
+                .locator(
+                    '[data-testid="product-card-pro"] [data-testid="get-started-button"]',
+                )
+                .click();
+
+            await expect(
+                page.getByTestId('checkout-handoff-failed'),
+            ).toBeVisible({
+                timeout: 15_000,
+            });
+
+            await page.getByTestId('checkout-retry').click();
+            await expect(
+                page.getByTestId('checkout-handoff-failed'),
+            ).toBeVisible({
+                timeout: 15_000,
+            });
+
+            const sessions = await laravel.select(
+                'SELECT COUNT(*) AS n FROM checkout_sessions cs JOIN customers c ON c.id = cs.customer_id JOIN users u ON u.id = c.user_id WHERE u.email = :email',
+                { email: buyer.email },
+            );
+            expect(Number(sessions[0].n)).toBe(1);
+        } finally {
+            await setRedirect(laravel, 'false');
+        }
+    });
+
     test('shows the plan being bought', async ({
         page,
         loginAs,

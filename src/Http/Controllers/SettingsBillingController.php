@@ -6,7 +6,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Services\BillingService;
-use Modules\Billing\Settings\BillingSettings;
 use Saucebase\Core\Settings\SettingsSection;
 
 class SettingsBillingController
@@ -14,19 +13,15 @@ class SettingsBillingController
     /**
      * Land the visitor on the billing section of the settings modal.
      *
-     * Stripe returns here with a `session_id` after checkout, so the fulfilment
-     * still has to run server-side before the panel is shown. The section itself
-     * lives behind the `#settings/billing` fragment, which never reaches the
-     * server.
+     * The provider returns here with our `checkout_session` after checkout, so
+     * the fulfilment still has to run server-side before the panel is shown.
+     * The section itself lives behind the `#settings/billing` fragment, which
+     * never reaches the server.
      */
     public function show(Request $request, BillingService $billingService): RedirectResponse
     {
-        $paid = false;
-
-        if ($sessionId = $request->query('session_id')) {
-            $paid = $this->belongsToUser($sessionId, $request->user()?->id)
-                && $billingService->fulfillCheckoutIfNeeded($sessionId);
-        }
+        $session = $this->ownCheckout($request->query('checkout_session'), $request->user()?->id);
+        $paid = $session && $billingService->fulfillCheckoutIfNeeded($session);
 
         // A query parameter rather than a flash message: the panel is addressed by
         // a URL fragment the server never sees, so it is reached by a fresh visit
@@ -39,15 +34,18 @@ class SettingsBillingController
     }
 
     /**
-     * The session ID arrives in the URL, so anyone can put someone else's in it.
-     * Only the buyer's own return fulfils and congratulates; everyone else's
-     * checkout is completed by its webhook.
+     * The ID arrives in the URL, so anyone can put someone else's in it: an
+     * unguessable ID is not permission. Only the buyer's own return fulfils and
+     * congratulates; everyone else's checkout is completed by its webhook.
      */
-    private function belongsToUser(string $providerSessionId, ?int $userId): bool
+    private function ownCheckout(mixed $uuid, ?int $userId): ?CheckoutSession
     {
-        return $userId !== null && CheckoutSession::where('provider', app(BillingSettings::class)->gateway)
-            ->where('provider_session_id', $providerSessionId)
+        if (! is_string($uuid) || $userId === null) {
+            return null;
+        }
+
+        return CheckoutSession::where('uuid', $uuid)
             ->whereHas('customer', fn ($query) => $query->where('user_id', $userId))
-            ->exists();
+            ->first();
     }
 }

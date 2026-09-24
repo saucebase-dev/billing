@@ -3,6 +3,7 @@
 namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
@@ -227,5 +228,25 @@ class TrialCheckoutTest extends TestCase
         $this->assertSame('FIRST', $this->lastSent()->coupon);
         $this->assertSame('https://app.test/ok', $this->lastSent()->successUrl);
         $this->assertSame('FIRST', $session->fresh()->coupon);
+    }
+
+    /** A checkout finished while this request waited must not be handed off again. */
+    public function test_a_checkout_no_longer_pending_is_not_handed_off(): void
+    {
+        $session = CheckoutSession::create([
+            'price_id' => $this->price->id,
+            'status' => CheckoutSessionStatus::Pending,
+            'expires_at' => now()->addDay(),
+        ]);
+        $stale = $session->fresh();
+        $session->update(['status' => CheckoutSessionStatus::Expired]);
+
+        try {
+            $this->billing->processCheckout($stale, $this->user, 'https://app.test/ok', 'https://app.test/no');
+            $this->fail('An expired checkout was handed off.');
+        } catch (AuthorizationException) {
+        }
+
+        $this->assertSame([], $this->sent);
     }
 }

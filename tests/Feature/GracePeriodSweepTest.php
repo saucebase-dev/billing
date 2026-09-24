@@ -3,10 +3,13 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Subscription;
+use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\PurchaseEligibility;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -127,5 +130,34 @@ class GracePeriodSweepTest extends TestCase
         $this->artisan('billing:end-grace-periods');
 
         $this->assertTrue($deadline->equalTo($subscription->fresh()->grace_ends_at));
+    }
+
+    /** One row that cannot be suspended is reported; the rest are still suspended, and the run fails. */
+    public function test_one_failing_row_does_not_stop_the_sweep(): void
+    {
+        Exceptions::fake();
+        $broken = $this->subscription(['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->subHour()]);
+        $fine = $this->subscription(['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->subHour()]);
+
+        app()->instance(BillingService::class, new class($broken->id, app(PaymentGatewayManager::class), app(PurchaseEligibility::class)) extends BillingService
+        {
+            public function __construct(private int $brokenId, PaymentGatewayManager $manager, PurchaseEligibility $eligibility)
+            {
+                parent::__construct($manager, $eligibility);
+            }
+
+            public function suspendIfGraceHasRunOut(Subscription $subscription): bool
+            {
+                return $subscription->id === $this->brokenId
+                    ? throw new \RuntimeException('Deadlock')
+                    : parent::suspendIfGraceHasRunOut($subscription);
+            }
+        });
+
+        $this->artisan('billing:end-grace-periods')->assertExitCode(1);
+
+        $this->assertSame(SubscriptionStatus::Suspended, $fine->fresh()->status);
+        $this->assertSame(SubscriptionStatus::PastDue, $broken->fresh()->status);
+        Exceptions::assertReported(\RuntimeException::class);
     }
 }

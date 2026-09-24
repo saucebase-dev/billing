@@ -18,7 +18,14 @@ function formatPrice(amount: number, currency?: string): string {
     }).format(amount / 100);
 }
 
-export default function Checkout({ session }: { session: CheckoutSession }) {
+export default function Checkout({
+    session,
+    handoffFailed = false,
+}: {
+    session: CheckoutSession;
+    /** The provider could not be reached; trying again resends this same checkout. */
+    handoffFailed?: boolean;
+}) {
     const t = useT();
     const page = usePage();
     const user = page.props.auth?.user;
@@ -32,6 +39,8 @@ export default function Checkout({ session }: { session: CheckoutSession }) {
     });
 
     const [showCoupon, setShowCoupon] = useState(false);
+
+    const retry = useForm({});
 
     function handleCheckout(event: FormEvent) {
         event.preventDefault();
@@ -161,74 +170,110 @@ export default function Checkout({ session }: { session: CheckoutSession }) {
             backHref={route('billing.plans')}
             summary={summary}
         >
-            {/* Right: what we need from you */}
-            <h2 className="text-foreground text-lg font-semibold">
-                {t('Billing information')}
-            </h2>
-
-            <form
-                data-testid="checkout-form"
-                onSubmit={handleCheckout}
-                className="mt-6 space-y-4"
-            >
-                <Field>
-                    <FieldLabel htmlFor="email">{t('Email')}</FieldLabel>
-                    <Input
-                        id="email"
-                        name="email"
-                        data-testid="checkout-email"
-                        type="email"
-                        placeholder={t('Enter your email')}
-                        autoComplete="email"
-                        required
-                        value={data.email}
-                        onChange={(event) =>
-                            setData('email', event.target.value)
-                        }
-                    />
-                </Field>
-
-                <p className="text-foreground/50 text-xs">
-                    {t(
-                        'Your billing address is collected on the payment page when it is needed.',
-                    )}
-                </p>
-
-                <Button
-                    type="submit"
-                    data-testid="checkout-submit"
-                    className="mt-6 w-full text-base"
-                    disabled={processing}
+            {/* Right: the hand-off failed, or what we need from you */}
+            {handoffFailed ? (
+                <div
+                    data-testid="checkout-handoff-failed"
+                    className="space-y-4"
                 >
-                    {processing ? t('Redirecting...') : t('Proceed to Payment')}
-                </Button>
-
-                <div className="text-foreground/50 flex items-center justify-center gap-1.5 text-xs">
-                    <IconLock className="size-3.5" />
-                    {t('Payments are secure and encrypted')}
-                </div>
-
-                {/* Guarded: both routes belong to the host app, and a site without
-                    them would otherwise take the whole checkout page down. */}
-                {route().has('terms') && route().has('privacy') && (
-                    <p className="text-foreground/50 text-center text-xs">
-                        {t('By continuing you agree to our')}{' '}
-                        <a
-                            href={route('terms')}
-                            className="hover:text-foreground underline underline-offset-4"
-                        >
-                            {t('Terms of Service')}
-                        </a>{' '}
-                        {t('and')}{' '}
-                        <a
-                            href={route('privacy')}
-                            className="hover:text-foreground underline underline-offset-4"
-                        >
-                            {t('Privacy Policy')}
-                        </a>
+                    <h2 className="text-foreground text-lg font-semibold">
+                        {t('We could not reach the payment provider')}
+                    </h2>
+                    <p className="text-foreground/70 text-sm">
+                        {t(
+                            'Nothing has been charged. Try again in a moment; your checkout is kept.',
+                        )}
                     </p>
-                )}
-            </form>
+                    <Button
+                        data-testid="checkout-retry"
+                        className="w-full text-base"
+                        disabled={retry.processing}
+                        onClick={() =>
+                            retry.post(
+                                route('billing.checkout.retry', session.uuid),
+                            )
+                        }
+                    >
+                        {retry.processing
+                            ? t('Redirecting...')
+                            : t('Try again')}
+                    </Button>
+                </div>
+            ) : (
+                <>
+                    <h2 className="text-foreground text-lg font-semibold">
+                        {t('Billing information')}
+                    </h2>
+
+                    <form
+                        data-testid="checkout-form"
+                        onSubmit={handleCheckout}
+                        className="mt-6 space-y-4"
+                    >
+                        <Field>
+                            <FieldLabel htmlFor="email">
+                                {t('Email')}
+                            </FieldLabel>
+                            <Input
+                                id="email"
+                                name="email"
+                                data-testid="checkout-email"
+                                type="email"
+                                placeholder={t('Enter your email')}
+                                autoComplete="email"
+                                required
+                                value={data.email}
+                                onChange={(event) =>
+                                    setData('email', event.target.value)
+                                }
+                            />
+                        </Field>
+
+                        <p className="text-foreground/50 text-xs">
+                            {t(
+                                'Your billing address is collected on the payment page when it is needed.',
+                            )}
+                        </p>
+
+                        <Button
+                            type="submit"
+                            data-testid="checkout-submit"
+                            className="mt-6 w-full text-base"
+                            disabled={processing}
+                        >
+                            {processing
+                                ? t('Redirecting...')
+                                : t('Proceed to Payment')}
+                        </Button>
+
+                        <div className="text-foreground/50 flex items-center justify-center gap-1.5 text-xs">
+                            <IconLock className="size-3.5" />
+                            {t('Payments are secure and encrypted')}
+                        </div>
+
+                        {/* Guarded: both routes belong to the host app, and a site without
+                    them would otherwise take the whole checkout page down. */}
+                        {route().has('terms') && route().has('privacy') && (
+                            <p className="text-foreground/50 text-center text-xs">
+                                {t('By continuing you agree to our')}{' '}
+                                <a
+                                    href={route('terms')}
+                                    className="hover:text-foreground underline underline-offset-4"
+                                >
+                                    {t('Terms of Service')}
+                                </a>{' '}
+                                {t('and')}{' '}
+                                <a
+                                    href={route('privacy')}
+                                    className="hover:text-foreground underline underline-offset-4"
+                                >
+                                    {t('Privacy Policy')}
+                                </a>
+                            </p>
+                        )}
+                    </form>
+                </>
+            )}
         </CheckoutLayout>
     );
 }

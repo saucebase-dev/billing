@@ -23,17 +23,25 @@ class EndGracePeriodsCommand extends Command
     public function handle(BillingService $billing): int
     {
         $suspended = 0;
+        $failed = 0;
 
         Subscription::where('status', SubscriptionStatus::PastDue)
             ->whereNotNull('grace_ends_at')
             ->where('grace_ends_at', '<=', now())
             ->lazyById()
-            ->each(function (Subscription $subscription) use ($billing, &$suspended): void {
-                $suspended += $billing->suspendIfGraceHasRunOut($subscription) ? 1 : 0;
+            ->each(function (Subscription $subscription) use ($billing, &$suspended, &$failed): void {
+                // One row that cannot be written (a lock timeout, say) must not
+                // stop the rest; it is still past due and the next run retries it.
+                try {
+                    $suspended += $billing->suspendIfGraceHasRunOut($subscription) ? 1 : 0;
+                } catch (\Throwable $e) {
+                    report($e);
+                    $failed++;
+                }
             });
 
-        $this->info("Suspended {$suspended} subscription(s).");
+        $this->info("Suspended {$suspended} subscription(s); {$failed} failed.");
 
-        return self::SUCCESS;
+        return $failed > 0 ? self::FAILURE : self::SUCCESS;
     }
 }

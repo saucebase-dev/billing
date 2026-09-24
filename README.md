@@ -201,7 +201,7 @@ Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `S
 
 **Change the screens.** The pricing page, checkout and billing settings are normal Vue and React pages in `resources/js/`. Edit them like any other page in your app.
 
-**Add a gateway.** Stripe is the only one today, and parts of the module still talk to Stripe directly, so a second provider is not a drop-in yet. `PaymentGatewayInterface` covers the outgoing calls; the webhook handling would need work first.
+**Add a gateway.** Stripe is the only one shipped. Another provider is a class implementing `PaymentGatewayInterface`, which turns that provider's webhooks into the module's own data — the billing logic never sees provider JSON. Features only some providers have, like a customer portal or plan changes, have no opt-out yet, so a provider without them is not a drop-in.
 
 ## Configuration
 

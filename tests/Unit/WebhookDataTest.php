@@ -2,33 +2,48 @@
 
 namespace Modules\Billing\Tests\Unit;
 
+use Modules\Billing\Data\Webhook\RefundData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\WebhookEventType;
+use Modules\Billing\Exceptions\InvalidWebhookData;
 use PHPUnit\Framework\TestCase;
 
 class WebhookDataTest extends TestCase
 {
-    public function test_is_returns_true_for_matching_type(): void
+    private function webhook(?WebhookEventType $type, mixed $data): WebhookData
     {
-        $data = new WebhookData(
-            type: WebhookEventType::CheckoutCompleted,
-            provider: 'stripe',
-            providerEventId: 'evt_123',
-            payload: [],
-        );
-
-        $this->assertTrue($data->is(WebhookEventType::CheckoutCompleted));
+        return new WebhookData(type: $type, provider: 'fake', providerEventId: 'evt_1', data: $data);
     }
 
-    public function test_is_returns_false_for_non_matching_type(): void
+    public function test_is_matches_the_type(): void
     {
-        $data = new WebhookData(
-            type: WebhookEventType::CheckoutCompleted,
-            provider: 'stripe',
-            providerEventId: 'evt_123',
-            payload: [],
-        );
+        $webhook = $this->webhook(WebhookEventType::PaymentRefunded, new RefundData(null, 'pay_1', 100, true));
 
-        $this->assertFalse($data->is(WebhookEventType::SubscriptionUpdated));
+        $this->assertTrue($webhook->is(WebhookEventType::PaymentRefunded));
+        $this->assertFalse($webhook->is(WebhookEventType::SubscriptionUpdated));
+    }
+
+    public function test_the_data_comes_back_as_the_class_asked_for(): void
+    {
+        $refund = new RefundData(null, 'pay_1', 100, true);
+
+        $this->assertSame($refund, $this->webhook(WebhookEventType::PaymentRefunded, $refund)->dataAs(RefundData::class));
+    }
+
+    /** A gateway that sends the wrong shape fails loudly, not with a null dereference later. */
+    public function test_data_of_the_wrong_class_is_refused(): void
+    {
+        $this->expectException(InvalidWebhookData::class);
+
+        $this->webhook(WebhookEventType::SubscriptionUpdated, new RefundData(null, 'pay_1', 100, true))
+            ->dataAs(SubscriptionStateData::class);
+    }
+
+    public function test_a_recognised_type_without_data_is_refused(): void
+    {
+        $this->expectException(InvalidWebhookData::class);
+
+        $this->webhook(WebhookEventType::SubscriptionUpdated, null)->dataAs(SubscriptionStateData::class);
     }
 }

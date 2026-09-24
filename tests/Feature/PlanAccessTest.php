@@ -6,11 +6,11 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia;
-use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
@@ -20,6 +20,7 @@ use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\MockObject;
 use RuntimeException;
 use Saucebase\Core\Settings\SettingsSection;
@@ -82,7 +83,7 @@ class PlanAccessTest extends TestCase
 
     private function webhook(WebhookEventType $type, array $payload): void
     {
-        $this->gateway->method('verifyAndParseWebhook')->willReturn(new WebhookData(
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
             type: $type,
             provider: 'stripe',
             providerEventId: 'evt_'.uniqid(),
@@ -251,7 +252,7 @@ class PlanAccessTest extends TestCase
     {
         $this->subscribe();
 
-        $this->gateway->method('getPlanChangeUrl')->willThrowException(new RuntimeException('portal disabled'));
+        $this->gateway->method('getPlanChangeUrl')->willThrowException(new GatewayOperationFailed('stripe', 'open the plan change portal'));
 
         $this->actingAs($this->user)
             ->get(route('billing.plan.change'))

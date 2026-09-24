@@ -5,9 +5,15 @@ namespace Modules\Billing\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Modules\Billing\Exceptions\InvalidWebhookSignature;
+use Modules\Billing\Exceptions\WebhookDependencyNotReady;
 use Modules\Billing\Services\BillingService;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 
+/**
+ * What the provider hears back. A 400 tells it never to send this again; a 500
+ * tells it to try again later, which is the recovery for every other failure.
+ * Bodies stay empty: nothing about the app goes back over the wire.
+ */
 class WebhookController
 {
     public function __construct(
@@ -20,21 +26,20 @@ class WebhookController
             $this->billingService->handleWebhook($provider, $request);
 
             return response()->noContent(200);
-        } catch (HttpException $e) {
-            Log::warning('Webhook rejected', [
-                'provider' => $provider,
-                'status' => $e->getStatusCode(),
-                'error' => $e->getMessage(),
-            ]);
+        } catch (InvalidWebhookSignature $e) {
+            Log::warning('Webhook rejected: signature', $e->context());
 
-            return response()->noContent($e->getStatusCode());
+            return response()->noContent(400);
+        } catch (WebhookDependencyNotReady $e) {
+            // Expected: providers do not order their events. The resend lands
+            // once the row it needs exists, so this is not reported.
+            Log::info('Webhook deferred: dependency not ready', $e->context());
+
+            return response()->noContent(500);
         } catch (\Throwable $e) {
-            // A 5xx is what makes the provider try again, which is the recovery
-            // for events that arrive before the ones they depend on.
-            Log::error('Webhook processing failed', [
-                'provider' => $provider,
-                'error' => $e->getMessage(),
-            ]);
+            // The one place a webhook failure is reported. Never acknowledged:
+            // the provider's resend is how anything left undone gets done.
+            report($e);
 
             return response()->noContent(500);
         }

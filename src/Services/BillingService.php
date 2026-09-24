@@ -15,9 +15,15 @@ use Modules\Billing\Data\AddressData;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
+use Modules\Billing\Data\Webhook\CheckoutSessionData;
+use Modules\Billing\Data\Webhook\CustomerDefaultsData;
+use Modules\Billing\Data\Webhook\InvoiceData;
+use Modules\Billing\Data\Webhook\InvoicePaymentData;
+use Modules\Billing\Data\Webhook\PaymentMethodChangeData;
+use Modules\Billing\Data\Webhook\RefundData;
+use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Enums\Currency;
 use Modules\Billing\Enums\InvoiceStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanKind;
@@ -33,6 +39,9 @@ use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Events\TrialEnding;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\SubscriptionReconciliationConflict;
+use Modules\Billing\Exceptions\WebhookDependencyNotReady;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
@@ -41,8 +50,8 @@ use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Models\WebhookEvent;
-use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Settings\BillingSettings;
+use Spatie\LaravelData\Optional;
 
 class BillingService
 {
@@ -127,6 +136,12 @@ class BillingService
             Customer::whereKey($customer->id)->lockForUpdate()->first();
 
             $session->refresh();
+
+            // Completed or expired while this request waited: handing it off
+            // again would open a second payable page for a finished checkout.
+            if ($session->status !== CheckoutSessionStatus::Pending) {
+                throw new AuthorizationException;
+            }
 
             if ($session->trial_days === null) {
                 $days = $price->product?->trial_days;
@@ -238,53 +253,37 @@ class BillingService
     }
 
     /**
+     * Complete a checkout the buyer has returned from, in case its webhook has
+     * not arrived. The caller has already scoped the session to its owner.
+     *
      * @return bool Whether the checkout is paid — including when the webhook got
      *              here first, which is what tells the caller to congratulate.
      */
-    public function fulfillCheckoutIfNeeded(string $providerSessionId): bool
+    public function fulfillCheckoutIfNeeded(CheckoutSession $session): bool
     {
-        $provider = $this->manager->getDefaultDriver();
-        $session = CheckoutSession::where('provider', $provider)->where('provider_session_id', $providerSessionId)->first();
-
-        if (! $session) {
-            return false;
-        }
-
         if ($session->status === CheckoutSessionStatus::Completed) {
             return true;
         }
 
+        if (! $session->provider || ! $session->provider_session_id) {
+            return false;
+        }
+
         try {
-            $gateway = $this->manager->driver();
-
-            if (! $gateway instanceof StripeGateway) {
-                Log::info('fulfillCheckoutIfNeeded skipped: gateway is not Stripe', [
-                    'session_id' => $providerSessionId,
-                ]);
-
-                return false;
-            }
-
-            $stripeSession = $gateway->retrieveCheckoutSession($providerSessionId);
-        } catch (\Throwable $e) {
-            Log::warning('Failed to retrieve checkout session for redirect fulfillment', [
-                'session_id' => $providerSessionId,
-                'error' => $e->getMessage(),
-            ]);
+            $checkout = $this->manager->driver($session->provider)->retrieveCheckoutSession($session->provider_session_id);
+        } catch (GatewayOperationFailed $e) {
+            // The panel still renders and nothing claims success; the webhook
+            // completes the checkout when it arrives.
+            report($e);
 
             return false;
         }
 
-        if ($this->awaitsPayment($stripeSession)) {
+        if (! $checkout->fulfillable) {
             return false;
         }
 
-        $this->onCheckoutCompleted(new WebhookData(
-            type: WebhookEventType::CheckoutCompleted,
-            provider: $provider,
-            providerEventId: 'redirect_fulfill_'.$providerSessionId,
-            payload: $stripeSession,
-        ));
+        $this->completeCheckout($session->provider, $checkout);
 
         return true;
     }
@@ -367,15 +366,9 @@ class BillingService
         ]);
     }
 
-    private function ensurePaymentMethod(Customer $customer, string $providerId, string $provider, bool $makeDefault = true): ?PaymentMethod
+    private function ensurePaymentMethod(Customer $customer, string $reference, string $provider, bool $makeDefault = true): ?PaymentMethod
     {
-        $gateway = $this->manager->driver($provider);
-
-        if (! $gateway instanceof StripeGateway) {
-            return null;
-        }
-
-        $data = $gateway->resolvePaymentMethod($providerId);
+        $data = $this->manager->driver($provider)->resolvePaymentMethod($reference);
 
         if (! $data) {
             return null;
@@ -414,16 +407,14 @@ class BillingService
         });
     }
 
-    private function customerFor(WebhookData $webhook): ?Customer
+    private function customerFor(string $provider, ?string $providerCustomerId): ?Customer
     {
-        $providerCustomerId = $webhook->payload['customer'] ?? null;
-
         // A null ID would match every customer the provider has never seen.
-        if (! is_string($providerCustomerId) || $providerCustomerId === '') {
+        if ($providerCustomerId === null || $providerCustomerId === '') {
             return null;
         }
 
-        return Customer::where('provider', $webhook->provider)
+        return Customer::where('provider', $provider)
             ->where('provider_customer_id', $providerCustomerId)
             ->first();
     }
@@ -439,8 +430,9 @@ class BillingService
      * database rebuilt without it. Retrying cannot change that, so the event is
      * acknowledged instead of failing forever.
      */
-    private function subscriptionForEvent(WebhookData $webhook, string $providerSubscriptionId): ?Subscription
+    private function subscriptionForEvent(WebhookData $webhook, SubscriptionStateData $state): ?Subscription
     {
+        $providerSubscriptionId = $state->providerSubscriptionId;
         $subscription = $this->subscriptionFor($webhook, $providerSubscriptionId);
 
         if ($subscription) {
@@ -450,18 +442,22 @@ class BillingService
         $context = [
             'provider' => $webhook->provider,
             'provider_subscription_id' => $providerSubscriptionId,
-            'provider_customer_id' => $webhook->payload['customer'] ?? null,
+            'provider_customer_id' => $state->providerCustomerId,
         ];
 
-        if (! $this->customerFor($webhook)) {
+        if (! $this->customerFor($webhook->provider, $state->providerCustomerId)) {
             Log::warning('Ignoring subscription event for an unknown customer', $context);
 
             return null;
         }
 
-        Log::warning('Subscription not found for a known customer', $context);
-
-        throw new \RuntimeException("Subscription not found: {$providerSubscriptionId}");
+        throw new WebhookDependencyNotReady(
+            provider: $webhook->provider,
+            eventType: $webhook->type?->value,
+            providerEventId: $webhook->providerEventId,
+            missing: 'subscription',
+            providerResourceId: $providerSubscriptionId,
+        );
     }
 
     private function subscriptionFor(WebhookData $webhook, string $providerSubscriptionId): ?Subscription
@@ -546,35 +542,28 @@ class BillingService
     /** A card added in the provider's portal, which is where a trialing customer adds one. */
     private function onPaymentMethodAttached(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
+        $change = $webhook->dataAs(PaymentMethodChangeData::class);
+        $customer = $this->customerFor($webhook->provider, $change->providerCustomerId);
 
-        $customer = $this->customerFor($webhook);
-
-        if ($customer && is_string($payload['id'] ?? null)) {
+        if ($customer && $change->paymentMethodReference) {
             // Attaching a card does not make it the one invoices are charged to.
-            $this->ensurePaymentMethod($customer, $payload['id'], $webhook->provider, makeDefault: false);
+            $this->ensurePaymentMethod($customer, $change->paymentMethodReference, $webhook->provider, makeDefault: false);
         }
     }
 
     /** The card invoices are charged to, which the customer may change or clear in the portal. */
     private function onCustomerUpdated(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
+        $defaults = $webhook->dataAs(CustomerDefaultsData::class);
+        $customer = $this->customerFor($webhook->provider, $defaults->providerCustomerId);
 
-        $customer = is_string($payload['id'] ?? null)
-            ? Customer::where('provider', $webhook->provider)->where('provider_customer_id', $payload['id'])->first()
-            : null;
-
-        if (! $customer) {
+        // Not mentioned is not cleared: only an explicit null removes the default.
+        if (! $customer || $defaults->defaultPaymentMethodReference instanceof Optional) {
             return;
         }
 
-        $default = $payload['invoice_settings']['default_payment_method'] ?? null;
-
-        if (is_string($default)) {
-            $this->ensurePaymentMethod($customer, $default, $webhook->provider);
+        if ($defaults->defaultPaymentMethodReference !== null) {
+            $this->ensurePaymentMethod($customer, $defaults->defaultPaymentMethodReference, $webhook->provider);
 
             return;
         }
@@ -585,16 +574,16 @@ class BillingService
     /** Removed there too, and a subscription pointing at it is left without one. */
     private function onPaymentMethodDetached(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
+        $change = $webhook->dataAs(PaymentMethodChangeData::class);
 
-        // Without an ID this would match every row missing one.
-        if (! is_string($payload['id'] ?? null)) {
+        // Without an ID this would match every row missing one. Matched on the
+        // method's own ID, so removal never waits on a provider lookup.
+        if (! $change->providerPaymentMethodId) {
             return;
         }
 
         PaymentMethod::where('provider', $webhook->provider)
-            ->where('provider_payment_method_id', $payload['id'])
+            ->where('provider_payment_method_id', $change->providerPaymentMethodId)
             ->each(fn (PaymentMethod $method) => $method->delete());
     }
 
@@ -621,16 +610,14 @@ class BillingService
     /** The provider warns before a trial converts; the customer hears it from us. */
     private function onTrialWillEnd(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-
-        $subscription = $this->subscriptionForEvent($webhook, $payload['id']);
+        $state = $webhook->dataAs(SubscriptionStateData::class);
+        $subscription = $this->subscriptionForEvent($webhook, $state);
 
         if (! $subscription) {
             return;
         }
 
-        $subscription = $this->applyIfCurrent($subscription, $webhook, $this->trialDates($payload));
+        $subscription = $this->applyIfCurrent($subscription, $webhook, $this->trialDates($state));
 
         if ($subscription) {
             event(new TrialEnding($subscription));
@@ -638,42 +625,18 @@ class BillingService
     }
 
     /**
-     * The provider's trial dates, in the app's columns. Stripe keeps them on the
-     * subscription for good, which is what makes "has this customer ever
+     * The trial dates the provider reported, in the app's columns. They stay on
+     * the subscription for good, which is what makes "has this customer ever
      * trialed" answerable from history.
      *
-     * @param  array<string, mixed>  $payload
      * @return array<string, Carbon>
      */
-    private function trialDates(array $payload): array
+    private function trialDates(SubscriptionStateData $state): array
     {
-        $dates = [];
-
-        foreach (['trial_start' => 'trial_starts_at', 'trial_end' => 'trial_ends_at'] as $key => $column) {
-            if (! empty($payload[$key])) {
-                $dates[$column] = Carbon::createFromTimestamp($payload[$key]);
-            }
-        }
-
-        return $dates;
-    }
-
-    /**
-     * What the provider says this subscription is, in the app's words. A trial
-     * is active there and here; anything unknown leaves the row as it is.
-     *
-     * @param  array<string, mixed>  $payload
-     */
-    private function providerStatus(array $payload, Subscription $subscription): SubscriptionStatus
-    {
-        return match ($payload['status'] ?? null) {
-            'active', 'trialing' => SubscriptionStatus::Active,
-            'past_due' => SubscriptionStatus::PastDue,
-            'unpaid' => SubscriptionStatus::Suspended,
-            'canceled', 'incomplete_expired' => SubscriptionStatus::Cancelled,
-            'incomplete', 'paused' => SubscriptionStatus::Pending,
-            default => $subscription->status,
-        };
+        return array_filter([
+            'trial_starts_at' => $state->trialStartsAt,
+            'trial_ends_at' => $state->trialEndsAt,
+        ]);
     }
 
     /**
@@ -695,8 +658,9 @@ class BillingService
             }
 
             $revision = $subscription->state_revision;
-            $payload = $this->manager->driver($subscription->provider)->retrieveSubscription($subscription->provider_subscription_id);
-            $status = $this->providerStatus($payload, $subscription);
+            // An unknown status leaves the row as it is.
+            $status = $this->manager->driver($subscription->provider)
+                ->retrieveSubscription($subscription->provider_subscription_id)->status ?? $subscription->status;
 
             $applied = DB::transaction(function () use ($subscription, $revision, $status): ?Subscription {
                 $current = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
@@ -717,7 +681,7 @@ class BillingService
             }
         }
 
-        throw new \RuntimeException("Could not reconcile subscription {$subscription->id}: it kept changing while the provider was asked.");
+        throw new SubscriptionReconciliationConflict($subscription->id, attempts: 2);
     }
 
     /**
@@ -758,60 +722,35 @@ class BillingService
         return ['status' => $status, 'grace_ends_at' => null];
     }
 
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function parseCurrency(array $payload): Currency
+    private function createPaymentFromWebhook(WebhookData $webhook, PaymentStatus $status): ?Payment
     {
-        return Currency::tryFrom(strtoupper($payload['currency'] ?? '')) ?? Currency::default();
-    }
-
-    /**
-     * @param  array<string, mixed>  $payload
-     */
-    private function resolveSubscriptionId(array $payload): ?string
-    {
-        return $payload['subscription'] ?? $payload['parent']['subscription_details']['subscription'] ?? null;
-    }
-
-    /**
-     * `unpaid` is a delayed payment method that has not settled; the provider
-     * sends a second event once it does. Anything else — including
-     * `no_payment_required`, which is what a trial or a fully discounted price
-     * reports — owes nothing now and is fulfilled.
-     *
-     * @param  array<string, mixed>  $session
-     */
-    private function awaitsPayment(array $session): bool
-    {
-        return ($session['payment_status'] ?? null) === 'unpaid';
-    }
-
-    private function createPaymentFromWebhook(WebhookData $webhook, PaymentStatus $status, string $amountKey): ?Payment
-    {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-
-        $customer = $this->customerFor($webhook);
+        $attempt = $webhook->dataAs(InvoicePaymentData::class);
+        $customer = $this->customerFor($webhook->provider, $attempt->providerCustomerId);
 
         if (! $customer) {
             return null;
         }
 
-        $subscriptionId = $this->resolveSubscriptionId($payload);
+        $subscriptionId = $attempt->providerSubscriptionId;
         $subscription = $subscriptionId ? $this->subscriptionFor($webhook, $subscriptionId) : null;
 
         // Its checkout event is still on the way. Failing here has the provider
         // deliver this one again once the subscription exists locally.
         if ($subscriptionId && ! $subscription) {
-            throw new \RuntimeException("Subscription not found: {$subscriptionId}");
+            throw new WebhookDependencyNotReady(
+                provider: $webhook->provider,
+                eventType: $webhook->type?->value,
+                providerEventId: $webhook->providerEventId,
+                missing: 'subscription',
+                providerResourceId: $subscriptionId,
+            );
         }
 
-        $pm = ($payload['default_payment_method'] ?? null)
-            ? $this->ensurePaymentMethod($customer, $payload['default_payment_method'], $webhook->provider)
+        $pm = $attempt->paymentMethodReference
+            ? $this->ensurePaymentMethod($customer, $attempt->paymentMethodReference, $webhook->provider)
             : null;
 
-        $providerPaymentId = $payload['payment_intent'] ?? $payload['id'];
+        $providerPaymentId = $attempt->providerPaymentId;
 
         $attributes = [
             'customer_id' => $customer->id,
@@ -819,8 +758,8 @@ class BillingService
             'subscription_id' => $subscription?->id,
             'price_id' => $subscription?->price_id,
             'provider_payment_id' => $providerPaymentId,
-            'currency' => $this->parseCurrency($payload),
-            'amount' => $payload[$amountKey] ?? 0,
+            'currency' => $attempt->currency,
+            'amount' => $attempt->amount,
             'status' => $status,
         ];
 
@@ -860,25 +799,31 @@ class BillingService
 
     private function onCheckoutCompleted(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
+        $checkout = $webhook->dataAs(CheckoutSessionData::class);
 
-        if ($this->awaitsPayment($payload)) {
-            Log::info('Checkout completed but not yet paid', ['session_id' => $payload['id']]);
+        // A delayed payment method has not settled; a second event says when it does.
+        if (! $checkout->fulfillable) {
+            Log::info('Checkout completed but not yet paid', ['session_id' => $checkout->sessionId]);
 
             return;
         }
 
-        $subscriptionId = $payload['subscription'] ?? null;
+        $this->completeCheckout($webhook->provider, $checkout);
+    }
+
+    /** Record what a fulfillable checkout bought, once, from the webhook or the buyer's return. */
+    private function completeCheckout(string $provider, CheckoutSessionData $checkout): void
+    {
+        $subscriptionId = $checkout->providerSubscriptionId;
         /** @var array{subscription: ?Subscription, payment: ?Payment} $result */
         $result = ['subscription' => null, 'payment' => null];
         $wasJustCreated = false;
 
         // Locked and re-read inside the transaction: the return redirect and the
         // webhook both complete the same session, and only one may record it.
-        $session = DB::transaction(function () use ($payload, $webhook, $subscriptionId, &$result, &$wasJustCreated) {
-            $session = CheckoutSession::where('provider', $webhook->provider)
-                ->where('provider_session_id', $payload['id'])
+        $session = DB::transaction(function () use ($checkout, $provider, $subscriptionId, &$result, &$wasJustCreated) {
+            $session = CheckoutSession::where('provider', $provider)
+                ->where('provider_session_id', $checkout->sessionId)
                 ->lockForUpdate()
                 ->first();
 
@@ -896,11 +841,13 @@ class BillingService
 
             $session->update(['status' => CheckoutSessionStatus::Completed]);
 
-            if ($subscriptionId) {
-                $pm = $this->ensurePaymentMethod($customer, $subscriptionId, $webhook->provider);
+            $pm = $checkout->paymentMethodReference
+                ? $this->ensurePaymentMethod($customer, $checkout->paymentMethodReference, $provider)
+                : null;
 
+            if ($subscriptionId) {
                 $subscription = Subscription::firstOrCreate(
-                    ['provider' => $webhook->provider, 'provider_subscription_id' => $subscriptionId],
+                    ['provider' => $provider, 'provider_subscription_id' => $subscriptionId],
                     [
                         'customer_id' => $session->customer_id,
                         'price_id' => $session->price_id,
@@ -915,25 +862,23 @@ class BillingService
 
                 $result['payment'] = Payment::create([
                     'customer_id' => $session->customer_id,
-                    'provider' => $webhook->provider,
+                    'provider' => $provider,
                     'subscription_id' => $subscription->id,
                     'price_id' => $session->price_id,
                     'payment_method_id' => $pm?->id,
-                    'currency' => $this->parseCurrency($payload),
-                    'amount' => $payload['amount_total'] ?? 0,
+                    'currency' => $checkout->currency,
+                    'amount' => $checkout->amount,
                     'status' => PaymentStatus::Succeeded,
                 ]);
-            } elseif ($payload['payment_intent'] ?? null) {
-                $pm = $this->ensurePaymentMethod($customer, $payload['payment_intent'], $webhook->provider);
-
+            } elseif ($checkout->providerPaymentId) {
                 $result['payment'] = Payment::create([
                     'customer_id' => $session->customer_id,
-                    'provider' => $webhook->provider,
+                    'provider' => $provider,
                     'price_id' => $session->price_id,
                     'payment_method_id' => $pm?->id,
-                    'provider_payment_id' => $payload['payment_intent'],
-                    'currency' => $this->parseCurrency($payload),
-                    'amount' => $payload['amount_total'] ?? 0,
+                    'provider_payment_id' => $checkout->providerPaymentId,
+                    'currency' => $checkout->currency,
+                    'amount' => $checkout->amount,
                     'status' => PaymentStatus::Succeeded,
                 ]);
             }
@@ -941,7 +886,7 @@ class BillingService
             return $session;
         });
 
-        $this->endSubscriptionReplacedByLifetime($webhook->provider, $payload['id']);
+        $this->endSubscriptionReplacedByLifetime($provider, $checkout->sessionId);
 
         if (! $session) {
             return;
@@ -949,7 +894,7 @@ class BillingService
 
         // Sync period dates from gateway after transaction commits (avoids API call inside transaction)
         if ($result['subscription'] && $wasJustCreated && $subscriptionId) {
-            $this->syncSubscriptionPeriod($result['subscription'], $subscriptionId, $webhook->provider);
+            $this->syncSubscriptionPeriod($result['subscription'], $subscriptionId, $provider);
         }
 
         // Fire events after transaction commits
@@ -966,10 +911,8 @@ class BillingService
 
     private function onSubscriptionUpdated(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-
-        $subscription = $this->subscriptionForEvent($webhook, $payload['id']);
+        $state = $webhook->dataAs(SubscriptionStateData::class);
+        $subscription = $this->subscriptionForEvent($webhook, $state);
 
         if (! $subscription) {
             return;
@@ -977,48 +920,41 @@ class BillingService
 
         // The provider call happens before the lock below, so the row is never
         // held across a network round trip.
-        $pm = ($payload['default_payment_method'] ?? null)
-            ? $this->ensurePaymentMethod($subscription->customer, $payload['default_payment_method'], $webhook->provider)
+        $pm = is_string($state->paymentMethodReference)
+            ? $this->ensurePaymentMethod($subscription->customer, $state->paymentMethodReference, $webhook->provider)
             : null;
 
-        $status = $this->providerStatus($payload, $subscription);
+        // An unknown status leaves the row as it is.
+        $status = $state->status ?? $subscription->status;
 
-        $updates = ['last_event_at' => $webhook->occurredAt, ...$this->trialDates($payload)];
+        $updates = ['last_event_at' => $webhook->occurredAt, ...$this->trialDates($state)];
 
         if ($pm) {
             $updates['payment_method_id'] = $pm->id;
-        } elseif (array_key_exists('default_payment_method', $payload) && $payload['default_payment_method'] === null) {
+        } elseif ($state->paymentMethodReference === null) {
             // Cleared at the provider: invoices fall back to the customer's default.
             $updates['payment_method_id'] = null;
         }
 
         // A plan changed at the provider (its billing portal) arrives here.
-        $priceId = $this->localPriceId($webhook->provider, $payload['items']['data'][0]['price']['id'] ?? null);
+        $priceId = $this->localPriceId($webhook->provider, $state->providerPriceId);
 
         if ($priceId) {
             $updates['price_id'] = $priceId;
         }
 
-        $period = $this->subscriptionPeriod($payload);
-
-        if ($period['start']) {
-            $updates['current_period_starts_at'] = Carbon::createFromTimestamp($period['start']);
+        if ($state->periodStartsAt) {
+            $updates['current_period_starts_at'] = $state->periodStartsAt;
         }
 
-        if ($period['end']) {
-            $updates['current_period_ends_at'] = Carbon::createFromTimestamp($period['end']);
+        if ($state->periodEndsAt) {
+            $updates['current_period_ends_at'] = $state->periodEndsAt;
         }
 
-        if (isset($payload['cancel_at_period_end']) && $payload['cancel_at_period_end']) {
+        if ($state->cancellationScheduled === true) {
             $updates['cancelled_at'] = now();
-            $endsAt = $period['end'] ?? $payload['cancel_at'] ?? null;
-            $updates['ends_at'] = $endsAt ? Carbon::createFromTimestamp($endsAt) : null;
-        } elseif (isset($payload['cancel_at']) && $payload['cancel_at']) {
-            $updates['cancelled_at'] = now();
-            $updates['ends_at'] = Carbon::createFromTimestamp($payload['cancel_at']);
-            // Reaching here means the first branch already ruled out a truthy
-            // `cancel_at_period_end`, so only its presence still needs checking.
-        } elseif (isset($payload['cancel_at_period_end']) && empty($payload['cancel_at'])) {
+            $updates['ends_at'] = $state->endsAt;
+        } elseif ($state->cancellationScheduled === false) {
             $updates['cancelled_at'] = null;
             $updates['ends_at'] = null;
         }
@@ -1099,14 +1035,13 @@ class BillingService
      */
     private function onPaymentRefunded(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-        $paymentIntent = $payload['payment_intent'] ?? null;
+        $refund = $webhook->dataAs(RefundData::class);
+        $paymentIntent = $refund->providerPaymentId;
 
-        // A charge made without a payment intent names nothing we record, and
-        // looking up a null ID would match an unrelated row.
-        if (! is_string($paymentIntent) || $paymentIntent === '') {
-            Log::info('Refund without a payment intent, acknowledged', ['charge' => $payload['id'] ?? null]);
+        // A refund that names no payment names nothing we record, and looking
+        // up a null ID would match an unrelated row.
+        if ($paymentIntent === null) {
+            Log::info('Refund without a payment, acknowledged', ['provider_event_id' => $webhook->providerEventId]);
 
             return;
         }
@@ -1116,27 +1051,30 @@ class BillingService
             ->first();
 
         if (! $payment) {
-            if (! $this->customerFor($webhook)) {
+            if (! $this->customerFor($webhook->provider, $refund->providerCustomerId)) {
                 Log::warning('Ignoring refund for an unknown customer', ['payment_intent' => $paymentIntent]);
 
                 return;
             }
 
-            throw new \RuntimeException("Payment not found for refund: {$paymentIntent}");
+            throw new WebhookDependencyNotReady(
+                provider: $webhook->provider,
+                eventType: $webhook->type?->value,
+                providerEventId: $webhook->providerEventId,
+                missing: 'payment',
+                providerResourceId: $paymentIntent,
+            );
         }
 
         $payment->update(array_filter([
-            'amount_refunded' => $payload['amount_refunded'] ?? null,
-            'status' => ($payload['refunded'] ?? false) === true ? PaymentStatus::Refunded : null,
+            'amount_refunded' => $refund->amountRefunded,
+            'status' => $refund->fullyRefunded ? PaymentStatus::Refunded : null,
         ], fn ($value) => $value !== null));
     }
 
     private function onSubscriptionDeleted(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-
-        $subscription = $this->subscriptionForEvent($webhook, $payload['id']);
+        $subscription = $this->subscriptionForEvent($webhook, $webhook->dataAs(SubscriptionStateData::class));
 
         if (! $subscription) {
             return;
@@ -1159,7 +1097,7 @@ class BillingService
 
     private function onPaymentSucceeded(WebhookData $webhook): void
     {
-        $payment = $this->createPaymentFromWebhook($webhook, PaymentStatus::Succeeded, 'amount_paid');
+        $payment = $this->createPaymentFromWebhook($webhook, PaymentStatus::Succeeded);
 
         if (! $payment) {
             return;
@@ -1182,7 +1120,7 @@ class BillingService
 
     private function onPaymentFailed(WebhookData $webhook): void
     {
-        $payment = $this->createPaymentFromWebhook($webhook, PaymentStatus::Failed, 'amount_due');
+        $payment = $this->createPaymentFromWebhook($webhook, PaymentStatus::Failed);
 
         if (! $payment) {
             return;
@@ -1195,43 +1133,36 @@ class BillingService
 
     private function onInvoicePaid(WebhookData $webhook): void
     {
-        /** @var array<string, mixed> $payload */
-        $payload = $webhook->payload;
-
-        $customer = $this->customerFor($webhook);
+        $paid = $webhook->dataAs(InvoiceData::class);
+        $customer = $this->customerFor($webhook->provider, $paid->providerCustomerId);
 
         if (! $customer) {
             return;
         }
 
-        $subscriptionId = $this->resolveSubscriptionId($payload);
-        $subscription = $subscriptionId ? $this->subscriptionFor($webhook, $subscriptionId) : null;
+        $subscription = $paid->providerSubscriptionId ? $this->subscriptionFor($webhook, $paid->providerSubscriptionId) : null;
 
         $invoice = Invoice::updateOrCreate(
-            ['provider' => $webhook->provider, 'provider_invoice_id' => $payload['id']],
+            ['provider' => $webhook->provider, 'provider_invoice_id' => $paid->providerInvoiceId],
             [
                 'customer_id' => $customer->id,
                 'subscription_id' => $subscription?->id,
-                'number' => $payload['number'] ?? null,
-                'currency' => $this->parseCurrency($payload),
-                'subtotal' => $payload['subtotal'] ?? 0,
-                'tax' => $payload['tax'] ?? 0,
-                'total' => $payload['total'] ?? 0,
+                'number' => $paid->number,
+                'currency' => $paid->currency,
+                'subtotal' => $paid->subtotal,
+                'tax' => $paid->tax,
+                'total' => $paid->total,
                 'status' => InvoiceStatus::Paid,
                 'paid_at' => now(),
-                'hosted_invoice_url' => $payload['hosted_invoice_url'] ?? null,
-                'pdf_url' => $payload['invoice_pdf'] ?? null,
+                'hosted_invoice_url' => $paid->hostedUrl,
+                'pdf_url' => $paid->pdfUrl,
             ],
         );
 
-        // Proration lines cover only the remainder of the period, so the period
-        // is the span of every line rather than whatever the first one says.
-        $periods = array_column($payload['lines']['data'] ?? [], 'period');
-
-        if ($subscription && $periods !== []) {
+        if ($subscription && $paid->periodStartsAt && $paid->periodEndsAt) {
             $subscription->update([
-                'current_period_starts_at' => Carbon::createFromTimestamp(min(array_column($periods, 'start'))),
-                'current_period_ends_at' => Carbon::createFromTimestamp(max(array_column($periods, 'end'))),
+                'current_period_starts_at' => $paid->periodStartsAt,
+                'current_period_ends_at' => $paid->periodEndsAt,
             ]);
         }
 
@@ -1241,51 +1172,22 @@ class BillingService
     private function syncSubscriptionPeriod(Subscription $subscription, string $providerSubscriptionId, string $provider): void
     {
         try {
-            $gateway = $this->manager->driver($provider);
-
-            if (! $gateway instanceof StripeGateway) {
-                return;
-            }
-
-            $remote = $gateway->retrieveSubscription($providerSubscriptionId);
-            $period = $this->subscriptionPeriod($remote);
+            $remote = $this->manager->driver($provider)->retrieveSubscription($providerSubscriptionId);
 
             // Read at checkout rather than waiting for the first update event,
             // so a trial is on the row within a second of the buyer paying.
-            $updates = $this->trialDates($remote);
-            if ($period['start']) {
-                $updates['current_period_starts_at'] = Carbon::createFromTimestamp($period['start']);
-            }
-            if ($period['end']) {
-                $updates['current_period_ends_at'] = Carbon::createFromTimestamp($period['end']);
-            }
+            $updates = array_filter([
+                ...$this->trialDates($remote),
+                'current_period_starts_at' => $remote->periodStartsAt,
+                'current_period_ends_at' => $remote->periodEndsAt,
+            ]);
 
             if ($updates) {
                 $subscription->update($updates);
             }
-        } catch (\Throwable $e) {
-            Log::warning('Failed to sync subscription period from gateway', [
-                'subscription_id' => $subscription->id,
-                'error' => $e->getMessage(),
-            ]);
+        } catch (GatewayOperationFailed $e) {
+            // The subscription's next event fills the dates in.
+            report($e);
         }
-    }
-
-    /**
-     * Stripe keeps the billing period on each subscription item since API
-     * version 2025-03-31; webhook endpoints pinned earlier still send it at the
-     * top level. Subscriptions here carry one item, so the first is the period.
-     *
-     * @param  array<string, mixed>  $subscription
-     * @return array{start: ?int, end: ?int}
-     */
-    private function subscriptionPeriod(array $subscription): array
-    {
-        $item = $subscription['items']['data'][0] ?? [];
-
-        return [
-            'start' => $item['current_period_start'] ?? $subscription['current_period_start'] ?? null,
-            'end' => $item['current_period_end'] ?? $subscription['current_period_end'] ?? null,
-        ];
     }
 }

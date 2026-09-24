@@ -3,8 +3,10 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -91,5 +93,24 @@ class SubscriptionResumeTest extends TestCase
         $response = $this->actingAs($user)->post(route('billing.subscription.resume'));
 
         $response->assertNotFound();
+    }
+
+    public function test_a_provider_failure_on_resume_is_explained_and_changes_nothing(): void
+    {
+        Exceptions::fake();
+        $user = $this->createUser();
+        $customer = Customer::factory()->create(['user_id' => $user->id]);
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'status' => SubscriptionStatus::Active,
+            'cancelled_at' => now(),
+            'ends_at' => now()->addMonth(),
+        ]);
+        $this->gateway->method('resumeSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'resume a subscription'));
+
+        $this->actingAs($user)->from(route('dashboard'))->post(route('billing.subscription.resume'))->assertRedirect(route('dashboard'));
+
+        $this->assertNotNull($subscription->fresh()->cancelled_at);
+        Exceptions::assertReportedCount(1);
     }
 }

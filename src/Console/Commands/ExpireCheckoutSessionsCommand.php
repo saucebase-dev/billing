@@ -7,7 +7,9 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Modules\Billing\Data\CheckoutData;
+use Modules\Billing\Enums\CheckoutExpiry;
 use Modules\Billing\Enums\CheckoutSessionStatus;
+use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -24,6 +26,12 @@ class ExpireCheckoutSessionsCommand extends Command
     protected $signature = 'billing:expire-checkout-sessions';
 
     protected $description = 'Mark expired pending checkout sessions as expired';
+
+    /** Completed at the provider: held, and not a failure. */
+    private int $kept = 0;
+
+    /** The provider could not confirm an outcome: held, reported, and a failed run. */
+    private int $unresolved = 0;
 
     public function handle(PaymentGatewayManager $manager): int
     {
@@ -43,9 +51,11 @@ class ExpireCheckoutSessionsCommand extends Command
             $manager,
         );
 
-        $this->info("Marked {$expired} session(s) as expired, {$abandoned} as abandoned.");
+        $this->info("Marked {$expired} session(s) as expired, {$abandoned} as abandoned; kept {$this->kept} the buyer completed, {$this->unresolved} unresolved.");
 
-        return self::SUCCESS;
+        // Unresolved checkouts keep their trial and are tried again next run;
+        // each was reported with its reason.
+        return $this->unresolved > 0 ? self::FAILURE : self::SUCCESS;
     }
 
     /**
@@ -64,15 +74,29 @@ class ExpireCheckoutSessionsCommand extends Command
             ->update(['status' => $status]);
 
         $query->clone()->where('trial_days', '>', 0)->lazyById()->each(function (CheckoutSession $session) use ($status, $manager, &$closed): void {
-            if (! $session->provider_session_id) {
-                // Kept once found: the replay only works for a day, the expiry for ever.
-                $session->update(['provider_session_id' => $this->resolveAtProvider($session, $manager)]);
+            try {
+                if (! $session->provider_session_id) {
+                    // Kept once found: the replay only works for a day, the expiry for ever.
+                    $session->update(['provider_session_id' => $this->resolveAtProvider($session, $manager)]);
+                }
+
+                if (! $session->provider_session_id) {
+                    Log::info('Keeping a checkout open: it cannot be found at the provider', ['checkout_session_id' => $session->id]);
+
+                    return;
+                }
+
+                $expiry = $manager->driver($session->provider ?? $manager->getDefaultDriver())->expireCheckoutSession($session->provider_session_id);
+            } catch (GatewayOperationFailed $e) {
+                // Unknown outcome: the trial stays held until the provider can say.
+                report($e);
+                $this->unresolved++;
+
+                return;
             }
 
-            $providerSessionId = $session->provider_session_id;
-
-            if (! $providerSessionId || ! $manager->driver($session->provider ?? $manager->getDefaultDriver())->expireCheckoutSession($providerSessionId)) {
-                Log::info('Keeping a checkout open: its trial cannot be released yet', ['checkout_session_id' => $session->id]);
+            if ($expiry === CheckoutExpiry::Completed) {
+                $this->kept++;
 
                 return;
             }
@@ -94,6 +118,10 @@ class ExpireCheckoutSessionsCommand extends Command
      * Find the provider's session for a hand-off that crashed before its ID was
      * stored, by replaying the original request under the same idempotency key.
      * The provider answers with the session it already made, if it made one.
+     * Null when no replay is possible; past the window the outcome is left to
+     * reconciliation, since every run would otherwise fail on it for good.
+     *
+     * @throws GatewayOperationFailed when the provider cannot answer
      */
     private function resolveAtProvider(CheckoutSession $session, PaymentGatewayManager $manager): ?string
     {
@@ -108,24 +136,15 @@ class ExpireCheckoutSessionsCommand extends Command
             return null;
         }
 
-        try {
-            return $manager->driver($session->provider ?? $manager->getDefaultDriver())->createCheckoutSession(new CheckoutData(
-                customer: $session->customer,
-                price: $session->price,
-                successUrl: $session->success_url,
-                cancelUrl: $session->cancel_url,
-                coupon: $session->coupon,
-                trialDays: $session->trial_days,
-                trialRequiresPaymentMethod: $session->trial_requires_payment_method,
-                idempotencyKey: 'checkout_'.$session->uuid,
-            ))->sessionId;
-        } catch (\Throwable $e) {
-            Log::warning('Could not resolve a checkout at the provider', [
-                'checkout_session_id' => $session->id,
-                'error' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
+        return $manager->driver($session->provider ?? $manager->getDefaultDriver())->createCheckoutSession(new CheckoutData(
+            customer: $session->customer,
+            price: $session->price,
+            successUrl: $session->success_url,
+            cancelUrl: $session->cancel_url,
+            coupon: $session->coupon,
+            trialDays: $session->trial_days,
+            trialRequiresPaymentMethod: $session->trial_requires_payment_method,
+            idempotencyKey: 'checkout_'.$session->uuid,
+        ))->sessionId;
     }
 }

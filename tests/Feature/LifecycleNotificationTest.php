@@ -18,6 +18,7 @@ use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
+use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -73,7 +74,7 @@ class LifecycleNotificationTest extends TestCase
     /** @param  array<string, mixed>  $payload */
     private function deliver(WebhookEventType $type, array $payload): void
     {
-        $this->deliveries[] = new WebhookData(
+        $this->deliveries[] = StripeWebhook::make(
             type: $type,
             provider: 'stripe',
             providerEventId: 'evt_'.++$this->delivered,
