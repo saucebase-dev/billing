@@ -2,7 +2,9 @@
 
 namespace Modules\Billing\Tests\Feature;
 
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
 use Modules\Billing\Data\WebhookData;
@@ -136,6 +138,31 @@ class PaymentMethodSyncTest extends TestCase
 
         $this->assertFalse(PaymentMethod::where('provider_payment_method_id', 'pm_portal')->value('is_default'));
         $this->assertTrue($default->fresh()->is_default);
+    }
+
+    /**
+     * Stripe sends the same card in several events at once. Another webhook
+     * saving it between this one's check and its insert is not a failure.
+     */
+    public function test_a_card_saved_by_a_concurrent_webhook_is_reused(): void
+    {
+        $raced = false;
+        DB::listen(function (QueryExecuted $query) use (&$raced): void {
+            if (! $raced && str_starts_with($query->sql, 'select * from "payment_methods"')) {
+                $raced = true;
+                PaymentMethod::factory()->create([
+                    'customer_id' => $this->customer->id,
+                    'provider' => 'stripe',
+                    'provider_payment_method_id' => 'pm_portal',
+                    'is_default' => false,
+                ]);
+            }
+        });
+
+        $this->deliver(WebhookEventType::CustomerUpdated, ['id' => 'cus_portal', 'invoice_settings' => ['default_payment_method' => 'pm_portal']]);
+
+        $this->assertDatabaseCount('payment_methods', 1);
+        $this->assertTrue(PaymentMethod::where('provider_payment_method_id', 'pm_portal')->value('is_default'));
     }
 
     public function test_the_customers_default_follows_the_provider(): void

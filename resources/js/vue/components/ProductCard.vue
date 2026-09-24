@@ -66,7 +66,7 @@ watch(priceKey, () => {
 <template>
     <div
         :data-testid="`product-card-${product.slug}`"
-        class="relative flex h-full flex-col rounded-3xl p-8 shadow-lg"
+        class="relative flex h-full flex-col rounded-3xl p-6 shadow-lg"
         :class="
             product.metadata?.badge || product.is_highlighted
                 ? 'ring-primary bg-card/70 shadow-lg ring-3 lg:scale-[1.05]'

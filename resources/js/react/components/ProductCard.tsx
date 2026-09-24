@@ -75,7 +75,7 @@ export default function ProductCard({
     return (
         <div
             data-testid={`product-card-${product.slug}`}
-            className={`relative flex h-full flex-col rounded-3xl p-8 shadow-lg ${
+            className={`relative flex h-full flex-col rounded-3xl p-6 shadow-lg ${
                 featured
                     ? 'ring-primary bg-card/70 shadow-lg ring-3 lg:scale-[1.05]'
                     : 'bg-card/70 ring-border ring-1'
