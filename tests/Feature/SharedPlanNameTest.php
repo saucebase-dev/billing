@@ -37,7 +37,7 @@ class SharedPlanNameTest extends TestCase
     private function assertPlanName(?string $expected): void
     {
         $this->actingAs($this->user)
-            ->get(route('dashboard'))
+            ->get(route('billing.plans'))
             ->assertInertia(fn (AssertableInertia $page) => $page->where('billing.plan', $expected));
     }
 
@@ -104,7 +104,7 @@ class SharedPlanNameTest extends TestCase
             }
         });
 
-        $this->actingAs($this->user)->get(route('dashboard'))->assertOk();
+        $this->actingAs($this->user)->get(route('billing.plans'))->assertOk();
 
         $this->assertSame(['subscriptions', 'payments'], array_values(array_unique($queries)));
         $this->assertCount(2, $queries);

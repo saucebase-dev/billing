@@ -258,7 +258,7 @@ class PlanAccessTest extends TestCase
             ->get(route('billing.plan.change'))
             ->assertRedirect(SettingsSection::url('billing'));
 
-        $this->get(route('dashboard'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
+        $this->get(route('billing.plans'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
     }
 
     /** Delivered before the checkout that created the payment: retried, not dropped. */

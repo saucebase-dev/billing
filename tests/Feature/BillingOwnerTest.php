@@ -181,7 +181,7 @@ class BillingOwnerTest extends TestCase
         $this->assertTrue($owner?->canUseFeature('exports') ?? false);
         $this->assertSame(50, $owner->planLimit('projects'));
         $this->assertFalse($this->member->hasPaidPlan());
-        $this->actingAs($this->member)->get(route('dashboard'))
+        $this->actingAs($this->member)->get(route('billing.plans'))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('billing.plan', 'Team')
                 ->where('navigation', fn ($navigation) => ! str_contains(json_encode($navigation), 'upgrade')));
@@ -226,7 +226,7 @@ class BillingOwnerTest extends TestCase
         $this->workspace->update(['members' => [(string) $this->manager->id => 'manager']]);
 
         $this->assertNull(app(BillingOwners::class)->for($this->member));
-        $this->actingAs($this->member)->get(route('dashboard'))
+        $this->actingAs($this->member)->get(route('billing.plans'))
             ->assertInertia(fn (AssertableInertia $page) => $page
                 ->where('billing.plan', null)
                 ->where('navigation', fn ($navigation) => ! str_contains(json_encode($navigation), 'upgrade')));

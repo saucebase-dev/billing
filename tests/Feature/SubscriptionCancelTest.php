@@ -159,11 +159,11 @@ class SubscriptionCancelTest extends TestCase
         $subscription = Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
         $this->gateway->method('cancelSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'cancel a subscription'));
 
-        $this->actingAs($user)->from(route('dashboard'))->post(route('billing.subscription.cancel'))->assertRedirect(route('dashboard'));
+        $this->actingAs($user)->from(route('billing.plans'))->post(route('billing.subscription.cancel'))->assertRedirect(route('billing.plans'));
 
         $this->assertNull($subscription->fresh()->cancelled_at);
         Exceptions::assertReportedCount(1);
-        $this->get(route('dashboard'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
+        $this->get(route('billing.plans'))->assertInertia(fn (AssertableInertia $page) => $page->where('toast.type', 'error'));
     }
 
     /** A bug is not a provider outage: it reaches the error handler as one. */
