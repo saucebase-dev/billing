@@ -22,8 +22,8 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
 /**
- * What the provider hears back. A 500 is how it is told to try again, so it
- * must mean exactly that; a 400 means "never send this again".
+ * What the provider hears back. A 503 identifies a known temporary dependency,
+ * a 500 an unexpected retryable failure, and a 400 means "never send this again".
  */
 class WebhookErrorHandlingTest extends TestCase
 {
@@ -88,7 +88,7 @@ class WebhookErrorHandlingTest extends TestCase
     {
         $customer = Customer::factory()->create(['provider' => 'stripe', 'provider_customer_id' => 'cus_known']);
 
-        $this->deliver($this->subscriptionUpdate())->assertStatus(500);
+        $this->deliver($this->subscriptionUpdate())->assertServiceUnavailable();
         $this->assertDatabaseHas('webhook_events', ['provider_event_id' => 'evt_1', 'processed_at' => null]);
         Exceptions::assertNotReported(WebhookDependencyNotReady::class);
 

@@ -10,9 +10,9 @@ use Modules\Billing\Exceptions\WebhookDependencyNotReady;
 use Modules\Billing\Services\BillingService;
 
 /**
- * What the provider hears back. A 400 tells it never to send this again; a 500
- * tells it to try again later, which is the recovery for every other failure.
- * Bodies stay empty: nothing about the app goes back over the wire.
+ * What the provider hears back. A 400 tells it never to send this again; a 503
+ * identifies a known temporary dependency; a 500 leaves every unexpected failure
+ * retryable. Bodies stay empty: nothing about the app goes back over the wire.
  */
 class WebhookController
 {
@@ -35,7 +35,7 @@ class WebhookController
             // once the row it needs exists, so this is not reported.
             Log::info('Webhook deferred: dependency not ready', $e->context());
 
-            return response()->noContent(500);
+            return response()->noContent(Response::HTTP_SERVICE_UNAVAILABLE);
         } catch (\Throwable $e) {
             // The one place a webhook failure is reported. Never acknowledged:
             // the provider's resend is how anything left undone gets done.
