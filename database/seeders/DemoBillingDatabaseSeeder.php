@@ -48,7 +48,7 @@ class DemoBillingDatabaseSeeder extends Seeder
         // A test run must never reach the provider, and a developer's real keys
         // are in the same `.env` the suite boots with.
         if (app()->runningUnitTests() || ! $gateways->isConfigured($gateways->getDefaultDriver())) {
-            $this->command?->outputComponents()->warn('Billing: no provider keys, demo plans stay local and cannot be bought.');
+            $this->command->outputComponents()->warn('Billing: no provider keys, demo plans stay local and cannot be bought.');
 
             return;
         }
@@ -66,11 +66,11 @@ class DemoBillingDatabaseSeeder extends Seeder
                 $prices += $report->prices;
             }
         } catch (\Throwable $e) {
-            $this->command?->outputComponents()->warn("Billing: push failed ({$e->getMessage()}); run billing:push-catalog when the provider is reachable.");
+            $this->command->outputComponents()->warn("Billing: push failed ({$e->getMessage()}); run billing:push-catalog when the provider is reachable.");
 
             return;
         }
 
-        $this->command?->outputComponents()->info("Billing: pushed {$products} products and {$prices} prices to the provider.");
+        $this->command->outputComponents()->info("Billing: pushed {$products} products and {$prices} prices to the provider.");
     }
 }

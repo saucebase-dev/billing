@@ -10,6 +10,7 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
+use Stripe\HttpClient\CurlClient;
 use Stripe\StripeClient;
 use Tests\TestCase;
 
@@ -31,13 +32,17 @@ class StripeCatalogRequestTest extends TestCase
     /** @param  string|array<string, string|array{string, int}>  $responseBody  One body, or one per URL path such as `/v1/prices`, optionally with a status. */
     private function gateway(string|array $responseBody = '{"id": "prod_new"}'): StripeGateway
     {
-        $client = new class($this->requests, $responseBody) implements ClientInterface
+        $record = function (array $request): void {
+            $this->requests[] = $request;
+        };
+
+        $client = new class($record, $responseBody) implements ClientInterface
         {
-            public function __construct(private array &$requests, private string|array $body) {}
+            public function __construct(private \Closure $record, private string|array $body) {}
 
             public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
             {
-                $this->requests[] = ['method' => $method, 'url' => $absUrl, 'params' => $params];
+                ($this->record)(['method' => $method, 'url' => $absUrl, 'params' => $params]);
 
                 $response = is_array($this->body) ? $this->body[parse_url($absUrl, PHP_URL_PATH)] : $this->body;
 
@@ -52,7 +57,7 @@ class StripeCatalogRequestTest extends TestCase
 
     protected function tearDown(): void
     {
-        ApiRequestor::setHttpClient(null);
+        ApiRequestor::setHttpClient(CurlClient::instance());
 
         parent::tearDown();
     }
@@ -136,7 +141,7 @@ class StripeCatalogRequestTest extends TestCase
         $this->assertSame([], $catalog[0]->prices);
     }
 
-    /** @param array<string, mixed> $params */
+    /** @return array<string, mixed> */
     private function checkoutParams(?int $trialDays, bool $requiresPaymentMethod = true): array
     {
         $price = Price::factory()->create(['provider_price_id' => 'price_wire', 'interval' => 'month']);

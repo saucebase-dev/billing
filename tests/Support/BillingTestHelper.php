@@ -5,7 +5,6 @@ namespace Modules\Billing\Tests\Support;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\BillingScheme;
@@ -343,7 +342,7 @@ class BillingTestHelper
             }
 
             /** No card on file: e2e never reaches Stripe. */
-            public function resolvePaymentMethod(string $reference): ?PaymentMethodData
+            public function resolvePaymentMethod(string $reference): null
             {
                 return null;
             }

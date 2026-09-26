@@ -30,7 +30,10 @@ class StripeEventMapperTest extends TestCase
     /** @param  array<string, mixed>  $object */
     private function subscription(array $object): SubscriptionStateData
     {
-        return StripeEventMapper::map(WebhookEventType::SubscriptionUpdated, ['id' => 'sub_1', 'customer' => 'cus_1', ...$object]);
+        $data = StripeEventMapper::map(WebhookEventType::SubscriptionUpdated, ['id' => 'sub_1', 'customer' => 'cus_1', ...$object]);
+        $this->assertInstanceOf(SubscriptionStateData::class, $data);
+
+        return $data;
     }
 
     public function test_each_event_type_maps_to_its_data_class(): void
@@ -172,6 +175,7 @@ class StripeEventMapperTest extends TestCase
         $this->assertInstanceOf(InvoicePaymentData::class, $paid);
         $this->assertSame('pi_1', $paid->providerPaymentId);
         $this->assertSame(2900, $paid->amount);
+        $this->assertInstanceOf(InvoicePaymentData::class, $failed);
         $this->assertSame(3900, $failed->amount);
     }
 
@@ -183,6 +187,7 @@ class StripeEventMapperTest extends TestCase
             'parent' => ['subscription_details' => ['subscription' => 'sub_nested']],
         ]);
 
+        $this->assertInstanceOf(InvoicePaymentData::class, $data);
         $this->assertSame('sub_nested', $data->providerSubscriptionId);
     }
 
@@ -206,6 +211,7 @@ class StripeEventMapperTest extends TestCase
 
         $this->assertInstanceOf(RefundData::class, $full);
         $this->assertTrue($full->fullyRefunded);
+        $this->assertInstanceOf(RefundData::class, $partial);
         $this->assertFalse($partial->fullyRefunded);
         $this->assertSame(50, $partial->amountRefunded);
     }
@@ -225,6 +231,7 @@ class StripeEventMapperTest extends TestCase
 
         $this->assertInstanceOf(CustomerDefaultsData::class, $cleared);
         $this->assertNull($cleared->defaultPaymentMethodReference);
+        $this->assertInstanceOf(CustomerDefaultsData::class, $silent);
         $this->assertInstanceOf(Optional::class, $silent->defaultPaymentMethodReference);
     }
 

@@ -46,7 +46,7 @@ class PlanActionsTest extends TestCase
     }
 
     /**
-     * @return array{priceActions: array<int, string>, productActions: array<int, string>}
+     * @return array{priceActions: array<int, PlanAction>, productActions: array<int, PlanAction>}
      */
     private function actions(?User $owner, Product ...$plans): array
     {

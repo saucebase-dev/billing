@@ -19,7 +19,7 @@ use Modules\Billing\Traits\Billable;
  * @property string $id
  * @property string $name
  * @property string $billing_email
- * @property array<string, string> $members
+ * @property array<int|string, string> $members
  */
 class TestWorkspace extends Model implements BillingOwner
 {
@@ -55,12 +55,12 @@ class TestWorkspace extends Model implements BillingOwner
 
     public function isMember(User $user): bool
     {
-        return isset($this->members[(string) $user->id]);
+        return isset($this->members[$user->id]);
     }
 
     public function canManageBilling(User $user): bool
     {
-        return ($this->members[(string) $user->id] ?? null) === 'manager';
+        return ($this->members[$user->id] ?? null) === 'manager';
     }
 
     public function routeNotificationForMail(): string

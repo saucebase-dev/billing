@@ -11,9 +11,11 @@ use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\TestHandler;
+use Monolog\Logger;
 use Stripe\ApiRequestor;
 use Stripe\Exception\InvalidArgumentException;
 use Stripe\HttpClient\ClientInterface;
+use Stripe\HttpClient\CurlClient;
 use Stripe\StripeClient;
 use Tests\TestCase;
 
@@ -44,7 +46,7 @@ class StripeGatewayErrorTest extends TestCase
 
     protected function tearDown(): void
     {
-        ApiRequestor::setHttpClient(null);
+        ApiRequestor::setHttpClient(CurlClient::instance());
 
         parent::tearDown();
     }
@@ -140,7 +142,11 @@ class StripeGatewayErrorTest extends TestCase
     {
         $handler = new TestHandler;
         config(['logging.channels.capture' => ['driver' => 'monolog', 'handler' => TestHandler::class], 'logging.default' => 'capture']);
-        Log::channel('capture')->getLogger()->setHandlers([$handler]);
+        $channel = Log::channel('capture');
+        $this->assertInstanceOf(\Illuminate\Log\Logger::class, $channel);
+        $monolog = $channel->getLogger();
+        $this->assertInstanceOf(Logger::class, $monolog);
+        $monolog->setHandlers([$handler]);
 
         $gateway = $this->gateway(['/v1/subscriptions/sub_1' => [
             self::error('invalid_request_error', 'Bad key sk_live_abc123SECRET for card 4242 4242 4242 4242, owner jane@example.com; secret whsec_signing123'),
