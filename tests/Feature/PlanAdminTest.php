@@ -2,7 +2,6 @@
 
 namespace Modules\Billing\Tests\Feature;
 
-use App\Enums\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -24,7 +23,7 @@ class PlanAdminTest extends TestCase
         parent::setUp();
 
         $admin = User::factory()->create();
-        $admin->assignRole(Role::ADMIN);
+        $admin->assignRole('admin');
 
         $this->actingAs($admin);
     }
