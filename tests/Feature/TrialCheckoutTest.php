@@ -17,7 +17,7 @@ use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 /**
@@ -30,7 +30,7 @@ class TrialCheckoutTest extends TestCase
 
     private BillingService $billing;
 
-    /** @var StripeGateway&MockObject */
+    /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
 
     private User $user;
@@ -44,7 +44,7 @@ class TrialCheckoutTest extends TestCase
     {
         parent::setUp();
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->gateway->method('createCustomer')->willReturn('cus_trial');
         $this->gateway->method('createCheckoutSession')->willReturnCallback(function (CheckoutData $data): CheckoutResultData {
             $this->sent[] = $data;
@@ -52,7 +52,7 @@ class TrialCheckoutTest extends TestCase
             return new CheckoutResultData(sessionId: 'cs_trial_'.count($this->sent), url: 'https://provider.test/'.count($this->sent), provider: 'stripe');
         });
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
@@ -176,10 +176,10 @@ class TrialCheckoutTest extends TestCase
             'status' => CheckoutSessionStatus::Pending,
             'expires_at' => now()->addDay(),
         ]);
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->gateway->method('createCustomer')->willReturn('cus_trial');
         $this->gateway->method('createCheckoutSession')->willThrowException(new \RuntimeException('timeout'));
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
         app()->forgetInstance(BillingService::class);

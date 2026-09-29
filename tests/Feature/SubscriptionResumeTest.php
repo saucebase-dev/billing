@@ -10,9 +10,11 @@ use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class SubscriptionResumeTest extends TestCase
 {
     use RefreshDatabase;
@@ -26,7 +28,7 @@ class SubscriptionResumeTest extends TestCase
 
         $this->gateway = $this->createMock(PaymentGatewayInterface::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
     }

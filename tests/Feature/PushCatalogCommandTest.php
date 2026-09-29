@@ -18,11 +18,11 @@ class PushCatalogCommandTest extends TestCase
         $product = Product::factory()->create(['provider' => null, 'provider_product_id' => null]);
         Price::factory()->create(['product_id' => $product->id, 'provider_price_id' => null]);
 
-        $gateway = $this->createMock(PaymentGatewayInterface::class);
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
         $gateway->method('createProduct')->willReturn('prod_new');
         $gateway->method('createPrice')->willReturn('price_new');
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

@@ -19,7 +19,7 @@ use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\StripeWebhook;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 /**
@@ -32,7 +32,7 @@ class LifecycleNotificationTest extends TestCase
 
     private BillingService $billing;
 
-    /** @var StripeGateway&MockObject */
+    /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
 
     private User $user;
@@ -50,12 +50,12 @@ class LifecycleNotificationTest extends TestCase
 
         Notification::fake();
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->gateway->method('verifyAndParseWebhook')->willReturnCallback(function (): WebhookData {
             return array_shift($this->deliveries);
         });
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

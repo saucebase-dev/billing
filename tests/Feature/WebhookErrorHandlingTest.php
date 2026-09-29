@@ -18,7 +18,7 @@ use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 /**
@@ -29,7 +29,7 @@ class WebhookErrorHandlingTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @var StripeGateway&MockObject */
+    /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
 
     /** @var list<WebhookData|\Throwable> */
@@ -41,14 +41,14 @@ class WebhookErrorHandlingTest extends TestCase
 
         Exceptions::fake();
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->gateway->method('verifyAndParseWebhook')->willReturnCallback(function (): WebhookData {
             $next = array_shift($this->deliveries);
 
             return $next instanceof \Throwable ? throw $next : $next;
         });
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

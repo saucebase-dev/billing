@@ -67,7 +67,7 @@ class NeutralGatewayTest extends TestCase
 
         $this->gateway = new FakeGateway;
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('fake');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

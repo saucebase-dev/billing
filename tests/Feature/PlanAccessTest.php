@@ -21,6 +21,7 @@ use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Tests\Support\StripeWebhook;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use RuntimeException;
 use Saucebase\Core\Settings\SettingsSection;
@@ -30,6 +31,7 @@ use Tests\TestCase;
  * One plan per customer: a subscription or lifetime access, never paid for
  * twice, changed at the provider, and taken back by a full refund.
  */
+#[AllowMockObjectsWithoutExpectations]
 class PlanAccessTest extends TestCase
 {
     use RefreshDatabase;
@@ -49,7 +51,7 @@ class PlanAccessTest extends TestCase
 
         $this->gateway = $this->createMock(StripeGateway::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
@@ -238,7 +240,7 @@ class PlanAccessTest extends TestCase
     {
         $subscription = $this->subscribe();
 
-        $this->gateway->method('getPlanChangeUrl')
+        $this->gateway->expects($this->once())->method('getPlanChangeUrl')
             ->with($this->callback(fn (Subscription $given) => $given->is($subscription)))
             ->willReturn('https://billing.stripe.com/p/session/test');
 

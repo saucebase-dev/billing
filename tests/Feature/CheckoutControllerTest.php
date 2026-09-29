@@ -31,13 +31,13 @@ class CheckoutControllerTest extends TestCase
             'expires_at' => now()->addHours(24),
         ]);
 
-        $gateway = $this->createMock(PaymentGatewayInterface::class);
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
         $gateway->method('createCustomer')->willReturn('cus_test_123');
         $gateway->method('createCheckoutSession')->willReturn(
             new CheckoutResultData(sessionId: 'cs_test_123', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

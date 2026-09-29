@@ -10,9 +10,11 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
+#[AllowMockObjectsWithoutExpectations]
 class CatalogPushTest extends TestCase
 {
     use RefreshDatabase;
@@ -26,7 +28,7 @@ class CatalogPushTest extends TestCase
 
         $this->gateway = $this->createMock(PaymentGatewayInterface::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

@@ -20,7 +20,7 @@ use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PlanActions;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\StripeWebhook;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 /**
@@ -34,7 +34,7 @@ class SubscriptionLifecycleTest extends TestCase
 
     private BillingService $billing;
 
-    /** @var StripeGateway&MockObject */
+    /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
 
     private User $user;
@@ -57,11 +57,11 @@ class SubscriptionLifecycleTest extends TestCase
     {
         parent::setUp();
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->gateway->method('verifyAndParseWebhook')->willReturnCallback(fn (): WebhookData => array_shift($this->deliveries));
         $this->gateway->method('retrieveSubscription')->willReturnCallback(fn (): SubscriptionStateData => StripeEventMapper::subscription(['id' => 'sub_story', 'status' => $this->providerSays]));
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
@@ -192,7 +192,7 @@ class SubscriptionLifecycleTest extends TestCase
     {
         $this->provider(WebhookEventType::SubscriptionUpdated, ['status' => 'past_due']);
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         $this->providerSays = 'active';
         $cancelled = false;
         $gateway = $this->gateway;
@@ -206,7 +206,7 @@ class SubscriptionLifecycleTest extends TestCase
 
             return StripeEventMapper::subscription(['id' => 'sub_story', 'status' => 'active']);
         });
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

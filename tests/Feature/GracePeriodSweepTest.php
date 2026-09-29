@@ -10,6 +10,7 @@ use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -17,6 +18,7 @@ use Tests\TestCase;
  * What suspends a subscription whose grace window has closed. Access is already
  * gone the moment the deadline passes; this is what makes it visible and says so.
  */
+#[AllowMockObjectsWithoutExpectations]
 class GracePeriodSweepTest extends TestCase
 {
     use RefreshDatabase;
@@ -30,7 +32,7 @@ class GracePeriodSweepTest extends TestCase
 
         $this->gateway = $this->createMock(StripeGateway::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

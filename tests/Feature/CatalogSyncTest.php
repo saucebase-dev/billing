@@ -11,23 +11,23 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogSync;
 use Modules\Billing\Services\PaymentGatewayManager;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 class CatalogSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @var PaymentGatewayInterface&MockObject */
+    /** @var PaymentGatewayInterface&Stub */
     private PaymentGatewayInterface $gateway;
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->gateway = $this->createMock(PaymentGatewayInterface::class);
+        $this->gateway = $this->createStub(PaymentGatewayInterface::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

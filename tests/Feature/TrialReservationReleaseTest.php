@@ -15,6 +15,7 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
@@ -23,6 +24,7 @@ use Tests\TestCase;
  * checkout can never be paid. Local bookkeeping alone proves nothing: the
  * hosted page is still payable until the provider says otherwise.
  */
+#[AllowMockObjectsWithoutExpectations]
 class TrialReservationReleaseTest extends TestCase
 {
     use RefreshDatabase;
@@ -40,7 +42,7 @@ class TrialReservationReleaseTest extends TestCase
 
         $this->gateway = $this->createMock(StripeGateway::class);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

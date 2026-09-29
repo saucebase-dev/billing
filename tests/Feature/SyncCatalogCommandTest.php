@@ -18,14 +18,14 @@ class SyncCatalogCommandTest extends TestCase
     {
         Price::factory()->create(['provider_price_id' => 'price_made_up']);
 
-        $gateway = $this->createMock(PaymentGatewayInterface::class);
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
         $gateway->method('listCatalog')->willReturn([
             new CatalogProductData(providerProductId: 'prod_pro', name: 'Pro', description: null, active: true, prices: [
                 new CatalogPriceData(providerPriceId: 'price_pro', currency: 'EUR', amount: 2900, interval: 'month', intervalCount: 1, active: true),
             ]),
         ]);
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);

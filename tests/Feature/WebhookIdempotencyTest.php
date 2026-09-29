@@ -24,7 +24,7 @@ use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Tests\Support\StripeWebhook;
-use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
 class WebhookIdempotencyTest extends TestCase
@@ -33,7 +33,7 @@ class WebhookIdempotencyTest extends TestCase
 
     private BillingService $billingService;
 
-    /** @var StripeGateway&MockObject */
+    /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
 
     private ?SubscriptionStateData $remoteSubscription = null;
@@ -42,7 +42,7 @@ class WebhookIdempotencyTest extends TestCase
     {
         parent::setUp();
 
-        $this->gateway = $this->createMock(StripeGateway::class);
+        $this->gateway = $this->createStub(StripeGateway::class);
         // What the provider says about a subscription when asked; a test that cares sets it.
         $this->gateway->method('retrieveSubscription')->willReturnCallback(
             fn (string $id) => $this->remoteSubscription ?? new SubscriptionStateData($id, null, null),
@@ -60,7 +60,7 @@ class WebhookIdempotencyTest extends TestCase
             ),
         );
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 

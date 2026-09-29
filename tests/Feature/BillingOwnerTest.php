@@ -59,7 +59,7 @@ class BillingOwnerTest extends TestCase
             'members' => [(string) $this->manager->id => 'manager', (string) $this->member->id => 'member'],
         ]);
 
-        $gateway = $this->createMock(PaymentGatewayInterface::class);
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
         $gateway->method('createCustomer')->willReturnCallback(function (CustomerData $data): string {
             $this->createdCustomers[] = $data;
 
@@ -70,7 +70,7 @@ class BillingOwnerTest extends TestCase
         );
         $gateway->method('getManagementUrl')->willReturn('https://provider.test/portal');
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
