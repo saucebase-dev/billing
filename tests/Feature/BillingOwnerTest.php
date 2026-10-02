@@ -49,8 +49,6 @@ class BillingOwnerTest extends TestCase
     {
         parent::setUp();
 
-        TestWorkspace::createTable();
-
         $this->manager = $this->createUser();
         $this->member = $this->createUser();
         $this->workspace = TestWorkspace::create([
