@@ -57,8 +57,10 @@ function PaymentMethodLine({
                 {details.expMonth && (
                     <>
                         {' '}
-                        &middot; {t('Expires')} {pad(details.expMonth)}/
-                        {details.expYear}
+                        &middot;{' '}
+                        {t('Expires :date', {
+                            date: `${pad(details.expMonth)}/${details.expYear}`,
+                        })}
                     </>
                 )}
             </>
@@ -225,14 +227,15 @@ export default function SettingsBilling({
                                             data-testid="subscription-grace"
                                         >
                                             {t(
-                                                'Payment failed — update your card by',
-                                            )}{' '}
-                                            {formatDate(
-                                                subscription.grace_ends_at,
-                                                locale,
-                                                longDate,
-                                            )}{' '}
-                                            {t('to keep this subscription')}
+                                                'Payment failed — update your card by :date to keep this subscription',
+                                                {
+                                                    date: formatDate(
+                                                        subscription.grace_ends_at,
+                                                        locale,
+                                                        longDate,
+                                                    ),
+                                                },
+                                            )}
                                         </span>
                                     </>
                                 ) : subscription.on_trial &&
@@ -241,12 +244,13 @@ export default function SettingsBilling({
                                         {' '}
                                         &middot;{' '}
                                         <span data-testid="subscription-trial">
-                                            {t('Trial ends on')}{' '}
-                                            {formatDate(
-                                                subscription.trial_ends_at,
-                                                locale,
-                                                longDate,
-                                            )}
+                                            {t('Trial ends on :date', {
+                                                date: formatDate(
+                                                    subscription.trial_ends_at,
+                                                    locale,
+                                                    longDate,
+                                                ),
+                                            })}
                                         </span>
                                     </>
                                 ) : subscription.cancelled_at ? (
@@ -255,15 +259,15 @@ export default function SettingsBilling({
                                         &middot;{' '}
                                         {subscription.replaced_by_lifetime ? (
                                             <span data-testid="replaced-by-lifetime">
-                                                {t('Ends on')}{' '}
-                                                {formatDate(
-                                                    subscription.ends_at,
-                                                    locale,
-                                                    longDate,
-                                                )}
-                                                ,{' '}
                                                 {t(
-                                                    'replaced by your lifetime plan',
+                                                    'Ends on :date, replaced by your lifetime plan',
+                                                    {
+                                                        date: formatDate(
+                                                            subscription.ends_at,
+                                                            locale,
+                                                            longDate,
+                                                        ),
+                                                    },
                                                 )}
                                             </span>
                                         ) : (
@@ -271,12 +275,13 @@ export default function SettingsBilling({
                                                 className="text-destructive"
                                                 data-testid="subscription-cancels-on"
                                             >
-                                                {t('Cancels on')}{' '}
-                                                {formatDate(
-                                                    subscription.ends_at,
-                                                    locale,
-                                                    longDate,
-                                                )}
+                                                {t('Cancels on :date', {
+                                                    date: formatDate(
+                                                        subscription.ends_at,
+                                                        locale,
+                                                        longDate,
+                                                    ),
+                                                })}
                                             </span>
                                         )}
                                     </>
@@ -284,12 +289,14 @@ export default function SettingsBilling({
                                     subscription.current_period_ends_at && (
                                         <>
                                             {' '}
-                                            &middot; {t('Renews on')}{' '}
-                                            {formatDate(
-                                                subscription.current_period_ends_at,
-                                                locale,
-                                                longDate,
-                                            )}
+                                            &middot;{' '}
+                                            {t('Renews on :date', {
+                                                date: formatDate(
+                                                    subscription.current_period_ends_at,
+                                                    locale,
+                                                    longDate,
+                                                ),
+                                            })}
                                         </>
                                     )
                                 )}

@@ -4,9 +4,7 @@ namespace Modules\Billing\Enums;
 
 use Filament\Support\Contracts\HasLabel;
 use Modules\Billing\Settings\BillingSettings;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-#[TypeScript]
 enum Currency: string implements HasLabel
 {
     case USD = 'USD';

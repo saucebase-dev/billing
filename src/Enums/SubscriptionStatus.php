@@ -4,9 +4,7 @@ namespace Modules\Billing\Enums;
 
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-#[TypeScript]
 enum SubscriptionStatus: string implements HasColor, HasLabel
 {
     case Pending = 'pending';

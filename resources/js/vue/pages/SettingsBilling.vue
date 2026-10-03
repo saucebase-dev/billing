@@ -189,17 +189,16 @@ function resumeSubscription() {
                                 >
                                     {{
                                         $t(
-                                            'Payment failed — update your card by',
+                                            'Payment failed — update your card by :date to keep this subscription',
+                                            {
+                                                date: formatDate(
+                                                    subscription.grace_ends_at,
+                                                    language,
+                                                    longDate,
+                                                ),
+                                            },
                                         )
                                     }}
-                                    {{
-                                        formatDate(
-                                            subscription.grace_ends_at,
-                                            language,
-                                            longDate,
-                                        )
-                                    }}
-                                    {{ $t('to keep this subscription') }}
                                 </span>
                             </template>
                             <template
@@ -210,13 +209,14 @@ function resumeSubscription() {
                             >
                                 &middot;
                                 <span data-testid="subscription-trial">
-                                    {{ $t('Trial ends on') }}
                                     {{
-                                        formatDate(
-                                            subscription.trial_ends_at,
-                                            language,
-                                            longDate,
-                                        )
+                                        $t('Trial ends on :date', {
+                                            date: formatDate(
+                                                subscription.trial_ends_at,
+                                                language,
+                                                longDate,
+                                            ),
+                                        })
                                     }}
                                 </span>
                             </template>
@@ -226,28 +226,32 @@ function resumeSubscription() {
                                     v-if="subscription.replaced_by_lifetime"
                                     data-testid="replaced-by-lifetime"
                                 >
-                                    {{ $t('Ends on') }}
                                     {{
-                                        formatDate(
-                                            subscription.ends_at,
-                                            language,
-                                            longDate,
+                                        $t(
+                                            'Ends on :date, replaced by your lifetime plan',
+                                            {
+                                                date: formatDate(
+                                                    subscription.ends_at,
+                                                    language,
+                                                    longDate,
+                                                ),
+                                            },
                                         )
-                                    }},
-                                    {{ $t('replaced by your lifetime plan') }}
+                                    }}
                                 </span>
                                 <span
                                     v-else
                                     class="text-destructive"
                                     data-testid="subscription-cancels-on"
                                 >
-                                    {{ $t('Cancels on') }}
                                     {{
-                                        formatDate(
-                                            subscription.ends_at,
-                                            language,
-                                            longDate,
-                                        )
+                                        $t('Cancels on :date', {
+                                            date: formatDate(
+                                                subscription.ends_at,
+                                                language,
+                                                longDate,
+                                            ),
+                                        })
                                     }}
                                 </span>
                             </template>
@@ -255,13 +259,14 @@ function resumeSubscription() {
                                 v-else-if="subscription.current_period_ends_at"
                             >
                                 &middot;
-                                {{ $t('Renews on') }}
                                 {{
-                                    formatDate(
-                                        subscription.current_period_ends_at,
-                                        language,
-                                        longDate,
-                                    )
+                                    $t('Renews on :date', {
+                                        date: formatDate(
+                                            subscription.current_period_ends_at,
+                                            language,
+                                            longDate,
+                                        ),
+                                    })
                                 }}
                             </template>
                         </p>
@@ -308,9 +313,10 @@ function resumeSubscription() {
                                     v-if="paymentMethod.details?.expMonth"
                                 >
                                     &middot;
-                                    {{ $t('Expires') }}
-                                    {{ pad(paymentMethod.details.expMonth) }}/{{
-                                        paymentMethod.details.expYear
+                                    {{
+                                        $t('Expires :date', {
+                                            date: `${pad(paymentMethod.details.expMonth)}/${paymentMethod.details.expYear}`,
+                                        })
                                     }}
                                 </template>
                             </template>
