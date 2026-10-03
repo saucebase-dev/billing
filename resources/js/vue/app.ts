@@ -4,8 +4,6 @@ import IconCreditCard from '~icons/lucide/credit-card';
 import IconSparkles from '~icons/lucide/sparkles';
 import PlanName from './components/PlanName.vue';
 
-import '@modules/billing/resources/css/style.css';
-
 /**
  * Billing module setup
  * Called during app initialization before mounting
