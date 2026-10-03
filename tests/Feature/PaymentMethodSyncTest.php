@@ -13,9 +13,9 @@ use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
@@ -28,7 +28,7 @@ class PaymentMethodSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
@@ -59,7 +59,7 @@ class PaymentMethodSyncTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         $this->customer = Customer::factory()->create(['provider' => 'stripe', 'provider_customer_id' => 'cus_portal']);
     }
 
@@ -73,7 +73,7 @@ class PaymentMethodSyncTest extends TestCase
             payload: $payload,
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     public function test_a_card_added_in_the_portal_arrives(): void

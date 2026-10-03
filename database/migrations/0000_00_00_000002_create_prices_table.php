@@ -44,6 +44,7 @@ return new class extends Migration
             // Unique, like every other provider ID: CatalogSync upserts on this
             // pair, so two overlapping runs would otherwise both insert.
             $table->unique(['provider', 'provider_price_id']);
+            $table->index('product_id');
             $table->index('is_active');
         });
     }

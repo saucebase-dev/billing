@@ -41,6 +41,7 @@ return new class extends Migration
             // ensurePaymentMethod() looks this pair up without a lock, so two
             // concurrent webhooks could both miss and both insert.
             $table->unique(['provider', 'provider_payment_method_id']);
+            $table->index('customer_id');
             $table->index('is_default');
         });
     }

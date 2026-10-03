@@ -7,7 +7,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Modules\Billing\Exceptions\InvalidWebhookSignature;
 use Modules\Billing\Exceptions\WebhookDependencyNotReady;
-use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\WebhookHandler;
 
 /**
  * What the provider hears back. A 400 tells it never to send this again; a 503
@@ -17,13 +17,13 @@ use Modules\Billing\Services\BillingService;
 class WebhookController
 {
     public function __construct(
-        private BillingService $billingService,
+        private WebhookHandler $webhooks,
     ) {}
 
     public function __invoke(string $provider, Request $request): Response
     {
         try {
-            $this->billingService->handleWebhook($provider, $request);
+            $this->webhooks->handle($provider, $request);
 
             return response()->noContent(200);
         } catch (InvalidWebhookSignature $e) {

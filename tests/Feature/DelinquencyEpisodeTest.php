@@ -14,10 +14,10 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -33,7 +33,7 @@ class DelinquencyEpisodeTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     /** @var StripeGateway&MockObject */
     private StripeGateway $gateway;
@@ -62,7 +62,7 @@ class DelinquencyEpisodeTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         app(BillingSettings::class)->fill(['grace_period_days' => 3])->save();
 
         $this->customer = Customer::factory()->create();
@@ -83,7 +83,7 @@ class DelinquencyEpisodeTest extends TestCase
             payload: ['id' => 'sub_episode', 'status' => 'trialing', 'trial_start' => $startsAt, 'trial_end' => $endsAt],
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     /** One delivery of `invoice.payment_succeeded` for this subscription. */
@@ -103,7 +103,7 @@ class DelinquencyEpisodeTest extends TestCase
             ],
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     /** What the provider says when the app asks it directly. */
@@ -128,7 +128,7 @@ class DelinquencyEpisodeTest extends TestCase
             payload: ['id' => 'sub_episode', 'status' => $status],
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     public function test_falling_behind_starts_the_grace_window(): void

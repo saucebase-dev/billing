@@ -56,6 +56,8 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
+            $table->index('customer_id');
+            $table->index('price_id');
             $table->index(['provider', 'provider_session_id']);
             $table->index('status');
             $table->index('expires_at');

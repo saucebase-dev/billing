@@ -2,26 +2,14 @@
 
 namespace Modules\Billing\Notifications;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 use Modules\Billing\Models\Subscription;
 
-class GraceStartedNotification extends Notification
+class GraceStartedNotification extends BillingNotification
 {
-    use Queueable;
-
     public function __construct(
         public Subscription $subscription,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['mail'];
-    }
 
     public function toMail(object $notifiable): MailMessage
     {

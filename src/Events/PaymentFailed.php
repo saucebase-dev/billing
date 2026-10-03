@@ -2,15 +2,5 @@
 
 namespace Modules\Billing\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-use Modules\Billing\Models\Payment;
-
-class PaymentFailed
-{
-    use Dispatchable, SerializesModels;
-
-    public function __construct(
-        public Payment $payment,
-    ) {}
-}
+/** The provider could not collect a renewal; the subscription's own update moves its status. */
+class PaymentFailed extends PaymentEvent {}

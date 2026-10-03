@@ -4,19 +4,17 @@ namespace Modules\Billing\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
+use Modules\Billing\Actions\CancelSubscription;
+use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Events\SubscriptionResumed;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
-use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Helpers\Toast;
 
 class SubscriptionController
 {
     public function __construct(
-        private BillingService $billingService,
+        private CancelSubscription $cancelSubscription,
         private BillingOwners $owners,
     ) {}
 
@@ -29,7 +27,7 @@ class SubscriptionController
         }
 
         try {
-            $this->billingService->cancelAtPeriodEnd($subscription);
+            $this->cancelSubscription->handle($subscription);
         } catch (GatewayOperationFailed $e) {
             return $this->unavailable($e);
         }
@@ -40,7 +38,7 @@ class SubscriptionController
         ]);
     }
 
-    public function resume(Request $request, PurchaseEligibility $eligibility): RedirectResponse
+    public function resume(Request $request, ResumeSubscription $resumeSubscription): RedirectResponse
     {
         $subscription = $this->owners->managedBy($request->user())->billingAccount()
             ?->subscriptions()
@@ -53,24 +51,11 @@ class SubscriptionController
             abort(404);
         }
 
-        if ($eligibility->isReplacedByLifetime($subscription)) {
-            throw ValidationException::withMessages([
-                'subscription' => __('Your lifetime plan replaces this subscription, so it ends as scheduled.'),
-            ]);
-        }
-
         try {
-            $this->billingService->resume($subscription);
+            $resumeSubscription->handle($subscription);
         } catch (GatewayOperationFailed $e) {
             return $this->unavailable($e);
         }
-
-        $subscription->update([
-            'cancelled_at' => null,
-            'ends_at' => null,
-        ]);
-
-        SubscriptionResumed::dispatch($subscription);
 
         return back()->with('toast', [
             'type' => 'success',

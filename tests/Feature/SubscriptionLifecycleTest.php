@@ -13,11 +13,11 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PlanActions;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\Stub;
@@ -32,7 +32,7 @@ class SubscriptionLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
@@ -66,7 +66,7 @@ class SubscriptionLifecycleTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         app(BillingSettings::class)->fill(['grace_period_days' => 3])->save();
 
         $this->user = $this->createUser();
@@ -93,7 +93,7 @@ class SubscriptionLifecycleTest extends TestCase
             payload: ['id' => 'sub_story', ...$payload],
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     private function invoicePaid(): void
@@ -210,8 +210,8 @@ class SubscriptionLifecycleTest extends TestCase
         $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
-        app()->forgetInstance(BillingService::class);
-        $this->billing = app(BillingService::class);
+        app()->forgetInstance(WebhookHandler::class);
+        $this->billing = app(WebhookHandler::class);
 
         $this->invoicePaid();
 

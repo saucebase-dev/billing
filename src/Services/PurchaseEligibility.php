@@ -2,6 +2,7 @@
 
 namespace Modules\Billing\Services;
 
+use Illuminate\Validation\ValidationException;
 use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\PurchaseRefusal;
@@ -73,5 +74,21 @@ class PurchaseEligibility
 
         return $account !== null && $account->lifetimePurchases()
             ->contains(fn ($payment) => $payment->price?->plan?->replaces_product_id === $subscription->price?->product_id);
+    }
+
+    /**
+     * Checked on the server because the pricing page only hides the button: a
+     * second subscription would bill the owner twice. `PurchaseEligibility` is
+     * the rule; the pricing page asks it too.
+     *
+     * @throws ValidationException
+     */
+    public function assertCanBuy(?BillingOwner $owner, Price $price): void
+    {
+        $refusal = $this->check($owner, $price);
+
+        if ($refusal) {
+            throw ValidationException::withMessages(['price_id' => $refusal->message()]);
+        }
     }
 }

@@ -31,4 +31,19 @@ class SubscriptionStateData extends Data implements WebhookEventData
         public bool|Optional $cancellationScheduled = new Optional,
         public ?Carbon $endsAt = null,
     ) {}
+
+    /**
+     * The trial dates the provider reported, in the app's columns. They stay on
+     * the subscription for good, which is what makes "has this customer ever
+     * trialed" answerable from history.
+     *
+     * @return array<string, Carbon>
+     */
+    public function trialDates(): array
+    {
+        return array_filter([
+            'trial_starts_at' => $this->trialStartsAt,
+            'trial_ends_at' => $this->trialEndsAt,
+        ]);
+    }
 }

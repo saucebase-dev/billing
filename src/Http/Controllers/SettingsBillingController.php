@@ -6,9 +6,9 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Modules\Billing\Actions\FulfillCheckout;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
 use Saucebase\Core\Settings\SettingsSection;
 
 class SettingsBillingController
@@ -23,10 +23,10 @@ class SettingsBillingController
      * The section itself lives behind the `#settings/billing` fragment, which
      * never reaches the server.
      */
-    public function show(Request $request, BillingService $billingService): RedirectResponse
+    public function show(Request $request, FulfillCheckout $fulfillCheckout): RedirectResponse
     {
         $session = $this->ownCheckout($request->query('checkout_session'), $request->user());
-        $paid = $session && $billingService->fulfillCheckoutIfNeeded($session);
+        $paid = $session && $fulfillCheckout->handle($session);
 
         // A query parameter rather than a flash message: the panel is addressed by
         // a URL fragment the server never sees, so it is reached by a fresh visit

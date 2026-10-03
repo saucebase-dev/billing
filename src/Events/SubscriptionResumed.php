@@ -2,15 +2,5 @@
 
 namespace Modules\Billing\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-use Modules\Billing\Models\Subscription;
-
-class SubscriptionResumed
-{
-    use Dispatchable, SerializesModels;
-
-    public function __construct(
-        public Subscription $subscription,
-    ) {}
-}
+/** The customer undid a scheduled cancellation, so the subscription renews again. */
+class SubscriptionResumed extends SubscriptionEvent {}

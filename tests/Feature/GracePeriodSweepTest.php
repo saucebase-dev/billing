@@ -4,12 +4,11 @@ namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Exceptions;
+use Modules\Billing\Actions\SuspendLapsedSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
-use Modules\Billing\Services\PurchaseEligibility;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
@@ -141,18 +140,15 @@ class GracePeriodSweepTest extends TestCase
         $broken = $this->subscription(['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->subHour()]);
         $fine = $this->subscription(['status' => SubscriptionStatus::PastDue, 'grace_ends_at' => now()->subHour()]);
 
-        app()->instance(BillingService::class, new class($broken->id, app(PaymentGatewayManager::class), app(PurchaseEligibility::class)) extends BillingService
+        app()->instance(SuspendLapsedSubscription::class, new class($broken->id) extends SuspendLapsedSubscription
         {
-            public function __construct(private int $brokenId, PaymentGatewayManager $manager, PurchaseEligibility $eligibility)
-            {
-                parent::__construct($manager, $eligibility);
-            }
+            public function __construct(private int $brokenId) {}
 
-            public function suspendIfGraceHasRunOut(Subscription $subscription): bool
+            public function handle(Subscription $subscription): bool
             {
                 return $subscription->id === $this->brokenId
                     ? throw new \RuntimeException('Deadlock')
-                    : parent::suspendIfGraceHasRunOut($subscription);
+                    : parent::handle($subscription);
             }
         });
 

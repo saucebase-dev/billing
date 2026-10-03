@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Events\AccessSuspended;
+use Modules\Billing\Events\GraceStarted;
+use Modules\Billing\Settings\BillingSettings;
 
 /**
  * @property int $id
@@ -142,5 +145,93 @@ class Subscription extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Write a row locked by the caller, moving it to `$status` under the
+     * delinquency rules when one is given. A status change bumps the revision,
+     * so a provider read taken before it can tell it is about an older row.
+     *
+     * @param  array<string, mixed>  $alsoUpdate
+     */
+    public function moveTo(?SubscriptionStatus $status, array $alsoUpdate = []): void
+    {
+        $delinquency = $status ? $this->delinquencyUpdates($status) : [];
+
+        $this->update($delinquency === []
+            ? $alsoUpdate
+            : [...$alsoUpdate, ...$delinquency, 'state_revision' => $this->state_revision + 1]);
+    }
+
+    /**
+     * Tell the customer what just happened to their subscription.
+     *
+     * Both mails hang off a transition rather than an event type, so a provider
+     * repeating itself says nothing twice. They are best-effort: a crash between
+     * the committed change and the queued job loses one.
+     */
+    public function announceDelinquency(): void
+    {
+        if (
+            $this->wasChanged('status')
+            && $this->status === SubscriptionStatus::Suspended
+        ) {
+            event(new AccessSuspended($this));
+
+            return;
+        }
+
+        if (
+            $this->wasChanged('grace_ends_at')
+            && $this->status === SubscriptionStatus::PastDue
+        ) {
+            event(new GraceStarted($this));
+        }
+    }
+
+    /**
+     * One failed payment opens one episode with one deadline.
+     *
+     * The deadline is set once and never extended, so a second failure cannot buy
+     * another window; a suspension pulls it back to now; and a suspension only
+     * ends with a recovery or a cancellation, never with another failure.
+     *
+     * @return array<string, mixed>
+     */
+    private function delinquencyUpdates(SubscriptionStatus $status): array
+    {
+        if (
+            $this->status === SubscriptionStatus::Suspended
+            && $status === SubscriptionStatus::PastDue
+        ) {
+            return [];
+        }
+
+        if ($status === SubscriptionStatus::PastDue) {
+            $deadline = $this->grace_ends_at
+                ?? now()->addDays(app(BillingSettings::class)->grace_period_days);
+
+            // A window of zero days, or one that closed while nobody was looking,
+            // is a suspension rather than a grace period.
+            return [
+                'status' => $deadline->isFuture()
+                    ? SubscriptionStatus::PastDue
+                    : SubscriptionStatus::Suspended,
+                'grace_ends_at' => $deadline,
+            ];
+        }
+
+        if ($status === SubscriptionStatus::Suspended) {
+            // A deadline already passed stays; one still ahead is pulled back to now.
+            return [
+                'status' => $status,
+                'grace_ends_at' => $this->grace_ends_at?->isPast()
+                    ? $this->grace_ends_at
+                    : now(),
+            ];
+        }
+
+        // Active (a trial included), pending or cancelled: the episode is over.
+        return ['status' => $status, 'grace_ends_at' => null];
     }
 }

@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Exceptions;
 use Inertia\Testing\AssertableInertia;
+use Modules\Billing\Actions\FulfillCheckout;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
@@ -33,8 +34,8 @@ use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Saucebase\Core\Settings\SettingsSection;
 use Spatie\LaravelData\Optional;
 use Tests\TestCase;
@@ -51,7 +52,7 @@ class NeutralGatewayTest extends TestCase
 
     private FakeGateway $gateway;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     private User $user;
 
@@ -72,7 +73,7 @@ class NeutralGatewayTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         $this->user = $this->createUser();
         $this->customer = Customer::factory()->for($this->user, 'owner')->create(['provider' => 'fake', 'provider_customer_id' => 'fcus_1']);
         $this->price = Price::factory()->create(['product_id' => Product::factory()->create()->id]);
@@ -82,7 +83,7 @@ class NeutralGatewayTest extends TestCase
     {
         $this->gateway->next = new WebhookData($type, 'fake', 'fevt_'.++$this->delivered, $data);
 
-        $this->billing->handleWebhook('fake', request());
+        $this->billing->handle('fake', request());
     }
 
     private function openCheckout(string $sessionId): CheckoutSession
@@ -196,7 +197,7 @@ class NeutralGatewayTest extends TestCase
         $this->gateway->checkouts['fcs_1'] = $this->completed('fcs_1');
         $this->gateway->remote = new SubscriptionStateData('fsub_1', 'fcus_1', SubscriptionStatus::Active);
 
-        $this->assertTrue($this->billing->fulfillCheckoutIfNeeded($session));
+        $this->assertTrue(app(FulfillCheckout::class)->handle($session));
         $this->assertSame(CheckoutSessionStatus::Completed, $session->fresh()->status);
     }
 
@@ -205,7 +206,7 @@ class NeutralGatewayTest extends TestCase
         $session = $this->openCheckout('fcs_1');
         $this->gateway->checkouts['fcs_1'] = $this->completed('fcs_1', fulfillable: false);
 
-        $this->assertFalse($this->billing->fulfillCheckoutIfNeeded($session));
+        $this->assertFalse(app(FulfillCheckout::class)->handle($session));
         $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
     }
 

@@ -17,8 +17,8 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Tests\Support\TestFixtures;
 
 class BillingTestHelper
@@ -367,9 +367,9 @@ class BillingTestHelper
             }
         });
 
-        app(BillingService::class)->handleWebhook('stripe', new Request);
+        app(WebhookHandler::class)->handle('stripe', new Request);
 
-        app()->forgetInstance(BillingService::class);
+        app()->forgetInstance(WebhookHandler::class);
         app()->forgetInstance(PaymentGatewayManager::class);
         app()->offsetUnset(PaymentGatewayManager::class);
     }

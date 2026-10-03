@@ -62,6 +62,9 @@ return new class extends Migration
             $table->timestamps();
 
             // Indexes
+            $table->index('customer_id');
+            $table->index('price_id');
+            $table->index('payment_method_id');
             $table->unique(['provider', 'provider_subscription_id']);
             $table->index('status');
             $table->index('current_period_ends_at');

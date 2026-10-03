@@ -2,15 +2,5 @@
 
 namespace Modules\Billing\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Illuminate\Queue\SerializesModels;
-use Modules\Billing\Models\Subscription;
-
-class SubscriptionCancelled
-{
-    use Dispatchable, SerializesModels;
-
-    public function __construct(
-        public Subscription $subscription,
-    ) {}
-}
+/** The provider ended a subscription: it no longer renews or grants access. */
+class SubscriptionCancelled extends SubscriptionEvent {}

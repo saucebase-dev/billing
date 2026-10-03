@@ -53,6 +53,9 @@ return new class extends Migration
 
             // Indexes
             $table->unique(['provider', 'provider_invoice_id']);
+            $table->index('customer_id');
+            $table->index('subscription_id');
+            $table->index('payment_id');
             $table->index('number');
             $table->index('status');
             $table->index('due_at');

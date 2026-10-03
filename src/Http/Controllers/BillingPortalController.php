@@ -6,7 +6,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Helpers\Toast;
 use Saucebase\Core\Settings\SettingsSection;
@@ -14,13 +14,15 @@ use Saucebase\Core\Settings\SettingsSection;
 class BillingPortalController
 {
     public function __construct(
-        private BillingService $billingService,
+        private PaymentGatewayManager $gateways,
         private BillingOwners $owners,
     ) {}
 
     public function __invoke(Request $request): RedirectResponse
     {
-        $customer = $this->owners->managedBy($request->user())->billingAccount();
+        $customer = $this->owners
+            ->managedBy($request->user())
+            ->billingAccount();
 
         if (! $customer) {
             Toast::error(__('No billing account found. Please subscribe to a plan first.'));
@@ -29,7 +31,9 @@ class BillingPortalController
         }
 
         try {
-            $url = $this->billingService->getManagementUrl($customer);
+            $url = $this->gateways
+                ->driver($customer->provider)
+                ->getManagementUrl($customer);
         } catch (GatewayOperationFailed $e) {
             report($e);
 
@@ -47,14 +51,21 @@ class BillingPortalController
      */
     public function changePlan(Request $request, PurchaseEligibility $eligibility): RedirectResponse
     {
-        $subscription = $this->owners->managedBy($request->user())->billingAccount()?->currentSubscription();
+        $subscription = $this->owners
+            ->managedBy($request->user())
+            ->billingAccount()
+            ?->currentSubscription();
 
         if (! $subscription || $eligibility->isReplacedByLifetime($subscription)) {
             abort(404);
         }
 
         try {
-            return redirect()->away($this->billingService->getPlanChangeUrl($subscription));
+            return redirect()->away(
+                $this->gateways
+                    ->driver($subscription->provider)
+                    ->getPlanChangeUrl($subscription)
+            );
         } catch (GatewayOperationFailed $e) {
             report($e);
 

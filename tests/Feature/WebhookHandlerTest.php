@@ -6,6 +6,8 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Modules\Billing\Actions\CancelSubscription;
+use Modules\Billing\Actions\StartCheckout;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
@@ -29,10 +31,10 @@ use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Models\WebhookEvent;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeEventMapper;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -40,11 +42,11 @@ use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
 
 #[AllowMockObjectsWithoutExpectations]
-class BillingServiceTest extends TestCase
+class WebhookHandlerTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billingService;
+    private WebhookHandler $billingService;
 
     /** @var StripeGateway&MockObject */
     private StripeGateway $gateway;
@@ -78,7 +80,7 @@ class BillingServiceTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billingService = app()->make(BillingService::class);
+        $this->billingService = app()->make(WebhookHandler::class);
     }
 
     public function test_process_checkout_creates_customer(): void
@@ -109,7 +111,7 @@ class BillingServiceTest extends TestCase
             ],
         ];
 
-        $result = $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', $billingDetails);
+        $result = app(StartCheckout::class)->handle($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', $billingDetails);
 
         $this->assertEquals('cs_guest_123', $result->sessionId);
         $this->assertEquals('https://stripe.com/checkout', $result->url);
@@ -154,7 +156,7 @@ class BillingServiceTest extends TestCase
             ->with($subscription)
             ->willReturn($periodEnd);
 
-        $this->billingService->cancelAtPeriodEnd($subscription);
+        app(CancelSubscription::class)->handle($subscription);
 
         $subscription->refresh();
         $this->assertNotNull($subscription->cancelled_at);
@@ -183,7 +185,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $session->refresh();
         $this->assertEquals(CheckoutSessionStatus::Completed, $session->status);
@@ -243,7 +245,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription = Subscription::where('provider_subscription_id', 'sub_test_period')->first();
         $this->assertNotNull($subscription);
@@ -277,7 +279,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $session->refresh();
         $this->assertEquals(CheckoutSessionStatus::Completed, $session->status);
@@ -319,7 +321,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription = Subscription::where('provider_subscription_id', 'sub_test_sub_pay')->first();
         $this->assertNotNull($subscription);
@@ -363,7 +365,7 @@ class BillingServiceTest extends TestCase
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
         try {
-            $this->billingService->handleWebhook('stripe', request());
+            $this->billingService->handle('stripe', request());
             $this->fail('Expected the handler to fail while the subscription is missing.');
         } catch (\RuntimeException) {
         }
@@ -377,7 +379,7 @@ class BillingServiceTest extends TestCase
             'provider_subscription_id' => 'sub_test_early',
         ]);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('payments', [
             'subscription_id' => $subscription->id,
@@ -407,7 +409,7 @@ class BillingServiceTest extends TestCase
             ],
         ));
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertNotNull(WebhookEvent::where('provider_event_id', 'evt_test_stranger')->value('processed_at'));
         Event::assertNotDispatched(SubscriptionUpdated::class);
@@ -435,7 +437,7 @@ class BillingServiceTest extends TestCase
         $this->expectException(\RuntimeException::class);
 
         try {
-            $this->billingService->handleWebhook('stripe', request());
+            $this->billingService->handle('stripe', request());
         } finally {
             $this->assertDatabaseHas('webhook_events', [
                 'provider_event_id' => 'evt_test_early_sub',
@@ -470,12 +472,12 @@ class BillingServiceTest extends TestCase
             StripeWebhook::make(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_retry_2', payload: $invoice),
         );
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
         // The invoice records the failure; the subscription's own event is what
         // moves it, so the row is untouched here.
         $this->assertEquals(SubscriptionStatus::Active, $subscription->fresh()->status);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('payments', 1);
         $this->assertDatabaseHas('payments', [
@@ -512,8 +514,8 @@ class BillingServiceTest extends TestCase
             StripeWebhook::make(type: WebhookEventType::PaymentFailed, provider: 'stripe', providerEventId: 'evt_late_2', payload: $invoice),
         );
 
-        $this->billingService->handleWebhook('stripe', request());
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('payments', ['provider_payment_id' => 'pi_test_late_fail', 'status' => PaymentStatus::Succeeded->value]);
         $this->assertEquals(SubscriptionStatus::Active, $subscription->fresh()->status);
@@ -537,8 +539,8 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_first', url: 'https://stripe.com/first', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
-        $again = $this->billingService->processCheckout($session->fresh(), $user, $user, 'https://example.com/success', 'https://example.com/other', coupon: 'SAVE10');
+        app(StartCheckout::class)->handle($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
+        $again = app(StartCheckout::class)->handle($session->fresh(), $user, $user, 'https://example.com/success', 'https://example.com/other', coupon: 'SAVE10');
 
         $this->assertSame('cs_first', $again->sessionId);
         $this->assertSame('https://stripe.com/first', $again->url);
@@ -566,13 +568,13 @@ class BillingServiceTest extends TestCase
             StripeWebhook::make(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_delayed_2', payload: $payload + ['payment_status' => 'paid']),
         );
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertEquals(CheckoutSessionStatus::Pending, $session->fresh()->status);
         $this->assertDatabaseCount('subscriptions', 0);
         Event::assertNotDispatched(SubscriptionCreated::class);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertEquals(CheckoutSessionStatus::Completed, $session->fresh()->status);
         $this->assertDatabaseCount('subscriptions', 1);
@@ -599,7 +601,7 @@ class BillingServiceTest extends TestCase
             ],
         ));
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertEquals(CheckoutSessionStatus::Completed, $session->fresh()->status);
         Event::assertDispatched(SubscriptionCreated::class);
@@ -645,7 +647,7 @@ class BillingServiceTest extends TestCase
         $this->gateway->method('verifyAndParseWebhook')
             ->willReturnOnConsecutiveCalls($checkoutWebhook, $invoiceWebhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription = Subscription::where('provider_subscription_id', 'sub_test_merge')->first();
         $this->assertNotNull($subscription);
@@ -656,7 +658,7 @@ class BillingServiceTest extends TestCase
         $this->assertNull($payment->provider_payment_id);
 
         // Process invoice webhook
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         // Still only 1 payment — not duplicated
         $this->assertDatabaseCount('payments', 1);
@@ -693,7 +695,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals(SubscriptionStatus::PastDue, $subscription->status);
@@ -730,7 +732,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals(SubscriptionStatus::Active, $subscription->status);
@@ -766,7 +768,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals(SubscriptionStatus::Active, $subscription->status);
@@ -799,7 +801,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals($expectedStatus, $subscription->status);
@@ -840,7 +842,7 @@ class BillingServiceTest extends TestCase
             payload: ['id' => 'sub_test_late', 'status' => 'active'],
         ));
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertEquals(SubscriptionStatus::Cancelled, $subscription->fresh()->status);
         Event::assertNotDispatched(SubscriptionUpdated::class);
@@ -865,7 +867,7 @@ class BillingServiceTest extends TestCase
             occurredAt: CarbonImmutable::now()->subMinute(),
         ));
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertEquals(SubscriptionStatus::PastDue, $subscription->fresh()->status);
         Event::assertNotDispatched(SubscriptionUpdated::class);
@@ -889,7 +891,7 @@ class BillingServiceTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
     }
 
     public function test_webhook_subscription_deleted_cancels_subscription(): void
@@ -912,7 +914,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals(SubscriptionStatus::Cancelled, $subscription->status);
@@ -950,7 +952,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('payment_methods', [
             'provider_payment_method_id' => 'pm_test_123',
@@ -1000,7 +1002,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertEquals(SubscriptionStatus::Active, $subscription->status);
@@ -1047,7 +1049,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('invoices', [
             'customer_id' => $customer->id,
@@ -1107,7 +1109,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $subscription->refresh();
         $this->assertNotNull($subscription->current_period_starts_at);
@@ -1170,7 +1172,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('invoices', [
             'customer_id' => $customer->id,
@@ -1203,7 +1205,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('payments', 0);
         Event::assertNotDispatched(PaymentSucceeded::class);
@@ -1227,7 +1229,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('payments', 0);
         Event::assertNotDispatched(PaymentFailed::class);
@@ -1253,7 +1255,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('invoices', 0);
         Event::assertNotDispatched(InvoicePaid::class);
@@ -1275,7 +1277,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('subscriptions', 0);
         Event::assertNotDispatched(CheckoutCompleted::class);
@@ -1292,7 +1294,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('webhook_events', [
             'provider_event_id' => 'evt_unmapped',
@@ -1327,8 +1329,8 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('invoices', 1);
         $this->assertDatabaseHas('invoices', [
@@ -1357,7 +1359,7 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_update', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', [
+        app(StartCheckout::class)->handle($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel', [
             'name' => 'New Name',
             'email' => 'new@example.com',
         ]);
@@ -1384,7 +1386,7 @@ class BillingServiceTest extends TestCase
             new CheckoutResultData(sessionId: 'cs_created', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $this->billingService->processCheckout($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
+        app(StartCheckout::class)->handle($session, $user, $user, 'https://example.com/success', 'https://example.com/cancel');
 
         $this->assertSame('cus_created', $customer->refresh()->provider_customer_id);
         $this->assertDatabaseCount('customers', 1);
@@ -1421,7 +1423,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseCount('payment_methods', 1);
 
@@ -1460,7 +1462,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $oldPm->refresh();
         $this->assertFalse($oldPm->is_default);
@@ -1491,7 +1493,7 @@ class BillingServiceTest extends TestCase
 
         $this->gateway->method('verifyAndParseWebhook')->willReturn($webhook);
 
-        $this->billingService->handleWebhook('stripe', request());
+        $this->billingService->handle('stripe', request());
 
         $this->assertDatabaseHas('payments', [
             'provider_payment_id' => 'pi_zero',

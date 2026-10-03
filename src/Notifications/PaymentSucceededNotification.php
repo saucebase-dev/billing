@@ -2,28 +2,16 @@
 
 namespace Modules\Billing\Notifications;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 use Modules\Billing\Enums\Currency;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
 
-class PaymentSucceededNotification extends Notification
+class PaymentSucceededNotification extends BillingNotification
 {
-    use Queueable;
-
     public function __construct(
         public Payment $payment,
     ) {}
-
-    /**
-     * @return array<int, string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['mail'];
-    }
 
     public function toMail(object $notifiable): MailMessage
     {

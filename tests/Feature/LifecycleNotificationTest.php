@@ -14,9 +14,9 @@ use Modules\Billing\Models\Subscription;
 use Modules\Billing\Notifications\AccessSuspendedNotification;
 use Modules\Billing\Notifications\GraceStartedNotification;
 use Modules\Billing\Notifications\TrialEndingNotification;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\MockObject\Stub;
@@ -30,7 +30,7 @@ class LifecycleNotificationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     /** @var StripeGateway&Stub */
     private StripeGateway $gateway;
@@ -60,7 +60,7 @@ class LifecycleNotificationTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         app(BillingSettings::class)->fill(['grace_period_days' => 3])->save();
 
         $this->user = User::factory()->create();
@@ -81,7 +81,7 @@ class LifecycleNotificationTest extends TestCase
             payload: ['id' => 'sub_mail', ...$payload],
         );
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     public function test_falling_behind_asks_the_customer_to_fix_their_card(): void

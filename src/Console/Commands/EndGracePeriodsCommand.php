@@ -3,9 +3,9 @@
 namespace Modules\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
+use Modules\Billing\Actions\SuspendLapsedSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 
 /**
  * Suspend subscriptions whose grace window has closed.
@@ -20,7 +20,7 @@ class EndGracePeriodsCommand extends Command
 
     protected $description = 'Suspend subscriptions whose grace period has run out';
 
-    public function handle(BillingService $billing): int
+    public function handle(SuspendLapsedSubscription $suspend): int
     {
         $suspended = 0;
         $failed = 0;
@@ -29,11 +29,11 @@ class EndGracePeriodsCommand extends Command
             ->whereNotNull('grace_ends_at')
             ->where('grace_ends_at', '<=', now())
             ->lazyById()
-            ->each(function (Subscription $subscription) use ($billing, &$suspended, &$failed): void {
+            ->each(function (Subscription $subscription) use ($suspend, &$suspended, &$failed): void {
                 // One row that cannot be written (a lock timeout, say) must not
                 // stop the rest; it is still past due and the next run retries it.
                 try {
-                    $suspended += $billing->suspendIfGraceHasRunOut($subscription) ? 1 : 0;
+                    $suspended += $suspend->handle($subscription) ? 1 : 0;
                 } catch (\Throwable $e) {
                     report($e);
                     $failed++;

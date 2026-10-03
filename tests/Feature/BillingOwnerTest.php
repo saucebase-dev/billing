@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Inertia\Testing\AssertableInertia;
+use Modules\Billing\Actions\StartCheckout;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
@@ -19,8 +20,8 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Notifications\GraceStartedNotification;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Settings\BillingSection;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\TestWorkspace;
@@ -263,7 +264,7 @@ class BillingOwnerTest extends TestCase
     public function test_the_return_fulfils_only_the_managed_owners_checkout(): void
     {
         $this->billWorkspaces();
-        $service = $this->mock(BillingService::class);
+        $service = $this->mock(WebhookHandler::class);
         $service->shouldNotReceive('fulfillCheckoutIfNeeded');
 
         $ownerless = $this->pendingSession();
@@ -279,7 +280,7 @@ class BillingOwnerTest extends TestCase
         $workspace = app(BillingOwners::class)->managedBy($this->manager);
         $this->assertNull($workspace->billingAccount());
 
-        app(BillingService::class)->processCheckout($this->pendingSession(), $workspace, $this->manager, 'https://app.test/ok', 'https://app.test/no');
+        app(StartCheckout::class)->handle($this->pendingSession(), $workspace, $this->manager, 'https://app.test/ok', 'https://app.test/no');
 
         $this->assertNotNull($workspace->billingAccount());
     }

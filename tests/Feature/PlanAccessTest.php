@@ -17,9 +17,10 @@ use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\PurchaseEligibility;
+use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Tests\Support\StripeWebhook;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -36,7 +37,7 @@ class PlanAccessTest extends TestCase
 {
     use RefreshDatabase;
 
-    private BillingService $billing;
+    private WebhookHandler $billing;
 
     /** @var StripeGateway&MockObject */
     private StripeGateway $gateway;
@@ -56,7 +57,7 @@ class PlanAccessTest extends TestCase
         $manager->method('driver')->willReturn($this->gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
 
-        $this->billing = app(BillingService::class);
+        $this->billing = app(WebhookHandler::class);
         $this->user = $this->createUser();
         $this->customer = Customer::factory()->for($this->user, 'owner')->create();
     }
@@ -92,7 +93,7 @@ class PlanAccessTest extends TestCase
             payload: $payload,
         ));
 
-        $this->billing->handleWebhook('stripe', request());
+        $this->billing->handle('stripe', request());
     }
 
     public function test_checkout_refuses_what_eligibility_refuses(): void
@@ -101,7 +102,7 @@ class PlanAccessTest extends TestCase
 
         $this->expectException(ValidationException::class);
 
-        $this->billing->assertCanBuy($this->user, Price::factory()->create());
+        app(PurchaseEligibility::class)->assertCanBuy($this->user, Price::factory()->create());
     }
 
     /** The server refuses it: the pricing page hiding the button is not enough. */

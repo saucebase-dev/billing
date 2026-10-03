@@ -15,9 +15,9 @@ use Modules\Billing\Exceptions\InvalidWebhookSignature;
 use Modules\Billing\Exceptions\WebhookDependencyNotReady;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\WebhookHandler;
 use PHPUnit\Framework\MockObject\Stub;
 use Tests\TestCase;
 
@@ -115,7 +115,7 @@ class WebhookErrorHandlingTest extends TestCase
         Customer::factory()->create(['provider' => 'stripe', 'provider_customer_id' => 'cus_known']);
 
         try {
-            app(BillingService::class)->handleWebhook('stripe', tap(request(), fn () => $this->deliveries[] = $this->subscriptionUpdate('evt_named')));
+            app(WebhookHandler::class)->handle('stripe', tap(request(), fn () => $this->deliveries[] = $this->subscriptionUpdate('evt_named')));
             $this->fail('No exception.');
         } catch (WebhookDependencyNotReady $e) {
             $this->assertSame('evt_named', $e->context()['provider_event_id']);

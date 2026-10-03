@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
+use Modules\Billing\Actions\StartCheckout;
 use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
@@ -15,7 +16,7 @@ use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
+use Modules\Billing\Services\PurchaseEligibility;
 use Modules\Billing\Settings\BillingSettings;
 use Saucebase\Core\Helpers\Toast;
 use Symfony\Component\HttpFoundation\Response;
@@ -23,7 +24,8 @@ use Symfony\Component\HttpFoundation\Response;
 class CheckoutController
 {
     public function __construct(
-        private BillingService $billingService,
+        private StartCheckout $startCheckout,
+        private PurchaseEligibility $eligibility,
         private BillingSettings $settings,
         private BillingOwners $owners,
     ) {}
@@ -46,7 +48,7 @@ class CheckoutController
 
         // Refused before a session exists, guests included: a pending session
         // freezes its plan. processCheckout() checks again once a guest signs in.
-        $this->billingService->assertCanBuy($owner, $price);
+        $this->eligibility->assertCanBuy($owner, $price);
 
         // Under the plan's row lock, the same one an admin edit takes: once this
         // pending session exists the plan's terms are fixed (Product::isSold()),
@@ -106,7 +108,7 @@ class CheckoutController
         ]);
 
         try {
-            $result = $this->billingService->processCheckout(
+            $result = $this->startCheckout->handle(
                 session: $checkoutSession,
                 owner: $owner,
                 buyer: $request->user(),
@@ -154,7 +156,7 @@ class CheckoutController
     private function sendToGateway(CheckoutSession $session, BillingOwner $owner, User $buyer): Response|InertiaResponse
     {
         try {
-            $result = $this->billingService->processCheckout(
+            $result = $this->startCheckout->handle(
                 session: $session,
                 owner: $owner,
                 buyer: $buyer,

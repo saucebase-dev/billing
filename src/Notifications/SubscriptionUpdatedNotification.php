@@ -2,25 +2,24 @@
 
 namespace Modules\Billing\Notifications;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
+use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Subscription;
 
-class SubscriptionUpdatedNotification extends Notification
+class SubscriptionUpdatedNotification extends BillingNotification
 {
-    use Queueable;
-
     public function __construct(
         public Subscription $subscription,
     ) {}
 
     /**
-     * @return array<int, string>
+     * Only a cancellation scheduled for the period end is news here. Falling behind on
+     * payment has its own mail, which names the date access ends.
      */
-    public function via(object $notifiable): array
+    public function shouldSend(object $notifiable, string $channel): bool
     {
-        return ['mail'];
+        return $this->subscription->cancelled_at !== null
+            && $this->subscription->status === SubscriptionStatus::Active;
     }
 
     public function toMail(object $notifiable): MailMessage

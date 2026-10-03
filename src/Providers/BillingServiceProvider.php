@@ -8,7 +8,6 @@ use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Services\BillingOwners;
-use Modules\Billing\Services\BillingService;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Saucebase\Core\Providers\ModuleServiceProvider;
 
@@ -24,7 +23,6 @@ class BillingServiceProvider extends ModuleServiceProvider
             return $app->make(PaymentGatewayManager::class)->driver();
         });
 
-        $this->app->singleton(BillingService::class);
         $this->app->singleton(BillingOwners::class);
     }
 

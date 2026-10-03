@@ -3,9 +3,12 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Exceptions;
+use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Events\SubscriptionResumed;
 use Modules\Billing\Exceptions\GatewayOperationFailed;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
@@ -114,5 +117,52 @@ class SubscriptionResumeTest extends TestCase
 
         $this->assertNotNull($subscription->fresh()->cancelled_at);
         Exceptions::assertReportedCount(1);
+    }
+
+    /** A subscription is resumed through the gateway it was bought on, not the default. */
+    public function test_resume_uses_the_subscriptions_own_gateway(): void
+    {
+        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager->expects($this->once())->method('driver')->with('paddle')->willReturn($this->gateway);
+        app()->instance(PaymentGatewayManager::class, $manager);
+
+        $subscription = Subscription::factory()->create([
+            'provider' => 'paddle',
+            'status' => SubscriptionStatus::Active,
+            'cancelled_at' => now(),
+            'ends_at' => now()->addMonth(),
+        ]);
+
+        app(ResumeSubscription::class)->handle($subscription);
+
+        $this->assertNull($subscription->fresh()->cancelled_at);
+    }
+
+    public function test_resuming_announces_it(): void
+    {
+        Event::fake([SubscriptionResumed::class]);
+        $subscription = Subscription::factory()->create([
+            'status' => SubscriptionStatus::Active,
+            'cancelled_at' => now(),
+            'ends_at' => now()->addMonth(),
+        ]);
+
+        app(ResumeSubscription::class)->handle($subscription);
+
+        Event::assertDispatched(SubscriptionResumed::class);
+    }
+
+    /** The portal opens on the customer's own gateway, not the default. */
+    public function test_the_billing_portal_uses_the_customers_own_gateway(): void
+    {
+        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager->expects($this->once())->method('driver')->with('paddle')->willReturn($this->gateway);
+        app()->instance(PaymentGatewayManager::class, $manager);
+        $this->gateway->method('getManagementUrl')->willReturn('https://provider.test/portal');
+
+        $user = $this->createUser();
+        Customer::factory()->for($user, 'owner')->create(['provider' => 'paddle']);
+
+        $this->actingAs($user)->get(route('billing.portal'))->assertRedirect('https://provider.test/portal');
     }
 }
