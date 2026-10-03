@@ -29,9 +29,10 @@ test.describe.parallel('Settings Billing lifecycle', () => {
         await expect(billingPage.trial).toBeVisible();
         await expect(billingPage.addPaymentMethod).toBeVisible();
         // The card is added in the provider's portal, so that is where it leads.
-        await expect(
-            page.locator('a', { has: billingPage.addPaymentMethod }),
-        ).toHaveAttribute('href', /\/billing\/portal$/);
+        await expect(billingPage.addPaymentMethod).toHaveAttribute(
+            'href',
+            /\/billing\/portal$/,
+        );
         await expect(billingPage.grace).not.toBeVisible();
     });
 
