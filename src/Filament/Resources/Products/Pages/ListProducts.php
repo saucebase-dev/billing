@@ -7,7 +7,7 @@ use Filament\Actions\CreateAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -101,7 +101,7 @@ class ListProducts extends ListRecords
      */
     private static function failureMessage(\Throwable $e): string
     {
-        return $e instanceof GatewayOperationFailed
+        return $e instanceof GatewayOperationFailedException
             ? $e->getMessage()
             : __('Something went wrong. The error has been reported.');
     }

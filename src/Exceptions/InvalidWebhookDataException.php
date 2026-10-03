@@ -3,7 +3,7 @@
 namespace Modules\Billing\Exceptions;
 
 /** A recognised event whose data is not the shape the module expects: a gateway defect. */
-class InvalidWebhookData extends BillingException
+class InvalidWebhookDataException extends BillingException
 {
     public function __construct(
         public readonly string $provider,

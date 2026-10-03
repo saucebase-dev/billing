@@ -7,7 +7,7 @@ namespace Modules\Billing\Exceptions;
  * report writes every previous exception's message, and a provider message can
  * echo back what it was sent.
  */
-class ProviderError extends BillingException
+class ProviderErrorException extends BillingException
 {
     public function __construct(
         public readonly string $sdkClass,

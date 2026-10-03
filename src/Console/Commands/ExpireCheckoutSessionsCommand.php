@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Enums\CheckoutExpiry;
 use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -87,7 +87,7 @@ class ExpireCheckoutSessionsCommand extends Command
                 }
 
                 $expiry = $manager->driver($session->provider ?? $manager->getDefaultDriver())->expireCheckoutSession($session->provider_session_id);
-            } catch (GatewayOperationFailed $e) {
+            } catch (GatewayOperationFailedException $e) {
                 // Unknown outcome: the trial stays held until the provider can say.
                 report($e);
                 $this->unresolved++;
@@ -121,7 +121,7 @@ class ExpireCheckoutSessionsCommand extends Command
      * Null when no replay is possible; past the window the outcome is left to
      * reconciliation, since every run would otherwise fail on it for good.
      *
-     * @throws GatewayOperationFailed when the provider cannot answer
+     * @throws GatewayOperationFailedException when the provider cannot answer
      */
     private function resolveAtProvider(CheckoutSession $session, PaymentGatewayManager $manager): ?string
     {

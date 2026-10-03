@@ -7,7 +7,7 @@ namespace Modules\Billing\Exceptions;
  * arrived yet. Expected: providers do not order their events, and failing the
  * delivery is what makes them send it again once the missing row exists.
  */
-class WebhookDependencyNotReady extends BillingException
+class WebhookDependencyNotReadyException extends BillingException
 {
     public function __construct(
         public readonly string $provider,

@@ -19,9 +19,9 @@ use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutExpiry;
 use Modules\Billing\Enums\PaymentMethodType;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
-use Modules\Billing\Exceptions\InvalidWebhookSignature;
-use Modules\Billing\Exceptions\ProviderError;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
+use Modules\Billing\Exceptions\InvalidWebhookSignatureException;
+use Modules\Billing\Exceptions\ProviderErrorException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -133,7 +133,7 @@ class StripeGateway implements PaymentGatewayInterface
     {
         try {
             $status = $this->call('expire a checkout session', fn () => $this->stripe->checkout->sessions->expire($providerSessionId)->status, $providerSessionId);
-        } catch (GatewayOperationFailed) {
+        } catch (GatewayOperationFailedException) {
             // Stripe refuses a session that is not open, which includes one an
             // earlier call expired whose answer was lost: ask what it is. If that
             // fails too, the outcome is unknown and the exception says so.
@@ -144,7 +144,7 @@ class StripeGateway implements PaymentGatewayInterface
             'expired' => CheckoutExpiry::Expired,
             'complete' => CheckoutExpiry::Completed,
             // Still open after an expiry that failed: nothing is proven.
-            default => throw new GatewayOperationFailed('stripe', 'expire a checkout session', providerResourceId: $providerSessionId),
+            default => throw new GatewayOperationFailedException('stripe', 'expire a checkout session', providerResourceId: $providerSessionId),
         };
     }
 
@@ -163,7 +163,7 @@ class StripeGateway implements PaymentGatewayInterface
                 'active' => true,
                 'limit' => 1,
             ]));
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             // Reported, then the documented fallback: Stripe's page asks for the code.
             report($e);
 
@@ -416,7 +416,7 @@ class StripeGateway implements PaymentGatewayInterface
             );
         } catch (SignatureVerificationException|\UnexpectedValueException) {
             // A bad signature, or a body that is not an event: nothing proves it came from Stripe.
-            throw new InvalidWebhookSignature('stripe');
+            throw new InvalidWebhookSignatureException('stripe');
         }
 
         $type = self::EVENT_MAP[$event->type] ?? null;
@@ -445,10 +445,10 @@ class StripeGateway implements PaymentGatewayInterface
         try {
             return $call();
         } catch (ApiErrorException $e) {
-            throw new GatewayOperationFailed(
+            throw new GatewayOperationFailedException(
                 provider: 'stripe',
                 operation: $operation,
-                previous: new ProviderError(
+                previous: new ProviderErrorException(
                     sdkClass: $e::class,
                     message: $e->getMessage(),
                     providerCode: $e->getStripeCode(),

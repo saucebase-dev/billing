@@ -6,7 +6,7 @@ namespace Modules\Billing\Exceptions;
  * The subscription kept changing while the provider was asked about it. The
  * delivery fails so the provider sends it again; nothing was written.
  */
-class SubscriptionReconciliationConflict extends BillingException
+class SubscriptionReconciliationConflictException extends BillingException
 {
     public function __construct(
         public readonly int $subscriptionId,

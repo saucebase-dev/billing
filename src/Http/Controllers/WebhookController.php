@@ -5,8 +5,8 @@ namespace Modules\Billing\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
-use Modules\Billing\Exceptions\InvalidWebhookSignature;
-use Modules\Billing\Exceptions\WebhookDependencyNotReady;
+use Modules\Billing\Exceptions\InvalidWebhookSignatureException;
+use Modules\Billing\Exceptions\WebhookDependencyNotReadyException;
 use Modules\Billing\Services\WebhookHandler;
 
 /**
@@ -26,11 +26,11 @@ class WebhookController
             $this->webhooks->handle($provider, $request);
 
             return response()->noContent(200);
-        } catch (InvalidWebhookSignature $e) {
+        } catch (InvalidWebhookSignatureException $e) {
             Log::warning('Webhook rejected: signature', $e->context());
 
             return response()->noContent(400);
-        } catch (WebhookDependencyNotReady $e) {
+        } catch (WebhookDependencyNotReadyException $e) {
             // Expected: providers do not order their events. The resend lands
             // once the row it needs exists, so this is not reported.
             Log::info('Webhook deferred: dependency not ready', $e->context());

@@ -10,9 +10,9 @@ use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\InvalidWebhookData;
-use Modules\Billing\Exceptions\InvalidWebhookSignature;
-use Modules\Billing\Exceptions\WebhookDependencyNotReady;
+use Modules\Billing\Exceptions\InvalidWebhookDataException;
+use Modules\Billing\Exceptions\InvalidWebhookSignatureException;
+use Modules\Billing\Exceptions\WebhookDependencyNotReadyException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\Gateways\StripeGateway;
@@ -69,11 +69,11 @@ class WebhookErrorHandlingTest extends TestCase
 
     public function test_a_bad_signature_is_refused_with_nothing_said(): void
     {
-        $response = $this->deliver(new InvalidWebhookSignature('stripe'));
+        $response = $this->deliver(new InvalidWebhookSignatureException('stripe'));
 
         $response->assertStatus(400);
         $this->assertSame('', $response->getContent());
-        Exceptions::assertNotReported(InvalidWebhookSignature::class);
+        Exceptions::assertNotReported(InvalidWebhookSignatureException::class);
     }
 
     public function test_an_event_the_module_does_not_handle_is_acknowledged(): void
@@ -90,7 +90,7 @@ class WebhookErrorHandlingTest extends TestCase
 
         $this->deliver($this->subscriptionUpdate())->assertServiceUnavailable();
         $this->assertDatabaseHas('webhook_events', ['provider_event_id' => 'evt_1', 'processed_at' => null]);
-        Exceptions::assertNotReported(WebhookDependencyNotReady::class);
+        Exceptions::assertNotReported(WebhookDependencyNotReadyException::class);
 
         Subscription::factory()->create(['customer_id' => $customer->id, 'provider' => 'stripe', 'provider_subscription_id' => 'sub_late']);
 
@@ -106,7 +106,7 @@ class WebhookErrorHandlingTest extends TestCase
         $response->assertStatus(500);
         $this->assertSame('', $response->getContent());
         Exceptions::assertReportedCount(1);
-        Exceptions::assertReported(InvalidWebhookData::class);
+        Exceptions::assertReported(InvalidWebhookDataException::class);
         $this->assertDatabaseHas('webhook_events', ['provider_event_id' => 'evt_bad', 'processed_at' => null]);
     }
 
@@ -117,7 +117,7 @@ class WebhookErrorHandlingTest extends TestCase
         try {
             app(WebhookHandler::class)->handle('stripe', tap(request(), fn () => $this->deliveries[] = $this->subscriptionUpdate('evt_named')));
             $this->fail('No exception.');
-        } catch (WebhookDependencyNotReady $e) {
+        } catch (WebhookDependencyNotReadyException $e) {
             $this->assertSame('evt_named', $e->context()['provider_event_id']);
             $this->assertSame('billing.webhook_dependency_not_ready', $e->context()['billing_error_id']);
         }

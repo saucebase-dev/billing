@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Modules\Billing\Actions\CancelSubscription;
 use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Services\BillingOwners;
 use Saucebase\Core\Helpers\Toast;
 
@@ -28,7 +28,7 @@ class SubscriptionController
 
         try {
             $this->cancelSubscription->handle($subscription);
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             return $this->unavailable($e);
         }
 
@@ -53,7 +53,7 @@ class SubscriptionController
 
         try {
             $resumeSubscription->handle($subscription);
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             return $this->unavailable($e);
         }
 
@@ -64,7 +64,7 @@ class SubscriptionController
     }
 
     /** The provider did not answer: nothing changed, so say so and let them try again. */
-    private function unavailable(GatewayOperationFailed $e): RedirectResponse
+    private function unavailable(GatewayOperationFailedException $e): RedirectResponse
     {
         report($e);
 

@@ -4,7 +4,7 @@ namespace Modules\Billing\Actions;
 
 use Illuminate\Validation\ValidationException;
 use Modules\Billing\Events\SubscriptionResumed;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
@@ -19,7 +19,7 @@ class ResumeSubscription
 
     /**
      * @throws ValidationException when a lifetime plan replaces it
-     * @throws GatewayOperationFailed when the provider does not answer
+     * @throws GatewayOperationFailedException when the provider does not answer
      */
     public function handle(Subscription $subscription): void
     {

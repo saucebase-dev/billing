@@ -27,7 +27,7 @@ use Modules\Billing\Enums\PaymentMethodType;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
@@ -269,7 +269,7 @@ class NeutralGatewayTest extends TestCase
             ->assertRedirect(SettingsSection::url('billing'));
 
         $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
-        Exceptions::assertReported(GatewayOperationFailed::class);
+        Exceptions::assertReported(GatewayOperationFailedException::class);
     }
 
     private function failingHandOff(): CheckoutSession
@@ -366,7 +366,7 @@ class FakeGateway implements PaymentGatewayInterface
 
     public function retrieveCheckoutSession(string $providerSessionId): CheckoutSessionData
     {
-        return $this->checkouts[$providerSessionId] ?? throw new GatewayOperationFailed('fake', 'read a checkout session', providerResourceId: $providerSessionId);
+        return $this->checkouts[$providerSessionId] ?? throw new GatewayOperationFailedException('fake', 'read a checkout session', providerResourceId: $providerSessionId);
     }
 
     public function resolvePaymentMethod(string $reference): ?PaymentMethodData
@@ -386,7 +386,7 @@ class FakeGateway implements PaymentGatewayInterface
         $this->lastCheckout = $data;
 
         if ($this->failCheckout) {
-            throw new GatewayOperationFailed('fake', 'create a checkout session');
+            throw new GatewayOperationFailedException('fake', 'create a checkout session');
         }
 
         return new CheckoutResultData(sessionId: 'fcs_new', url: 'https://fake.test/pay', provider: 'fake');

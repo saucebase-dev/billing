@@ -6,7 +6,7 @@ use Modules\Billing\Data\Webhook\RefundData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\InvalidWebhookData;
+use Modules\Billing\Exceptions\InvalidWebhookDataException;
 use PHPUnit\Framework\TestCase;
 
 class WebhookDataTest extends TestCase
@@ -34,7 +34,7 @@ class WebhookDataTest extends TestCase
     /** A gateway that sends the wrong shape fails loudly, not with a null dereference later. */
     public function test_data_of_the_wrong_class_is_refused(): void
     {
-        $this->expectException(InvalidWebhookData::class);
+        $this->expectException(InvalidWebhookDataException::class);
 
         $this->webhook(WebhookEventType::SubscriptionUpdated, new RefundData(null, 'pay_1', 100, true))
             ->dataAs(SubscriptionStateData::class);
@@ -42,7 +42,7 @@ class WebhookDataTest extends TestCase
 
     public function test_a_recognised_type_without_data_is_refused(): void
     {
-        $this->expectException(InvalidWebhookData::class);
+        $this->expectException(InvalidWebhookDataException::class);
 
         $this->webhook(WebhookEventType::SubscriptionUpdated, null)->dataAs(SubscriptionStateData::class);
     }

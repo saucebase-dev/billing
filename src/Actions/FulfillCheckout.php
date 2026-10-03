@@ -3,7 +3,7 @@
 namespace Modules\Billing\Actions;
 
 use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Services\PaymentGatewayManager;
 
@@ -33,7 +33,7 @@ class FulfillCheckout
 
         try {
             $checkout = $this->manager->driver($session->provider)->retrieveCheckoutSession($session->provider_session_id);
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             // The panel still renders and nothing claims success; the webhook
             // completes the checkout when it arrives.
             report($e);

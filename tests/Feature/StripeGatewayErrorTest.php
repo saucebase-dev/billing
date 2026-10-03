@@ -5,8 +5,8 @@ namespace Modules\Billing\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Log;
 use Modules\Billing\Enums\CheckoutExpiry;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
-use Modules\Billing\Exceptions\ProviderError;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
+use Modules\Billing\Exceptions\ProviderErrorException;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Monolog\Formatter\LineFormatter;
@@ -63,13 +63,13 @@ class StripeGatewayErrorTest extends TestCase
         try {
             $gateway->retrieveSubscription('sub_1');
             $this->fail('No exception.');
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             $this->assertSame('billing.gateway_operation_failed', $e->context()['billing_error_id']);
             $this->assertSame('stripe', $e->context()['provider']);
             $this->assertSame('req_trace', $e->context()['provider_request_id']);
             $this->assertSame('resource_missing', $e->context()['provider_code']);
             $this->assertSame(404, $e->context()['http_status']);
-            $this->assertInstanceOf(ProviderError::class, $e->getPrevious());
+            $this->assertInstanceOf(ProviderErrorException::class, $e->getPrevious());
         }
     }
 
@@ -120,7 +120,7 @@ class StripeGatewayErrorTest extends TestCase
             '/v1/checkout/sessions/cs_1' => [self::error('invalid_request_error', 'No such checkout.session', 'resource_missing'), 404],
         ]);
 
-        $this->expectException(GatewayOperationFailed::class);
+        $this->expectException(GatewayOperationFailedException::class);
 
         $gateway->expireCheckoutSession('cs_1');
     }
@@ -132,7 +132,7 @@ class StripeGatewayErrorTest extends TestCase
             '/v1/checkout/sessions/cs_1' => [self::error('api_error', 'Down'), 500],
         ]);
 
-        $this->expectException(GatewayOperationFailed::class);
+        $this->expectException(GatewayOperationFailedException::class);
 
         $gateway->expireCheckoutSession('cs_1');
     }
@@ -155,7 +155,7 @@ class StripeGatewayErrorTest extends TestCase
 
         try {
             $gateway->retrieveSubscription('sub_1');
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             report($e);
         }
 

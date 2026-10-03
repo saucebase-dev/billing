@@ -3,7 +3,7 @@
 namespace Modules\Billing\Exceptions;
 
 /** A delivery that does not prove it came from the provider. Never processed. */
-class InvalidWebhookSignature extends BillingException
+class InvalidWebhookSignatureException extends BillingException
 {
     public function __construct(public readonly string $provider)
     {

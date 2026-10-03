@@ -8,7 +8,7 @@ use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Enums\CheckoutExpiry;
 use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
@@ -185,12 +185,12 @@ class TrialReservationReleaseTest extends TestCase
     {
         Exceptions::fake();
         $session = $this->heldTrial();
-        $this->gateway->method('expireCheckoutSession')->willThrowException(new GatewayOperationFailed('stripe', 'expire a checkout session'));
+        $this->gateway->method('expireCheckoutSession')->willThrowException(new GatewayOperationFailedException('stripe', 'expire a checkout session'));
 
         $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
 
         $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
-        Exceptions::assertReported(GatewayOperationFailed::class);
+        Exceptions::assertReported(GatewayOperationFailedException::class);
     }
 
     public function test_a_completed_checkout_is_not_a_failed_run(): void
@@ -208,7 +208,7 @@ class TrialReservationReleaseTest extends TestCase
         $stuck = $this->heldTrial(['provider_session_id' => 'cs_stuck']);
         $free = $this->heldTrial(['provider_session_id' => 'cs_free', 'customer_id' => Customer::factory()->create()->id]);
         $this->gateway->method('expireCheckoutSession')->willReturnCallback(fn (string $id) => $id === 'cs_stuck'
-            ? throw new GatewayOperationFailed('stripe', 'expire a checkout session')
+            ? throw new GatewayOperationFailedException('stripe', 'expire a checkout session')
             : CheckoutExpiry::Expired);
 
         $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
@@ -222,11 +222,11 @@ class TrialReservationReleaseTest extends TestCase
     {
         Exceptions::fake();
         $session = $this->heldTrial(['provider_session_id' => null, 'provider_url' => null]);
-        $this->gateway->method('createCheckoutSession')->willThrowException(new GatewayOperationFailed('stripe', 'create a checkout session'));
+        $this->gateway->method('createCheckoutSession')->willThrowException(new GatewayOperationFailedException('stripe', 'create a checkout session'));
 
         $this->artisan('billing:expire-checkout-sessions')->assertExitCode(1);
 
         $this->assertSame(CheckoutSessionStatus::Pending, $session->fresh()->status);
-        Exceptions::assertReported(GatewayOperationFailed::class);
+        Exceptions::assertReported(GatewayOperationFailedException::class);
     }
 }

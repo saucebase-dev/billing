@@ -9,7 +9,7 @@ use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\SubscriptionResumed;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -111,7 +111,7 @@ class SubscriptionResumeTest extends TestCase
             'cancelled_at' => now(),
             'ends_at' => now()->addMonth(),
         ]);
-        $this->gateway->method('resumeSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'resume a subscription'));
+        $this->gateway->method('resumeSubscription')->willThrowException(new GatewayOperationFailedException('stripe', 'resume a subscription'));
 
         $this->actingAs($user)->from(route('dashboard'))->post(route('billing.subscription.resume'))->assertRedirect(route('dashboard'));
 

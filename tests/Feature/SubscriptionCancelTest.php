@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Exceptions;
 use Inertia\Testing\AssertableInertia;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -159,7 +159,7 @@ class SubscriptionCancelTest extends TestCase
         $user = $this->createUser();
         $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create(['customer_id' => $customer->id, 'status' => SubscriptionStatus::Active]);
-        $this->gateway->method('cancelSubscription')->willThrowException(new GatewayOperationFailed('stripe', 'cancel a subscription'));
+        $this->gateway->method('cancelSubscription')->willThrowException(new GatewayOperationFailedException('stripe', 'cancel a subscription'));
 
         $this->actingAs($user)->from(route('billing.plans'))->post(route('billing.subscription.cancel'))->assertRedirect(route('billing.plans'));
 

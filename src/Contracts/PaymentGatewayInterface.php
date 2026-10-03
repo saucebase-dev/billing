@@ -12,7 +12,7 @@ use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\CheckoutExpiry;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -56,9 +56,9 @@ interface PaymentGatewayInterface
      *
      * Only a confirmed `Expired` may release what the checkout holds. Anything
      * the provider cannot confirm — unreachable, not found under these keys —
-     * throws `GatewayOperationFailed`, and the hold stays.
+     * throws `GatewayOperationFailedException`, and the hold stays.
      *
-     * @throws GatewayOperationFailed
+     * @throws GatewayOperationFailedException
      */
     public function expireCheckoutSession(string $providerSessionId): CheckoutExpiry;
 

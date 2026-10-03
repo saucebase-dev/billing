@@ -12,7 +12,7 @@ use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Events\CheckoutCompleted;
 use Modules\Billing\Events\PaymentSucceeded;
 use Modules\Billing\Events\SubscriptionCreated;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Subscription;
@@ -126,7 +126,7 @@ class CompleteCheckout
             if ($updates) {
                 $subscription->update($updates);
             }
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             // The subscription's next event fills the dates in.
             report($e);
         }

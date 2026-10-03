@@ -5,7 +5,7 @@ namespace Modules\Billing\Data;
 use Carbon\CarbonImmutable;
 use Modules\Billing\Data\Webhook\WebhookEventData;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\InvalidWebhookData;
+use Modules\Billing\Exceptions\InvalidWebhookDataException;
 use Spatie\LaravelData\Data;
 
 class WebhookData extends Data
@@ -39,7 +39,7 @@ class WebhookData extends Data
     public function dataAs(string $class): WebhookEventData
     {
         if (! $this->data instanceof $class) {
-            throw new InvalidWebhookData(
+            throw new InvalidWebhookDataException(
                 provider: $this->provider,
                 eventType: $this->type?->value,
                 providerEventId: $this->providerEventId,

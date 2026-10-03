@@ -25,8 +25,8 @@ use Modules\Billing\Events\PaymentSucceeded;
 use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Events\TrialEnding;
-use Modules\Billing\Exceptions\SubscriptionReconciliationConflict;
-use Modules\Billing\Exceptions\WebhookDependencyNotReady;
+use Modules\Billing\Exceptions\SubscriptionReconciliationConflictException;
+use Modules\Billing\Exceptions\WebhookDependencyNotReadyException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
@@ -140,7 +140,7 @@ class WebhookHandler
             return null;
         }
 
-        throw new WebhookDependencyNotReady(
+        throw new WebhookDependencyNotReadyException(
             provider: $webhook->provider,
             eventType: $webhook->type?->value,
             providerEventId: $webhook->providerEventId,
@@ -292,7 +292,7 @@ class WebhookHandler
             }
         }
 
-        throw new SubscriptionReconciliationConflict($subscription->id, attempts: 2);
+        throw new SubscriptionReconciliationConflictException($subscription->id, attempts: 2);
     }
 
     private function createPaymentFromWebhook(WebhookData $webhook, PaymentStatus $status): ?Payment
@@ -310,7 +310,7 @@ class WebhookHandler
         // Its checkout event is still on the way. Failing here has the provider
         // deliver this one again once the subscription exists locally.
         if ($subscriptionId && ! $subscription) {
-            throw new WebhookDependencyNotReady(
+            throw new WebhookDependencyNotReadyException(
                 provider: $webhook->provider,
                 eventType: $webhook->type?->value,
                 providerEventId: $webhook->providerEventId,
@@ -502,7 +502,7 @@ class WebhookHandler
                 return;
             }
 
-            throw new WebhookDependencyNotReady(
+            throw new WebhookDependencyNotReadyException(
                 provider: $webhook->provider,
                 eventType: $webhook->type?->value,
                 providerEventId: $webhook->providerEventId,

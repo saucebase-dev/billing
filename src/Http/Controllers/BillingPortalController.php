@@ -4,7 +4,7 @@ namespace Modules\Billing\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
@@ -34,7 +34,7 @@ class BillingPortalController
             $url = $this->gateways
                 ->driver($customer->provider)
                 ->getManagementUrl($customer);
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             report($e);
 
             Toast::error(__('Billing management is not available right now. Please try again later.'));
@@ -66,7 +66,7 @@ class BillingPortalController
                     ->driver($subscription->provider)
                     ->getPlanChangeUrl($subscription)
             );
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             report($e);
 
             Toast::error(__('Plan changes are not available right now. Please try again later.'));

@@ -11,7 +11,7 @@ use Inertia\Response as InertiaResponse;
 use Modules\Billing\Actions\StartCheckout;
 use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
@@ -117,7 +117,7 @@ class CheckoutController
                 billingDetails: ['email' => $validated['email']],
                 coupon: $validated['coupon'] ?? null,
             );
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             report($e);
 
             // Back to this checkout's own page: submitting again reuses the session.
@@ -165,7 +165,7 @@ class CheckoutController
                 // would bounce the buyer straight back to the payment page.
                 cancelUrl: route('billing.plans'),
             );
-        } catch (GatewayOperationFailed $e) {
+        } catch (GatewayOperationFailedException $e) {
             report($e);
 
             // Rendered, not redirected: the checkout URL hands off again on its

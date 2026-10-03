@@ -10,7 +10,7 @@ use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
@@ -255,7 +255,7 @@ class PlanAccessTest extends TestCase
     {
         $this->subscribe();
 
-        $this->gateway->method('getPlanChangeUrl')->willThrowException(new GatewayOperationFailed('stripe', 'open the plan change portal'));
+        $this->gateway->method('getPlanChangeUrl')->willThrowException(new GatewayOperationFailedException('stripe', 'open the plan change portal'));
 
         $this->actingAs($this->user)
             ->get(route('billing.plan.change'))

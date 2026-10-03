@@ -5,7 +5,7 @@ namespace Modules\Billing\Filament\Actions;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
-use Modules\Billing\Exceptions\GatewayOperationFailed;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -30,7 +30,7 @@ class PushProductAction
             ->action(function (Product $record, CatalogPush $push) use ($provider): void {
                 try {
                     $report = $push->run($record);
-                } catch (GatewayOperationFailed $e) {
+                } catch (GatewayOperationFailedException $e) {
                     report($e);
 
                     Notification::make()->title(__('Push failed'))->body($e->getMessage())->danger()->send();
