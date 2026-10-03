@@ -1,22 +1,16 @@
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { useT } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import { useForm, usePage } from '@inertiajs/react';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
 import { useState, type FormEvent } from 'react';
 import { getIntervalDisplay } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
 import CheckoutLayout from '../layouts/CheckoutLayout';
 
 import IconCheck from '~icons/heroicons/check';
 import IconLock from '~icons/heroicons/lock-closed';
-
-function formatPrice(amount: number, currency?: string): string {
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: currency?.toUpperCase() ?? 'EUR',
-    }).format(amount / 100);
-}
 
 export default function Checkout({
     session,
@@ -26,7 +20,9 @@ export default function Checkout({
     /** The provider could not be reached; trying again resends this same checkout. */
     handoffFailed?: boolean;
 }) {
-    const t = useT();
+    const { t, locale } = useTranslation();
+    const formatPrice = (amount: number, currency?: string) =>
+        formatMoney(amount, currency, locale);
     const page = usePage();
     const user = page.props.auth?.user;
 

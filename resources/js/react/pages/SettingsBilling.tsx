@@ -7,6 +7,8 @@ import { formatDate } from '@js/lib/dates';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { getIntervalLabel } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
 import type { Invoice, PaymentMethod, Subscription } from '../../types';
 
 const longDate: Intl.DateTimeFormatOptions = {
@@ -14,19 +16,6 @@ const longDate: Intl.DateTimeFormatOptions = {
     month: 'long',
     day: 'numeric',
 };
-
-function formatCurrency(amount: number, currency: string | null): string {
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: currency?.toUpperCase() ?? 'USD',
-    }).format(amount / 100);
-}
-
-function formatInterval(interval: string | null): string {
-    if (!interval) return '';
-
-    return interval === 'year' ? 'Yearly' : 'Monthly';
-}
 
 function ucfirst(value: string | null | undefined): string {
     if (!value) return '';
@@ -210,7 +199,9 @@ export default function SettingsBilling({
                                 {subscription.plan_name ?? t('Unknown Plan')}
                             </p>
                             <p className="text-muted-foreground text-sm">
-                                {formatInterval(subscription.interval)}
+                                {subscription.interval
+                                    ? t(getIntervalLabel(subscription.interval))
+                                    : ''}
                                 {/* Trial, then trouble, then the ordinary dates */}
                                 {subscription.suspended ? (
                                     <>
@@ -304,20 +295,23 @@ export default function SettingsBilling({
                                 )}
                             </p>
                         </div>
-                        <a href={billingPortalUrl}>
-                            {subscription.needs_payment_method ? (
-                                <Button
-                                    size="sm"
-                                    data-testid="add-payment-method"
-                                >
+                        {subscription.needs_payment_method ? (
+                            <Button
+                                asChild
+                                size="sm"
+                                data-testid="add-payment-method"
+                            >
+                                <a href={billingPortalUrl}>
                                     {t('Add payment method')}
-                                </Button>
-                            ) : (
-                                <Button variant="outline" size="sm">
+                                </a>
+                            </Button>
+                        ) : (
+                            <Button asChild variant="outline" size="sm">
+                                <a href={billingPortalUrl}>
                                     {t('Adjust plan')}
-                                </Button>
-                            )}
-                        </a>
+                                </a>
+                            </Button>
+                        )}
                     </div>
 
                     {/* Payment method */}
@@ -336,11 +330,9 @@ export default function SettingsBilling({
                                 )}
                             </p>
                         </div>
-                        <a href={billingPortalUrl}>
-                            <Button variant="outline" size="sm">
-                                {t('Update')}
-                            </Button>
-                        </a>
+                        <Button asChild variant="outline" size="sm">
+                            <a href={billingPortalUrl}>{t('Update')}</a>
+                        </Button>
                     </div>
 
                     {/* Invoices */}
@@ -380,9 +372,10 @@ export default function SettingsBilling({
                                                     )}
                                                 </td>
                                                 <td className="text-foreground py-3">
-                                                    {formatCurrency(
+                                                    {formatMoney(
                                                         invoice.total,
                                                         invoice.currency,
+                                                        locale,
                                                     )}
                                                 </td>
                                                 <td className="py-3">
@@ -391,7 +384,11 @@ export default function SettingsBilling({
                                                             invoice.status,
                                                         )}
                                                     >
-                                                        {invoice.status}
+                                                        {t(
+                                                            ucfirst(
+                                                                invoice.status,
+                                                            ),
+                                                        )}
                                                     </Badge>
                                                 </td>
                                                 <td className="py-3 text-right">
@@ -492,9 +489,9 @@ export default function SettingsBilling({
                             'Choose a plan to get started with all the features.',
                         )}
                     </p>
-                    <a href={route('billing.plans')} className="mt-4">
-                        <Button>{t('View Plans')}</Button>
-                    </a>
+                    <Button asChild className="mt-4">
+                        <a href={route('billing.plans')}>{t('View Plans')}</a>
+                    </Button>
                 </div>
             )}
         </div>

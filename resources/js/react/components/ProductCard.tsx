@@ -1,4 +1,4 @@
-import { useT } from '@/i18n';
+import { useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 
@@ -8,16 +8,7 @@ import type {
     Product,
 } from '@modules/billing/resources/js/types';
 import { getIntervalDisplay } from '../../lib/intervals';
-
-function formatPrice(amount: number | string, currency?: string): string {
-    const cents = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: currency?.toUpperCase() ?? 'EUR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(cents / 100);
-}
+import { formatMoney } from '../../lib/money';
 
 export default function ProductCard({
     product,
@@ -28,7 +19,9 @@ export default function ProductCard({
     price?: Price;
     action: PlanAction;
 }) {
-    const t = useT();
+    const { t, locale } = useTranslation();
+    const formatPrice = (amount: number | string, currency?: string) =>
+        formatMoney(amount, currency, locale, { wholeUnits: true });
     const featured = !!product.metadata?.badge || product.is_highlighted;
     const [isAnimating, setIsAnimating] = useState(false);
 

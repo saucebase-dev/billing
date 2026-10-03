@@ -11,7 +11,7 @@ export default function Plans({
     const t = useT();
 
     return (
-        <SiteLayout title="Pricing">
+        <SiteLayout title={t('Pricing')}>
             <ProductSection
                 products={products}
                 priceActions={priceActions}
