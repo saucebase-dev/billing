@@ -7,7 +7,7 @@ defineProps<PlanActions & { products: Product[] }>();
 </script>
 
 <template>
-    <SiteLayout title="Pricing">
+    <SiteLayout :title="$t('Pricing')">
         <ProductSection
             :products="products"
             :price-actions="priceActions"

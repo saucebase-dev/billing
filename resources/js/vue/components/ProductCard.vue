@@ -7,7 +7,9 @@ import type {
     Price,
     Product,
 } from '@modules/billing/resources/js/types';
+import { useLocalization } from '@/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
 
 const props = defineProps<{
     product: Product;
@@ -42,14 +44,10 @@ function handleGetStarted() {
     }
 }
 
+const { language } = useLocalization();
+
 function formatPrice(amount: number | string, currency?: string): string {
-    const cents = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: currency?.toUpperCase() ?? 'EUR',
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-    }).format(cents / 100);
+    return formatMoney(amount, currency, language.value, { wholeUnits: true });
 }
 
 const priceKey = computed(() => props.price?.amount);

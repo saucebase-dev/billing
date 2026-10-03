@@ -4,13 +4,7 @@ import IconCreditCard from '~icons/lucide/credit-card';
 import IconSparkles from '~icons/lucide/sparkles';
 import PlanName from './components/PlanName.vue';
 
-/**
- * Billing module setup
- * Called during app initialization before mounting
- */
 export function setup() {
-    console.debug('Billing module loaded');
-
     registerIcon('billing', IconCreditCard);
     registerIcon('upgrade', IconSparkles);
     registerGlobalComponent('user-subtitle', PlanName);
@@ -21,5 +15,5 @@ export function setup() {
  * Called after the app has been mounted
  */
 export function afterMount() {
-    console.debug('Billing module after mount logic executed');
+
 }

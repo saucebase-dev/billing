@@ -5,7 +5,9 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
 import { computed, ref } from 'vue';
 import CheckoutLayout from '../layouts/CheckoutLayout.vue';
+import { useLocalization } from '@/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
 
 import IconCheck from '~icons/heroicons/check';
 import IconLock from '~icons/heroicons/lock-closed';
@@ -29,11 +31,10 @@ const form = useForm({
 
 const showCoupon = ref(false);
 
+const { language } = useLocalization();
+
 function formatPrice(amount: number, currency?: string): string {
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: currency?.toUpperCase() ?? 'EUR',
-    }).format(amount / 100);
+    return formatMoney(amount, currency, language.value);
 }
 
 function handleCheckout() {

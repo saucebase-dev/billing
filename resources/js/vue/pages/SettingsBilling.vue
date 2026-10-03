@@ -9,6 +9,8 @@ import { trans } from 'laravel-vue-i18n';
 import { toast } from 'vue-sonner';
 import { CreditCard, Loader2 } from '@lucide/vue';
 import { onMounted, ref } from 'vue';
+import { getIntervalLabel } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
 import type { Invoice, PaymentMethod, Subscription } from '../../types';
 
 defineProps<{
@@ -57,19 +59,6 @@ const longDate: Intl.DateTimeFormatOptions = {
     month: 'long',
     day: 'numeric',
 };
-
-function formatCurrency(amount: number, currency: string | null): string {
-    const cur = currency?.toUpperCase() ?? 'USD';
-    return new Intl.NumberFormat(undefined, {
-        style: 'currency',
-        currency: cur,
-    }).format(amount / 100);
-}
-
-function formatInterval(interval: string | null): string {
-    if (!interval) return '';
-    return interval === 'year' ? 'Yearly' : 'Monthly';
-}
 
 function ucfirst(value: string | null | undefined): string {
     if (!value) return '';
@@ -169,7 +158,15 @@ function resumeSubscription() {
                             {{ subscription.plan_name ?? $t('Unknown Plan') }}
                         </p>
                         <p class="text-muted-foreground text-sm">
-                            {{ formatInterval(subscription.interval) }}
+                            {{
+                                subscription.interval
+                                    ? $t(
+                                          getIntervalLabel(
+                                              subscription.interval,
+                                          ),
+                                      )
+                                    : ''
+                            }}
                             <!-- Trial, then trouble, then the ordinary dates -->
                             <template v-if="subscription.suspended">
                                 &middot;
@@ -269,18 +266,24 @@ function resumeSubscription() {
                             </template>
                         </p>
                     </div>
-                    <a :href="billingPortalUrl">
-                        <Button
-                            v-if="subscription.needs_payment_method"
-                            size="sm"
-                            data-testid="add-payment-method"
-                        >
-                            {{ $t('Add payment method') }}
-                        </Button>
-                        <Button v-else variant="outline" size="sm">
-                            {{ $t('Adjust plan') }}
-                        </Button>
-                    </a>
+                    <Button
+                        v-if="subscription.needs_payment_method"
+                        as="a"
+                        :href="billingPortalUrl"
+                        size="sm"
+                        data-testid="add-payment-method"
+                    >
+                        {{ $t('Add payment method') }}
+                    </Button>
+                    <Button
+                        v-else
+                        as="a"
+                        :href="billingPortalUrl"
+                        variant="outline"
+                        size="sm"
+                    >
+                        {{ $t('Adjust plan') }}
+                    </Button>
                 </div>
 
                 <!-- Payment method -->
@@ -346,11 +349,14 @@ function resumeSubscription() {
                             {{ $t('No payment method on file') }}
                         </p>
                     </div>
-                    <a :href="billingPortalUrl">
-                        <Button variant="outline" size="sm">
-                            {{ $t('Update') }}
-                        </Button>
-                    </a>
+                    <Button
+                        as="a"
+                        :href="billingPortalUrl"
+                        variant="outline"
+                        size="sm"
+                    >
+                        {{ $t('Update') }}
+                    </Button>
                 </div>
 
                 <!-- Invoices -->
@@ -400,9 +406,10 @@ function resumeSubscription() {
                                     </td>
                                     <td class="text-foreground py-3">
                                         {{
-                                            formatCurrency(
+                                            formatMoney(
                                                 invoice.total,
                                                 invoice.currency,
+                                                language,
                                             )
                                         }}
                                     </td>
@@ -412,7 +419,7 @@ function resumeSubscription() {
                                                 statusVariant(invoice.status)
                                             "
                                         >
-                                            {{ invoice.status }}
+                                            {{ $t(ucfirst(invoice.status)) }}
                                         </Badge>
                                     </td>
                                     <td class="py-3 text-right">
@@ -514,11 +521,9 @@ function resumeSubscription() {
             <p class="text-muted-foreground mt-2 text-sm">
                 {{ $t('Choose a plan to get started with all the features.') }}
             </p>
-            <a :href="route('billing.plans')" class="mt-4">
-                <Button>
-                    {{ $t('View Plans') }}
-                </Button>
-            </a>
+            <Button as="a" :href="route('billing.plans')" class="mt-4">
+                {{ $t('View Plans') }}
+            </Button>
         </div>
     </div>
 </template>
