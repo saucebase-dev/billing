@@ -160,6 +160,25 @@ test.describe('Buying a plan', () => {
         await expect(checkout.couponInput).toBeVisible();
     });
 
+    // Following them in place would leave the checkout half-filled behind.
+    test('opens the terms and privacy policy in a new tab', async ({
+        page,
+        loginAs,
+        credentials,
+    }) => {
+        await loginAs(credentials.admin);
+
+        const checkout = new CheckoutPage(page);
+        await checkout.startFromPricing('pro');
+
+        for (const id of ['checkout-terms-link', 'checkout-privacy-link']) {
+            await expect(page.getByTestId(id)).toHaveAttribute(
+                'target',
+                '_blank',
+            );
+        }
+    });
+
     /**
      * Someone who picks a plan before they have an account has to arrive back at
      * the checkout they chose, not at a dashboard with nothing bought.

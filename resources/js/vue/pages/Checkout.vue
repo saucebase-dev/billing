@@ -251,6 +251,9 @@ function handleRetry() {
                     {{ $t('By continuing you agree to our') }}
                     <a
                         :href="route('terms')"
+                        data-testid="checkout-terms-link"
+                        target="_blank"
+                        rel="noopener"
                         class="hover:text-foreground underline underline-offset-4"
                     >
                         {{ $t('Terms of Service') }}
@@ -258,6 +261,9 @@ function handleRetry() {
                     {{ $t('and') }}
                     <a
                         :href="route('privacy')"
+                        data-testid="checkout-privacy-link"
+                        target="_blank"
+                        rel="noopener"
                         class="hover:text-foreground underline underline-offset-4"
                     >
                         {{ $t('Privacy Policy') }}
