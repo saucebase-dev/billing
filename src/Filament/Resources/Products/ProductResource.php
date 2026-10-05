@@ -26,6 +26,11 @@ class ProductResource extends Resource
 
     protected static ?int $navigationSort = 201;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public static function getGloballySearchableAttributes(): array
     {
         return ['name', 'sku', 'slug'];

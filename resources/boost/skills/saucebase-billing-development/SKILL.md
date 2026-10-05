@@ -177,9 +177,9 @@ Everything else the merchant decides — provider, currency, checkout redirect, 
 
 ## Seeders
 
-There is no install seeder: a real install defines its own plans in the admin panel.
+The install seeder, `DatabaseSeeder`, only creates the `manage billing` permission (granted to nobody), which every billing admin page and resource checks in `canAccess()`: Customers, Products, Subscriptions, the Billing dashboard and Billing settings. `access admin panel` alone only opens the panel; `admin` passes every check. Plans are not seeded: a real install defines its own in the admin panel.
 
-Everything the module ships is demo content, run by `modules:seed --demo` through `DemoBillingDatabaseSeeder`, which calls one `Demo*Seeder` per kind of content, in dependency order:
+Everything else the module seeds is demo content, run by `modules:seed --demo` through `DemoBillingDatabaseSeeder`, which calls one `Demo*Seeder` per kind of content, in dependency order:
 
 | Seeder | What it makes |
 | --- | --- |

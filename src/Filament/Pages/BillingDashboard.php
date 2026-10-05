@@ -29,6 +29,11 @@ class BillingDashboard extends Page
 
     public string $endDate = '';
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public static function getNavigationGroup(): ?string
     {
         return __('Billing');

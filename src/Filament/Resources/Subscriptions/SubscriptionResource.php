@@ -23,6 +23,11 @@ class SubscriptionResource extends Resource
 
     protected static ?int $navigationSort = 202;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public static function getGloballySearchableAttributes(): array
     {
         return ['provider_subscription_id', 'customer.email'];

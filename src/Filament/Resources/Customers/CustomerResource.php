@@ -23,6 +23,11 @@ class CustomerResource extends Resource
 
     protected static ?int $navigationSort = 203;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public static function getGloballySearchableAttributes(): array
     {
         return ['email', 'name'];

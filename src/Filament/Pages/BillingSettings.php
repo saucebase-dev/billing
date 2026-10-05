@@ -22,6 +22,11 @@ class BillingSettings extends SettingsPage
 
     protected static string $settings = Settings::class;
 
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public static function getNavigationLabel(): string
     {
         return __('Billing');
