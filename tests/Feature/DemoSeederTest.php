@@ -3,6 +3,7 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Modules\Billing\Database\Seeders\DatabaseSeeder;
 use Modules\Billing\Database\Seeders\DemoBillingDatabaseSeeder;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
@@ -21,7 +22,7 @@ class DemoSeederTest extends TestCase
      */
     public function test_the_demo_seeder_fills_every_dashboard_widget(): void
     {
-        $this->seed(DemoBillingDatabaseSeeder::class);
+        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
 
         $this->assertGreaterThan(0, Customer::count());
         $this->assertGreaterThan(0, Payment::count());
@@ -33,10 +34,10 @@ class DemoSeederTest extends TestCase
     /** Re-running the demo seeder must not double the data. */
     public function test_seeding_twice_leaves_the_same_data(): void
     {
-        $this->seed(DemoBillingDatabaseSeeder::class);
+        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
         $first = [Customer::count(), Subscription::count(), Payment::count()];
 
-        $this->seed(DemoBillingDatabaseSeeder::class);
+        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
 
         $this->assertSame($first, [Customer::count(), Subscription::count(), Payment::count()]);
     }

@@ -6,6 +6,8 @@ use Illuminate\Database\Seeder;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
+use App\Models\User;
+use Spatie\Permission\Models\Role;
 
 /**
  * Sample billing content for the demo site, run by `modules:seed --demo`.
@@ -18,6 +20,14 @@ class DemoBillingDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
+        // A staff account that sees only this module's admin area.
+        Role::findOrCreate('billing admin')->syncPermissions(['access admin panel', 'manage billing']);
+        $staff = User::firstOrCreate(
+            ['email' => 'billing@saucebase.dev'],
+            ['name' => 'Billing Admin', 'password' => bcrypt('secretsauce')],
+        );
+        $staff->syncRoles('billing admin');
+
         $this->call([
             DemoProductSeeder::class,
             DemoCustomerSeeder::class,
