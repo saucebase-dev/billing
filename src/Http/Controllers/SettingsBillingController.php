@@ -33,7 +33,7 @@ class SettingsBillingController
         // that would have dropped the flash. The panel clears it after toasting.
         return redirect()->to(
             $paid
-                ? route('dashboard').'?checkout=success#settings/billing'
+                ? route('home', ['checkout' => 'success']).'#settings/billing'
                 : SettingsSection::url('billing'),
         );
     }
