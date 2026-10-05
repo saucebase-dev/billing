@@ -23,6 +23,11 @@ class RevenueChartWidget extends ChartWidget
 
     public string $endDate = '';
 
+    public static function canView(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public function mount(): void
     {
         $this->startDate = now()->subDays(30)->startOfDay()->toDateTimeString();

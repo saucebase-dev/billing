@@ -11,6 +11,10 @@ use Modules\Billing\Filament\Pages\BillingSettings;
 use Modules\Billing\Filament\Resources\Customers\CustomerResource;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Filament\Resources\Subscriptions\SubscriptionResource;
+use Modules\Billing\Filament\Widgets\BillingSaasStatsWidget;
+use Modules\Billing\Filament\Widgets\ConversionChartWidget;
+use Modules\Billing\Filament\Widgets\RevenueChartWidget;
+use Modules\Billing\Filament\Widgets\SubscriptionsChartWidget;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -63,6 +67,30 @@ class BillingPermissionTest extends TestCase
         $this->actingAs($this->staff('access admin panel'))
             ->get($this->urlOf($page))
             ->assertForbidden();
+    }
+
+    /**
+     * @return array<string, array{0: class-string}>
+     */
+    public static function widgets(): array
+    {
+        return [
+            'stats' => [BillingSaasStatsWidget::class],
+            'revenue' => [RevenueChartWidget::class],
+            'subscriptions' => [SubscriptionsChartWidget::class],
+            'conversion' => [ConversionChartWidget::class],
+        ];
+    }
+
+    /** The stats widget also sits on the main dashboard, which every staff role sees. */
+    #[DataProvider('widgets')]
+    public function test_billing_widgets_show_only_to_a_billing_admin(string $widget): void
+    {
+        $this->actingAs($this->staff('access admin panel'));
+        $this->assertFalse($widget::canView());
+
+        $this->actingAs($this->staff('access admin panel', 'manage billing'));
+        $this->assertTrue($widget::canView());
     }
 
     private function urlOf(string $page): string
