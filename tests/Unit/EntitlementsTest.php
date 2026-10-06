@@ -53,4 +53,15 @@ class EntitlementsTest extends TestCase
 
         $this->assertSame($stored, Entitlements::fromArray($stored)->toArray());
     }
+
+    /** A missing limit reads as 0, so a caller enforcing one must first ask whether any plan sets it. */
+    public function test_it_says_whether_a_limit_is_set_at_all(): void
+    {
+        $entitlements = Entitlements::fromArray(['limits' => ['members' => 5, 'projects' => null]]);
+
+        $this->assertTrue($entitlements->declares('members'));
+        $this->assertTrue($entitlements->declares('projects'));
+        $this->assertFalse($entitlements->declares('seats'));
+        $this->assertFalse(Entitlements::none()->declares('members'));
+    }
 }

@@ -57,6 +57,12 @@ final class Entitlements
         return isset($this->features[$feature]);
     }
 
+    /** Whether any plan sets this limit; `limit()` reads a missing one as 0. */
+    public function declares(string $key): bool
+    {
+        return array_key_exists($key, $this->limits);
+    }
+
     /** Null is unlimited; a limit no plan mentions is zero. */
     public function limit(string $key): ?int
     {
