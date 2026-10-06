@@ -13,6 +13,7 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * The plan name every page carries, shown under the user's name in the sidebar.
@@ -20,6 +21,7 @@ use Tests\TestCase;
  */
 class SharedPlanNameTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private User $user;

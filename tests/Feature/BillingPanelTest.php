@@ -15,12 +15,14 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Settings\BillingSection;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * What the billing panel in the settings modal says about the owner's plans.
  */
 class BillingPanelTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private User $user;

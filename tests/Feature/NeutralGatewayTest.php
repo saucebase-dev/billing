@@ -39,6 +39,7 @@ use Modules\Billing\Services\WebhookHandler;
 use Saucebase\Core\Settings\SettingsSection;
 use Spatie\LaravelData\Optional;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * A provider that is not Stripe, speaking only the module's data. If billing
@@ -48,6 +49,7 @@ use Tests\TestCase;
  */
 class NeutralGatewayTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private FakeGateway $gateway;

@@ -204,6 +204,12 @@ php artisan test --testsuite=Modules --filter='^Modules\\Billing\\Tests'  # PHPU
 npx playwright test --project="@billing*"                  # E2E
 ```
 
+A test that depends on who pays uses `Tests\Support\Traits\BillsTheUser`, which resets
+`BillingOwners` to the default (the user pays) before each test. An app can register its own
+rule (tenancy's workspace-billing patch does), and without the reset billing's tests would
+check that app's rule instead of billing's. The patched setup is tested by tenancy's
+`WorkspaceBillingTest`.
+
 The provider hand-off is asserted in PHP, where the gateway is mocked; e2e cannot
 reach Stripe. `BillingTestHelper::completeCheckout()` finishes a started checkout
 the way the webhook would, which is what lets `checkout.flow.spec.ts` run pricing

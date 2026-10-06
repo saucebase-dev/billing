@@ -27,6 +27,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use RuntimeException;
 use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * One plan per customer: a subscription or lifetime access, never paid for
@@ -35,6 +36,7 @@ use Tests\TestCase;
 #[AllowMockObjectsWithoutExpectations]
 class PlanAccessTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private WebhookHandler $billing;

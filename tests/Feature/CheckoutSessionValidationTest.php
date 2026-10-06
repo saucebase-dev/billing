@@ -11,9 +11,11 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 class CheckoutSessionValidationTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     protected function setUp(): void

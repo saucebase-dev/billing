@@ -26,6 +26,7 @@ use Modules\Billing\Settings\BillingSection;
 use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\TestWorkspace;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * Billing belongs to an owner, which is the user unless the app says a user
@@ -35,6 +36,7 @@ use Tests\TestCase;
  */
 class BillingOwnerTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private TestWorkspace $workspace;

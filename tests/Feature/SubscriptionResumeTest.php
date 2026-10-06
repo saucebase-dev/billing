@@ -16,10 +16,12 @@ use Modules\Billing\Services\PaymentGatewayManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 #[AllowMockObjectsWithoutExpectations]
 class SubscriptionResumeTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     /** @var PaymentGatewayInterface&MockObject */

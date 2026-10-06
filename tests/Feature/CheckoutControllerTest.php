@@ -13,9 +13,11 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 class CheckoutControllerTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private CheckoutSession $session;
