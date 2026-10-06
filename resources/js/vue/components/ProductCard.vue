@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { router } from '@inertiajs/vue3';
+import { UserLock } from '@lucide/vue';
+import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
 
 import type {
@@ -7,6 +9,7 @@ import type {
     Price,
     Product,
 } from '@modules/billing/resources/js/types';
+import { useDialog } from '@/composables/useDialog';
 import { useLocalization } from '@/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
@@ -28,10 +31,29 @@ const startsCheckout = computed(
 );
 
 const enabled = computed(
-    () => startsCheckout.value || props.action === 'signup',
+    () =>
+        startsCheckout.value ||
+        props.action === 'signup' ||
+        props.action === 'owner_only',
 );
 
+const { confirm } = useDialog();
+
 function handleGetStarted() {
+    // Somebody else's plan: say who can change it rather than start a checkout that refuses.
+    if (props.action === 'owner_only') {
+        confirm({
+            title: trans('Ask an owner to change the plan'),
+            description: trans(
+                'This plan is shared, and only its owners can change it.',
+            ),
+            confirmLabel: trans('Got it'),
+            cancelLabel: trans('Close'),
+            icon: UserLock,
+        });
+        return;
+    }
+
     if (props.action === 'signup') {
         router.visit(route('register'));
         return;
@@ -194,6 +216,9 @@ watch(priceKey, () => {
             }}</template>
             <template v-else-if="action === 'unavailable'">{{
                 $t('Not available')
+            }}</template>
+            <template v-else-if="action === 'owner_only'">{{
+                $t('Ask an owner')
             }}</template>
             <template v-else-if="action === 'trial'">{{
                 $t('Start :days-day free trial', {

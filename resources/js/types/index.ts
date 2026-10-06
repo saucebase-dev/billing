@@ -26,7 +26,8 @@ export interface Price {
 /**
  * What a pricing card's button does, decided on the server (`PlanActions`).
  * Mirrors the PHP `PlanAction` enum; change one, change the other. `buy`,
- * `trial`, `signup`, `change` and `contact` act; the rest are disabled labels.
+ * `trial`, `signup`, `change` and `contact` act; `owner_only` explains who can; the rest
+ * are disabled labels.
  */
 export type PlanAction =
     | 'buy'
@@ -37,7 +38,8 @@ export type PlanAction =
     | 'included'
     | 'later'
     | 'unavailable'
-    | 'trial';
+    | 'trial'
+    | 'owner_only';
 
 /** Button per displayed price, and per plan shown without a price. */
 export interface PlanActions {

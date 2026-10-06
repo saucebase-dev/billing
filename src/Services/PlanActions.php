@@ -2,6 +2,7 @@
 
 namespace Modules\Billing\Services;
 
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\PlanAction;
@@ -23,9 +24,29 @@ class PlanActions
 
     /**
      * @param  Collection<int, Product>  $plans  With their displayed prices loaded.
+     * @param  User|null  $viewer  Who is looking, when that may not be the owner: what they
+     *                             cannot change becomes `OwnerOnly`.
      * @return array{priceActions: array<int, PlanAction>, productActions: array<int, PlanAction>}
      */
-    public function for(?BillingOwner $owner, Collection $plans): array
+    public function for(?BillingOwner $owner, Collection $plans, ?User $viewer = null): array
+    {
+        $actions = $this->actionsFor($owner, $plans);
+
+        if ($owner === null || $viewer === null || $owner->canManageBilling($viewer)) {
+            return $actions;
+        }
+
+        return array_map(fn (array $byId): array => array_map(
+            fn (PlanAction $action): PlanAction => in_array($action, [PlanAction::Buy, PlanAction::Trial, PlanAction::Change], true) ? PlanAction::OwnerOnly : $action,
+            $byId,
+        ), $actions);
+    }
+
+    /**
+     * @param  Collection<int, Product>  $plans
+     * @return array{priceActions: array<int, PlanAction>, productActions: array<int, PlanAction>}
+     */
+    private function actionsFor(?BillingOwner $owner, Collection $plans): array
     {
         $priceActions = [];
         $productActions = [];

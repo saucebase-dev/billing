@@ -31,4 +31,7 @@ enum PlanAction: string
     case Later = 'later';
 
     case Unavailable = 'unavailable';
+
+    /** What would buy or change, for someone who sees an owner's plan but may not change it. */
+    case OwnerOnly = 'owner_only';
 }

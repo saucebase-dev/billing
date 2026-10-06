@@ -1,5 +1,7 @@
+import { confirm } from '@/hooks/useDialog';
 import { useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
+import { UserLock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type {
@@ -39,9 +41,24 @@ export default function ProductCard({
         : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset';
 
     const startsCheckout = action === 'buy' || action === 'trial';
-    const enabled = startsCheckout || action === 'signup';
+    const enabled =
+        startsCheckout || action === 'signup' || action === 'owner_only';
 
     function handleGetStarted() {
+        // Somebody else's plan: say who can change it rather than start a checkout that refuses.
+        if (action === 'owner_only') {
+            confirm({
+                title: t('Ask an owner to change the plan'),
+                description: t(
+                    'This plan is shared, and only its owners can change it.',
+                ),
+                confirmLabel: t('Got it'),
+                cancelLabel: t('Close'),
+                icon: UserLock,
+            });
+            return;
+        }
+
         if (action === 'signup') {
             router.visit(route('register'));
             return;
@@ -59,6 +76,7 @@ export default function ProductCard({
         included: t('Included in your plan'),
         later: t('Available when your current plan ends'),
         unavailable: t('Not available'),
+        owner_only: t('Ask an owner'),
         trial: t('Start :days-day free trial', {
             days: String(product.trial_days ?? 0),
         }),

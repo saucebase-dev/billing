@@ -16,7 +16,7 @@ class BillingPlansController
 
         return inertia('Billing::Plans', [
             'products' => $products,
-            ...$actions->for($owners->for($request->user()), $products),
+            ...$actions->for($owners->for($request->user()), $products, $request->user()),
         ])->withSSR();
     }
 }

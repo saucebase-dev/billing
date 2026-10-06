@@ -82,6 +82,29 @@ class PlanActionsTest extends TestCase
         $this->assertSame(PlanAction::Buy, $actions['priceActions'][$this->priceOf($this->pro)->id]);
     }
 
+    /**
+     * Someone who sees an owner's plan but may not change it (a workspace member, with
+     * workspace billing) is told to ask, rather than offered a checkout that refuses them.
+     */
+    public function test_a_viewer_who_cannot_manage_the_plan_is_sent_to_an_owner(): void
+    {
+        $this->subscribeTo($this->pro);
+        $viewer = $this->createUser();
+
+        $actions = app(PlanActions::class)->for($this->user, collect([$this->free, $this->pro, $this->team])->map->fresh(['prices']), $viewer);
+
+        $this->assertSame(PlanAction::Included, $actions['priceActions'][$this->priceOf($this->free)->id]);
+        $this->assertSame(PlanAction::Current, $actions['priceActions'][$this->priceOf($this->pro)->id]);
+        $this->assertSame(PlanAction::OwnerOnly, $actions['priceActions'][$this->priceOf($this->team)->id]);
+    }
+
+    public function test_the_owner_viewing_their_own_plan_acts_on_it(): void
+    {
+        $actions = app(PlanActions::class)->for($this->user, collect([$this->pro])->map->fresh(['prices']), $this->user);
+
+        $this->assertSame(PlanAction::Buy, $actions['priceActions'][$this->priceOf($this->pro)->id]);
+    }
+
     public function test_a_user_with_nothing_bought_is_on_free(): void
     {
         $this->assertSame(PlanAction::Current, $this->actions($this->user, $this->free)['priceActions'][$this->priceOf($this->free)->id]);
