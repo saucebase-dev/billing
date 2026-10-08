@@ -9,7 +9,7 @@ use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Services\BillingOwners;
-use Saucebase\Core\Helpers\Toast;
+use Saucebase\Core\Toast;
 
 class SubscriptionController
 {

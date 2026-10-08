@@ -8,7 +8,7 @@ use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
-use Saucebase\Core\Helpers\Toast;
+use Saucebase\Core\Toast;
 use Saucebase\Core\Settings\SettingsSection;
 
 class BillingPortalController

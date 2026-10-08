@@ -18,7 +18,7 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\PurchaseEligibility;
 use Modules\Billing\Settings\BillingSettings;
-use Saucebase\Core\Helpers\Toast;
+use Saucebase\Core\Toast;
 use Symfony\Component\HttpFoundation\Response;
 
 class CheckoutController
