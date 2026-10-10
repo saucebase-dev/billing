@@ -1,4 +1,4 @@
-import { useT } from '@/i18n';
+import { useT } from '@saucebase/react/i18n';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type {

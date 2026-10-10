@@ -5,7 +5,7 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
 import { computed, ref } from 'vue';
 import CheckoutLayout from '../layouts/CheckoutLayout.vue';
-import { useLocalization } from '@/composables/useLocalization';
+import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
 

@@ -9,8 +9,8 @@ import type {
     Price,
     Product,
 } from '@modules/billing/resources/js/types';
-import { useDialog } from '@/composables/useDialog';
-import { useLocalization } from '@/composables/useLocalization';
+import { useDialog } from '@saucebase/vue/composables/useDialog';
+import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
 

@@ -1,9 +1,9 @@
 import { Button } from '@/components/ui/button';
 import { Field, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
-import { useTranslation } from '@/i18n';
 import { useForm, usePage } from '@inertiajs/react';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
+import { useTranslation } from '@saucebase/react/i18n';
 import { useState, type FormEvent } from 'react';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';

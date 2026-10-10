@@ -1,6 +1,6 @@
-import { confirm } from '@/hooks/useDialog';
-import { useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
+import { confirm } from '@saucebase/react/hooks/useDialog';
+import { useTranslation } from '@saucebase/react/i18n';
 import { UserLock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

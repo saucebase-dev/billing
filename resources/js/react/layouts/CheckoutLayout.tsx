@@ -1,6 +1,6 @@
 import AppLogo from '@/components/AppLogo';
-import { useT } from '@/i18n';
 import { Head, Link } from '@inertiajs/react';
+import { useT } from '@saucebase/react/i18n';
 import type { ReactNode } from 'react';
 
 import IconArrowLeft from '~icons/heroicons/arrow-left';

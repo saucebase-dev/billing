@@ -1,5 +1,5 @@
-import { useT } from '@/i18n';
 import SiteLayout from '@/layouts/SiteLayout';
+import { useT } from '@saucebase/react/i18n';
 import type { PlanActions, Product } from '../../types';
 import ProductSection from '../components/ProductSection';
 

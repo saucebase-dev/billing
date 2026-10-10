@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useDialog } from '@/composables/useDialog';
-import { useLocalization } from '@/composables/useLocalization';
+import { useDialog } from '@saucebase/vue/composables/useDialog';
+import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { formatDate } from '@saucebase/core/lib/dates';
 import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';

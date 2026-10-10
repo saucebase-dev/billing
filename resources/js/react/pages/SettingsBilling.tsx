@@ -1,9 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useDialog } from '@/hooks/useDialog';
-import { useT, useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
 import { formatDate } from '@saucebase/core/lib/dates';
+import { useDialog } from '@saucebase/react/hooks/useDialog';
+import { useT, useTranslation } from '@saucebase/react/i18n';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
