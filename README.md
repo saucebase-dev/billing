@@ -202,7 +202,7 @@ Event::listen(SubscriptionCreated::class, function (SubscriptionCreated $event) 
 });
 ```
 
-Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `InvoicePaid`, `TrialEnding`, `GraceStarted`, `AccessSuspended`.
+Available: `CheckoutCompleted`, `SubscriptionCreated`, `SubscriptionUpdated`, `SubscriptionCancelled`, `SubscriptionResumed`, `PaymentSucceeded`, `PaymentFailed`, `PaymentRefunded`, `InvoicePaid`, `TrialEnding`, `GraceStarted`, `AccessSuspended`.
 
 **Bill a workspace instead of a user.** Tell billing which owner a user acts for, and make that model an owner:
 

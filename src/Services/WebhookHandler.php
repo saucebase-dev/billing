@@ -21,6 +21,7 @@ use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Events\InvoicePaid;
 use Modules\Billing\Events\PaymentFailed;
+use Modules\Billing\Events\PaymentRefunded;
 use Modules\Billing\Events\PaymentSucceeded;
 use Modules\Billing\Events\SubscriptionCancelled;
 use Modules\Billing\Events\SubscriptionUpdated;
@@ -515,6 +516,11 @@ class WebhookHandler
             'amount_refunded' => $refund->amountRefunded,
             'status' => $refund->fullyRefunded ? PaymentStatus::Refunded : null,
         ], fn ($value) => $value !== null));
+
+        // On the change, not the event type: a provider repeating itself announces nothing twice.
+        if ($payment->wasChanged('status') && $payment->status === PaymentStatus::Refunded) {
+            event(new PaymentRefunded($payment));
+        }
     }
 
     private function onSubscriptionDeleted(WebhookData $webhook): void

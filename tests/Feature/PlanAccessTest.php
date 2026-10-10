@@ -4,12 +4,14 @@ namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Validation\ValidationException;
 use Inertia\Testing\AssertableInertia;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
+use Modules\Billing\Events\PaymentRefunded;
 use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
@@ -221,6 +223,34 @@ class PlanAccessTest extends TestCase
         $this->assertSame(PaymentStatus::Succeeded, $payment->fresh()->status);
         $this->assertSame(100, $payment->fresh()->amount_refunded);
         $this->assertTrue($this->user->fresh()->canUseFeature('exports'));
+    }
+
+    public function test_a_full_refund_is_announced_once(): void
+    {
+        $payment = $this->buyLifetime();
+        Event::fake([PaymentRefunded::class]);
+
+        $refund = ['payment_intent' => 'pi_lifetime', 'refunded' => true, 'amount_refunded' => $payment->amount];
+        $this->webhook(WebhookEventType::PaymentRefunded, $refund);
+        // The provider reports the same refund again, as a new event.
+        $this->webhook(WebhookEventType::PaymentRefunded, $refund);
+
+        Event::assertDispatchedTimes(PaymentRefunded::class, 1);
+        Event::assertDispatched(PaymentRefunded::class, fn (PaymentRefunded $event) => $event->payment->is($payment));
+    }
+
+    public function test_a_partial_refund_is_not_announced(): void
+    {
+        $this->buyLifetime();
+        Event::fake([PaymentRefunded::class]);
+
+        $this->webhook(WebhookEventType::PaymentRefunded, [
+            'payment_intent' => 'pi_lifetime',
+            'refunded' => false,
+            'amount_refunded' => 100,
+        ]);
+
+        Event::assertNotDispatched(PaymentRefunded::class);
     }
 
     /** Replaced by lifetime and running out: the app offers no way back into it. */
