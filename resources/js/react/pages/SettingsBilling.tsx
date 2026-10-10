@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useDialog } from '@/hooks/useDialog';
 import { useT, useTranslation } from '@/i18n';
 import { router } from '@inertiajs/react';
-import { formatDate } from '@js/lib/dates';
+import { formatDate } from '@saucebase/core/lib/dates';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';

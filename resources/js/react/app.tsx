@@ -1,5 +1,5 @@
-import { registerGlobalComponent } from '@/lib/globalComponents';
-import { registerIcon } from '@/lib/navigation';
+import { registerGlobalComponent } from '@saucebase/react/lib/globalComponents';
+import { registerIcon } from '@saucebase/react/lib/navigation';
 import IconCreditCard from '~icons/lucide/credit-card';
 import IconSparkles from '~icons/lucide/sparkles';
 import PlanName from './components/PlanName';
