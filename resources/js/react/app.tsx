@@ -9,5 +9,3 @@ export function setup() {
     registerIcon('upgrade', IconSparkles);
     registerGlobalComponent('user-subtitle', PlanName);
 }
-
-export function afterMount() {}

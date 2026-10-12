@@ -215,8 +215,8 @@ export default function ProductCard({
             {/* Features */}
             {!!product.features?.length && (
                 <ul className="text-foreground/70 mt-6 flex-1 space-y-1 text-sm">
-                    {product.features.map((feature, index) => (
-                        <li key={index} className="flex items-start gap-3">
+                    {product.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-3">
                             <svg
                                 className="text-primary mt-0.5 h-5 w-5 shrink-0"
                                 fill="currentColor"

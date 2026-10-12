@@ -9,9 +9,3 @@ export function setup() {
     registerIcon('upgrade', IconSparkles);
     registerGlobalComponent('user-subtitle', PlanName);
 }
-
-/**
- * Billing module after mount logic
- * Called after the app has been mounted
- */
-export function afterMount() {}

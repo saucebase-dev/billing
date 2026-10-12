@@ -87,9 +87,9 @@ export default function Checkout({
 
                 {!!product.features?.length && (
                     <ul className="mt-4 space-y-2">
-                        {product.features.map((feature, index) => (
+                        {product.features.map((feature) => (
                             <li
-                                key={index}
+                                key={feature}
                                 className="text-foreground/70 flex items-center gap-2 text-sm"
                             >
                                 <IconCheck className="text-primary size-4 shrink-0" />
