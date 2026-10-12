@@ -5,6 +5,7 @@ namespace Modules\Billing\Services;
 use Illuminate\Support\Manager;
 use Illuminate\Support\Str;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Modules\Billing\Settings\BillingSettings;
 use Stripe\StripeClient;
@@ -54,8 +55,14 @@ class PaymentGatewayManager extends Manager
 
     public function createStripeDriver(): StripeGateway
     {
-        $client = new StripeClient($this->config->get('services.stripe.secret_key'));
+        $secretKey = $this->config->get('services.stripe.secret_key');
 
-        return new StripeGateway($client);
+        // Stripe's client refuses a missing key with an error of its own, which would
+        // reach a buyer as a server error instead of a checkout they can retry.
+        if (blank($secretKey)) {
+            throw new GatewayOperationFailedException('stripe', 'connect: STRIPE_SECRET_KEY is not set');
+        }
+
+        return new StripeGateway(new StripeClient($secretKey));
     }
 }
