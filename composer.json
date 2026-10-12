@@ -2,7 +2,7 @@
     "name": "saucebase/billing",
     "description": "Payment gateway and subscription management module for Saucebase",
     "type": "saucebase-module",
-    "version": "v2.1.2",
+    "version": "v2.1.4",
     "authors": [
         {
             "name": "Saucebase",
