@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    uses: saucebase-dev/saucebase/.github/workflows/semantic-release.yml@main
+    uses: saucebase-dev/core/.github/workflows/semantic-release.yml@main
     with:
       version_file: 'composer.json'
       version_file_path: '.version'
