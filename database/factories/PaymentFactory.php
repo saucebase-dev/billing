@@ -27,6 +27,7 @@ class PaymentFactory extends Factory
             'subscription_id' => null,
             'payment_method_id' => null,
             'price_id' => null,
+            'provider' => 'stripe',
             'provider_payment_id' => 'pi_'.fake()->regexify('[A-Za-z0-9]{24}'),
             'currency' => Currency::default(),
             'amount' => fake()->randomElement([999, 1999, 4999]),

@@ -2,14 +2,5 @@
 
 namespace Modules\Billing\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Modules\Billing\Models\Payment;
-
-class PaymentSucceeded
-{
-    use Dispatchable;
-
-    public function __construct(
-        public Payment $payment,
-    ) {}
-}
+/** A payment went through: a checkout's first payment or one-time purchase, or a renewal. */
+class PaymentSucceeded extends PaymentEvent {}

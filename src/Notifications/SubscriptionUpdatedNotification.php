@@ -2,50 +2,37 @@
 
 namespace Modules\Billing\Notifications;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
-use Illuminate\Notifications\Notification;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Subscription;
 
-class SubscriptionUpdatedNotification extends Notification
+class SubscriptionUpdatedNotification extends BillingNotification
 {
-    use Queueable;
-
     public function __construct(
         public Subscription $subscription,
     ) {}
 
     /**
-     * @return array<int, string>
+     * Only a cancellation scheduled for the period end is news here. Falling behind on
+     * payment has its own mail, which names the date access ends.
      */
-    public function via(object $notifiable): array
+    public function shouldSend(object $notifiable, string $channel): bool
     {
-        return ['mail'];
+        return $this->subscription->cancelled_at !== null
+            && $this->subscription->status === SubscriptionStatus::Active;
     }
 
     public function toMail(object $notifiable): MailMessage
     {
         $productName = $this->subscription->price->product->name;
+        $endsAt = $this->subscription->ends_at?->format('F j, Y') ?? __('the end of your billing period');
 
-        $mail = (new MailMessage)
-            ->greeting(__('Hello :name,', ['name' => $notifiable->name]));
-
-        if ($this->subscription->cancelled_at && $this->subscription->status === SubscriptionStatus::Active) {
-            $endsAt = $this->subscription->ends_at?->format('F j, Y') ?? __('the end of your billing period');
-
-            return $mail
-                ->subject(__('Subscription Cancellation Scheduled'))
-                ->line(__('Your subscription to **:product** has been scheduled for cancellation on **:date**.', ['product' => $productName, 'date' => $endsAt]))
-                ->action(__('Manage Billing'), route('settings.billing'))
-                ->line(__('You can resume your subscription at any time before this date.'));
-        }
-
-        return $mail
-            ->subject(__('Subscription Past Due'))
-            ->line(__('Your subscription to **:product** is past due. Please update your payment method.', ['product' => $productName]))
+        return (new MailMessage)
+            ->subject(__('Subscription Cancellation Scheduled'))
+            ->greeting(__('Hello :name,', ['name' => $notifiable->name]))
+            ->line(__('Your subscription to **:product** has been scheduled for cancellation on **:date**.', ['product' => $productName, 'date' => $endsAt]))
             ->action(__('Manage Billing'), route('settings.billing'))
-            ->line(__('Update your payment method to avoid service interruption.'));
+            ->line(__('You can resume your subscription at any time before this date.'));
     }
 
     /**

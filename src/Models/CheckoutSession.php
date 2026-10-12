@@ -14,9 +14,14 @@ use Modules\Billing\Enums\CheckoutSessionStatus;
  * @property string $uuid
  * @property int|null $customer_id
  * @property int $price_id
+ * @property string|null $provider
  * @property string|null $provider_session_id
+ * @property string|null $provider_url
  * @property string|null $success_url
  * @property string|null $cancel_url
+ * @property string|null $coupon
+ * @property int|null $trial_days
+ * @property bool|null $trial_requires_payment_method
  * @property CheckoutSessionStatus $status
  * @property array<string, mixed>|null $metadata
  * @property Carbon|null $expires_at
@@ -31,12 +36,17 @@ class CheckoutSession extends Model
         'uuid',
         'customer_id',
         'price_id',
+        'provider',
         'provider_session_id',
+        'provider_url',
         'success_url',
         'cancel_url',
         'status',
         'metadata',
         'expires_at',
+        'coupon',
+        'trial_days',
+        'trial_requires_payment_method',
     ];
 
     protected static function booted(): void
@@ -62,6 +72,8 @@ class CheckoutSession extends Model
             'status' => CheckoutSessionStatus::class,
             'metadata' => 'array',
             'expires_at' => 'datetime',
+            'trial_days' => 'integer',
+            'trial_requires_payment_method' => 'boolean',
         ];
     }
 

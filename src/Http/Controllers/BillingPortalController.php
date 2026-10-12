@@ -3,29 +3,75 @@
 namespace Modules\Billing\Http\Controllers;
 
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
-use Modules\Billing\Models\Customer;
-use Modules\Billing\Services\BillingService;
+use Illuminate\Http\Request;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
+use Modules\Billing\Services\BillingOwners;
+use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Services\PurchaseEligibility;
+use Saucebase\Core\Toast;
+use Saucebase\Core\Settings\SettingsSection;
 
 class BillingPortalController
 {
     public function __construct(
-        private BillingService $billingService,
+        private PaymentGatewayManager $gateways,
+        private BillingOwners $owners,
     ) {}
 
-    public function __invoke(): RedirectResponse
+    public function __invoke(Request $request): RedirectResponse
     {
-        $customer = Customer::where('user_id', Auth::id())->first();
+        $customer = $this->owners
+            ->managedBy($request->user())
+            ->billingAccount();
 
         if (! $customer) {
-            return redirect()->route('settings.billing')->with('toast', [
-                'type' => 'error',
-                'message' => __('No billing account found. Please subscribe to a plan first.'),
-            ]);
+            Toast::error(__('No billing account found. Please subscribe to a plan first.'));
+
+            return redirect()->to(SettingsSection::url('billing'));
         }
 
-        $url = $this->billingService->getManagementUrl(Auth::user());
+        try {
+            $url = $this->gateways
+                ->driver($customer->provider)
+                ->getManagementUrl($customer);
+        } catch (GatewayOperationFailedException $e) {
+            report($e);
+
+            Toast::error(__('Billing management is not available right now. Please try again later.'));
+
+            return redirect()->to(SettingsSection::url('billing'));
+        }
 
         return redirect()->away($url);
+    }
+
+    /**
+     * Only the subscription of the owner the user manages: nothing in the
+     * request says which one, so there is nobody else's to reach.
+     */
+    public function changePlan(Request $request, PurchaseEligibility $eligibility): RedirectResponse
+    {
+        $subscription = $this->owners
+            ->managedBy($request->user())
+            ->billingAccount()
+            ?->currentSubscription();
+
+        if (! $subscription || $eligibility->isReplacedByLifetime($subscription)) {
+            abort(404);
+        }
+
+        try {
+            return redirect()->away(
+                $this->gateways
+                    ->driver($subscription->provider)
+                    ->getPlanChangeUrl($subscription)
+            );
+        } catch (GatewayOperationFailedException $e) {
+            report($e);
+
+            Toast::error(__('Plan changes are not available right now. Please try again later.'));
+
+            return redirect()->to(SettingsSection::url('billing'));
+        }
     }
 }

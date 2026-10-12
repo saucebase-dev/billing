@@ -3,9 +3,8 @@
 namespace Modules\Billing\Enums;
 
 use Filament\Support\Contracts\HasLabel;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
+use Modules\Billing\Settings\BillingSettings;
 
-#[TypeScript]
 enum Currency: string implements HasLabel
 {
     case USD = 'USD';
@@ -18,12 +17,10 @@ enum Currency: string implements HasLabel
         return $this->value;
     }
 
-    /**
-     * Get the default currency from configuration.
-     */
+    /** The merchant's reporting currency, from the billing settings. */
     public static function default(): self
     {
-        return self::from(config('billing.default_currency'));
+        return self::from(app(BillingSettings::class)->currency);
     }
 
     public function formatAmount(int $amountInMinorUnits): string

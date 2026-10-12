@@ -2,8 +2,10 @@
 
 namespace Modules\Billing\Filament\Resources\Products;
 
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
@@ -20,7 +22,14 @@ class ProductResource extends Resource
 {
     protected static ?string $model = Product::class;
 
-    protected static ?int $navigationSort = 1;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCube;
+
+    protected static ?int $navigationSort = 201;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

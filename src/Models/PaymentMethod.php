@@ -11,6 +11,7 @@ use Modules\Billing\Enums\PaymentMethodType;
 /**
  * @property int $id
  * @property int $customer_id
+ * @property string $provider
  * @property string|null $provider_payment_method_id
  * @property PaymentMethodType $type
  * @property array<string, mixed>|null $details
@@ -25,6 +26,7 @@ class PaymentMethod extends Model
 
     protected $fillable = [
         'customer_id',
+        'provider',
         'provider_payment_method_id',
         'type',
         'details',

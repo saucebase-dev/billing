@@ -1,0 +1,82 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\PaymentMethod;
+use Modules\Billing\Models\Price;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::create('subscriptions', function (Blueprint $table) {
+            $table->id();
+
+            // Foreign keys
+            $table->foreignIdFor(Customer::class)->constrained()->cascadeOnDelete();
+            // Restricted, not cascaded: products cascade to prices, and the admin
+            // can force-delete a product, so cascading here would take paid
+            // subscriptions with it. Refusing is the only safe answer.
+            $table->foreignIdFor(Price::class)->constrained()->restrictOnDelete();
+            $table->foreignIdFor(PaymentMethod::class)->nullable()->constrained()->nullOnDelete();
+
+            // Provider identifiers
+            $table->string('provider');
+            $table->string('provider_subscription_id')->nullable();
+
+            // Status
+            $table->string('status')->default('pending');
+
+            // Trial period
+            $table->timestamp('trial_starts_at')->nullable();
+            $table->timestamp('trial_ends_at')->nullable();
+
+            // Billing period
+            $table->timestamp('current_period_starts_at')->nullable();
+            $table->timestamp('current_period_ends_at')->nullable();
+
+            // Cancellation
+            $table->timestamp('cancelled_at')->nullable();
+            $table->timestamp('ends_at')->nullable();
+
+            // When a subscription behind on payment stops granting access. Null
+            // while nothing is owed; set once per delinquency, never extended.
+            $table->timestamp('grace_ends_at')->nullable();
+
+            // Bumped by every state change, so a provider read taken before one
+            // can tell that it is answering about an older row.
+            $table->unsignedInteger('state_revision')->default(0);
+
+            // When the provider event last applied to this row happened, to drop older ones
+            $table->timestamp('last_event_at')->nullable();
+
+            // Configuration
+            $table->json('metadata')->nullable();
+
+            // Timestamps
+            $table->timestamps();
+
+            // Indexes
+            $table->index('customer_id');
+            $table->index('price_id');
+            $table->index('payment_method_id');
+            $table->unique(['provider', 'provider_subscription_id']);
+            $table->index('status');
+            $table->index('current_period_ends_at');
+            $table->index('ends_at');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('subscriptions');
+    }
+};

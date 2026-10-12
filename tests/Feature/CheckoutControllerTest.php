@@ -5,16 +5,19 @@ namespace Modules\Billing\Tests\Feature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CheckoutResultData;
-use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Settings\BillingSettings;
 use Tests\TestCase;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 class CheckoutControllerTest extends TestCase
 {
+    use BillsTheUser;
     use RefreshDatabase;
 
     private CheckoutSession $session;
@@ -30,24 +33,25 @@ class CheckoutControllerTest extends TestCase
             'expires_at' => now()->addHours(24),
         ]);
 
-        $gateway = $this->createMock(PaymentGatewayInterface::class);
-        $gateway->method('createCustomer')->willReturnCallback(
-            fn (CustomerData $data) => Customer::create([
-                'user_id' => $data->user->id,
-                'provider_customer_id' => 'cus_test_123',
-                'email' => $data->email,
-                'name' => $data->name,
-                'phone' => $data->phone,
-                'address' => $data->address?->toArray(),
-            ]),
-        );
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
+        $gateway->method('createCustomer')->willReturn('cus_test_123');
         $gateway->method('createCheckoutSession')->willReturn(
             new CheckoutResultData(sessionId: 'cs_test_123', url: 'https://stripe.com/checkout', provider: 'stripe'),
         );
 
-        $manager = $this->createMock(PaymentGatewayManager::class);
+        $manager = $this->createStub(PaymentGatewayManager::class);
+        $manager->method('getDefaultDriver')->willReturn('stripe');
         $manager->method('driver')->willReturn($gateway);
         app()->instance(PaymentGatewayManager::class, $manager);
+    }
+
+    /** Any text can be typed into the address; only a real checkout ID reaches the database. */
+    public function test_a_checkout_address_that_is_not_an_id_is_not_found(): void
+    {
+        $user = $this->createUser();
+
+        $this->actingAs($user)->get('/billing/checkout/not-a-real-uuid')->assertNotFound();
+        $this->actingAs($user)->post('/billing/checkout/not-a-real-uuid/retry')->assertNotFound();
     }
 
     public function test_checkout_requires_authentication(): void
@@ -66,7 +70,7 @@ class CheckoutControllerTest extends TestCase
 
         $response = $this->actingAs($user)->post(route('billing.checkout.store', $this->session), []);
 
-        $response->assertSessionHasErrors(['name', 'email']);
+        $response->assertSessionHasErrors(['email']);
     }
 
     public function test_authenticated_checkout_uses_existing_user(): void
@@ -74,52 +78,119 @@ class CheckoutControllerTest extends TestCase
         $user = $this->createUser();
 
         $response = $this->actingAs($user)->post(route('billing.checkout.store', $this->session), [
-            'name' => $user->name,
             'email' => $user->email,
         ]);
 
         $response->assertRedirect('https://stripe.com/checkout');
 
         $this->assertDatabaseCount('users', 1);
-        $this->assertDatabaseHas('customers', [
-            'user_id' => $user->id,
-        ]);
+        $this->assertTrue($user->fresh()->billingAccount() !== null);
     }
 
-    public function test_checkout_stores_billing_details_on_customer(): void
+    /**
+     * The form asks for an email and nothing else; the name comes from the
+     * account and Stripe collects the billing address on its own page.
+     */
+    public function test_checkout_takes_the_name_from_the_account(): void
     {
         $user = $this->createUser();
 
         $response = $this->actingAs($user)->post(route('billing.checkout.store', $this->session), [
-            'name' => 'Billing Name',
             'email' => 'billing@example.com',
-            'phone' => '+1234567890',
-            'address' => [
-                'street' => '123 Main St',
-                'city' => 'Springfield',
-                'state' => 'IL',
-                'postal_code' => '62701',
-                'country' => 'US',
-            ],
         ]);
 
         $response->assertRedirect('https://stripe.com/checkout');
 
         $this->assertDatabaseHas('customers', [
-            'user_id' => $user->id,
-            'name' => 'Billing Name',
+            'owner_id' => $user->id,
+            'name' => $user->name,
             'email' => 'billing@example.com',
-            'phone' => '+1234567890',
         ]);
+    }
 
-        $customer = Customer::where('user_id', $user->id)->first();
-        $this->assertEquals([
-            'country' => 'US',
-            'line1' => '123 Main St',
-            'line2' => null,
-            'city' => 'Springfield',
-            'state' => 'IL',
-            'postalCode' => '62701',
-        ], $customer->address);
+    /** The price can stay active on a product the admin has switched off. */
+    public function test_a_disabled_product_cannot_be_bought(): void
+    {
+        app(BillingSettings::class)->fill(['redirect_to_gateway' => true])->save();
+        $user = $this->createUser();
+
+        $this->session->price->product->update(['is_active' => false]);
+
+        $this->actingAs($user)
+            ->post(route('billing.checkout.create'), ['price_id' => $this->session->price_id])
+            ->assertSessionHasErrors('price_id');
+
+        $this->actingAs($user)
+            ->get(route('billing.checkout', $this->session))
+            ->assertNotFound();
+    }
+
+    /** The provider rejects a checkout naming a price it has never heard of. */
+    public function test_a_price_the_provider_does_not_know_cannot_be_bought(): void
+    {
+        $user = $this->createUser();
+
+        $this->session->price->update(['provider_price_id' => null]);
+
+        $this->actingAs($user)
+            ->post(route('billing.checkout.create'), ['price_id' => $this->session->price_id])
+            ->assertSessionHasErrors('price_id');
+    }
+
+    public function test_opening_a_checkout_session_goes_straight_to_the_gateway(): void
+    {
+        app(BillingSettings::class)->fill(['redirect_to_gateway' => true])->save();
+        $user = $this->createUser();
+
+        $this->actingAs($user)
+            ->get(route('billing.checkout', $this->session))
+            ->assertRedirect('https://stripe.com/checkout');
+
+        $this->assertDatabaseHas('checkout_sessions', [
+            'id' => $this->session->id,
+            'provider_session_id' => 'cs_test_123',
+        ]);
+    }
+
+    public function test_the_module_checkout_page_is_shown_when_the_redirect_is_turned_off(): void
+    {
+        app(BillingSettings::class)->fill(['redirect_to_gateway' => false])->save();
+        $user = $this->createUser();
+
+        $this->actingAs($user)
+            ->get(route('billing.checkout', $this->session))
+            ->assertOk();
+    }
+
+    /**
+     * A session is bound to a customer at the first hand-off. After that, opening
+     * its URL as somebody else must not move it onto the visitor's account.
+     */
+    public function test_a_pending_session_cannot_be_taken_over_by_another_user(): void
+    {
+        $owner = $this->createUser();
+        $this->actingAs($owner)->get(route('billing.checkout', $this->session));
+
+        $intruder = $this->createUser();
+
+        $this->actingAs($intruder)
+            ->get(route('billing.checkout', $this->session))
+            ->assertForbidden();
+
+        $this->assertSame(
+            (string) $owner->id,
+            $this->session->fresh()->customer->owner_id,
+        );
+    }
+
+    /** A pending session freezes its plan, so a guest's is refused before it exists. */
+    public function test_a_guest_cannot_open_a_checkout_for_the_free_plan(): void
+    {
+        $price = Price::factory()->create(['product_id' => Product::factory()->free()->create()->id, 'amount' => 0]);
+
+        $this->post(route('billing.checkout.create'), ['price_id' => $price->id])
+            ->assertSessionHasErrors('price_id');
+
+        $this->assertDatabaseMissing('checkout_sessions', ['price_id' => $price->id]);
     }
 }

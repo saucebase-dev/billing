@@ -26,6 +26,7 @@ class InvoiceFactory extends Factory
             'customer_id' => Customer::factory(),
             'subscription_id' => null,
             'payment_id' => null,
+            'provider' => 'stripe',
             'provider_invoice_id' => 'in_'.fake()->regexify('[A-Za-z0-9]{24}'),
             'number' => 'INV-'.fake()->unique()->numerify('######'),
             'currency' => Currency::default(),

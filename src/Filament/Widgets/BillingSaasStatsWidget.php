@@ -23,6 +23,11 @@ class BillingSaasStatsWidget extends BaseWidget
 
     public string $endDate = '';
 
+    public static function canView(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
+
     public function mount(): void
     {
         $this->startDate = now()->subDays(30)->startOfDay()->toDateTimeString();
@@ -49,8 +54,10 @@ class BillingSaasStatsWidget extends BaseWidget
 
     private function mrrStat(): Stat
     {
+        // One currency only: amounts in different currencies do not add up.
         $mrr = (int) Subscription::query()
             ->where('status', SubscriptionStatus::Active)
+            ->whereHas('price', fn ($query) => $query->where('currency', Currency::default()))
             ->with('price')
             ->get()
             ->sum(function (Subscription $subscription): float {
@@ -88,11 +95,12 @@ class BillingSaasStatsWidget extends BaseWidget
     private function totalRevenueStat(): Stat
     {
         $total = (int) Payment::where('status', PaymentStatus::Succeeded)
+            ->where('currency', Currency::default())
             ->whereBetween('created_at', [$this->startDate, $this->endDate])
             ->sum('amount');
 
         return Stat::make(__('Total Revenue'), Currency::default()->formatAmount($total))
-            ->description(__('Succeeded payments in period'))
+            ->description(__('Succeeded :currency payments in period', ['currency' => Currency::default()->value]))
             ->descriptionIcon('heroicon-m-banknotes')
             ->color('warning');
     }
@@ -105,7 +113,7 @@ class BillingSaasStatsWidget extends BaseWidget
                 CheckoutSessionStatus::Abandoned->value,
                 CheckoutSessionStatus::Expired->value,
             ])
-            ->selectRaw('SUM(status = ?) as completed, COUNT(*) as total', [CheckoutSessionStatus::Completed->value])
+            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed, COUNT(*) as total', [CheckoutSessionStatus::Completed->value])
             ->first();
 
         $total = $result ? (int) $result->getAttribute('total') : 0;

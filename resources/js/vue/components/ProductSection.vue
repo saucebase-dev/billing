@@ -1,18 +1,29 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 
-import type { Product } from '@modules/billing/resources/js/types';
+import type {
+    PlanAction,
+    PlanActions,
+    Product,
+} from '@modules/billing/resources/js/types';
 import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
-} from '../utils/intervals';
+} from '../../lib/intervals';
 
 import ProductCard from './ProductCard.vue';
 
-const props = defineProps<{
-    products: Product[];
-}>();
+const props = defineProps<PlanActions & { products: Product[] }>();
+
+/** A plan with no price for this interval shows only when it has something to say. */
+function planAction(product: Product): PlanAction {
+    const price = product.prices[0];
+
+    return price
+        ? (props.priceActions[price.id] ?? 'unavailable')
+        : (props.productActions[product.id] ?? 'unavailable');
+}
 
 const availableIntervals = computed(() => {
     if (!props.products) return [];
@@ -57,7 +68,12 @@ const filteredProducts = computed(() => {
                 matchesInterval(price.interval, billingInterval.value),
             ),
         }))
-        .filter((product) => product.prices.length > 0);
+        .filter(
+            (product) =>
+                product.prices.length > 0 ||
+                (props.productActions[product.id] ?? 'unavailable') !==
+                    'unavailable',
+        );
 });
 
 function getToggleLabel(interval: string): string {
@@ -75,7 +91,7 @@ function getToggleLabel(interval: string): string {
             class="mt-16 flex justify-center"
         >
             <div
-                class="relative flex items-center rounded-xl bg-gray-100 p-1 shadow-lg dark:bg-white/5"
+                class="bg-card/35 relative flex items-center rounded-xl p-1 shadow-lg"
             >
                 <button
                     v-for="interval in availableIntervals"
@@ -85,7 +101,7 @@ function getToggleLabel(interval: string): string {
                         'relative z-10 rounded-xl px-6 py-2 text-sm font-medium transition-all duration-200',
                         billingInterval === interval
                             ? 'bg-primary text-white'
-                            : 'text-gray-600 hover:text-gray-900 dark:text-gray-200 dark:hover:text-white',
+                            : 'text-foreground/70 hover:text-foreground',
                     ]"
                 >
                     {{ $t(getToggleLabel(interval)) }}
@@ -93,10 +109,23 @@ function getToggleLabel(interval: string): string {
             </div>
         </div>
 
+        <div
+            v-if="filteredProducts.length === 0"
+            class="bg-muted/70 text-muted-foreground mx-auto mt-16 max-w-xl rounded-lg p-4 text-center text-xl"
+            data-testid="pricing-empty"
+        >
+            {{
+                $t('No plans are available right now. Please check back soon.')
+            }}
+        </div>
+
         <!-- Pricing Cards -->
         <div
-            class="mx-auto mt-16 grid max-w-6xl grid-cols-1 gap-8"
+            v-else
+            class="mx-auto mt-16 grid grid-cols-1 gap-8"
             :class="{
+                'max-w-[450px]': filteredProducts.length === 1,
+                'max-w-6xl': filteredProducts.length > 1,
                 'lg:grid-cols-2': filteredProducts.length === 2,
                 'lg:grid-cols-3': filteredProducts.length === 3,
                 'lg:grid-cols-4': filteredProducts.length >= 4,
@@ -107,6 +136,7 @@ function getToggleLabel(interval: string): string {
                 :key="product.id"
                 :product="product"
                 :price="product.prices[0]"
+                :action="planAction(product)"
             />
         </div>
 

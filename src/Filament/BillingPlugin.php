@@ -2,11 +2,8 @@
 
 namespace Modules\Billing\Filament;
 
-use App\Filament\ModulePlugin;
 use Filament\Contracts\Plugin;
-use Filament\Navigation\NavigationGroup;
-use Filament\Panel;
-use Filament\Support\Icons\Heroicon;
+use Saucebase\Core\Filament\ModulePlugin;
 
 class BillingPlugin implements Plugin
 {
@@ -24,16 +21,6 @@ class BillingPlugin implements Plugin
 
     public static function getNavigationGroupSort(): int
     {
-        return 1;
-    }
-
-    public function boot(Panel $panel): void
-    {
-        $panel->navigationGroups([
-            NavigationGroup::make()
-                ->label(__('Billing'))
-                ->icon(Heroicon::OutlinedCreditCard)
-                ->collapsible(),
-        ]);
+        return 10;
     }
 }

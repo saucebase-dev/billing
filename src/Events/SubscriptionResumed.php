@@ -2,14 +2,5 @@
 
 namespace Modules\Billing\Events;
 
-use Illuminate\Foundation\Events\Dispatchable;
-use Modules\Billing\Models\Subscription;
-
-class SubscriptionResumed
-{
-    use Dispatchable;
-
-    public function __construct(
-        public Subscription $subscription,
-    ) {}
-}
+/** The customer undid a scheduled cancellation, so the subscription renews again. */
+class SubscriptionResumed extends SubscriptionEvent {}

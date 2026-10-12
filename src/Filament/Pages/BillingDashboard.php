@@ -12,7 +12,7 @@ class BillingDashboard extends Page
 {
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBarSquare;
 
-    protected static ?int $navigationSort = 0;
+    protected static ?int $navigationSort = 200;
 
     protected string $view = 'billing::filament.pages.billing-dashboard';
 
@@ -28,6 +28,11 @@ class BillingDashboard extends Page
     public string $startDate = '';
 
     public string $endDate = '';
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
 
     public static function getNavigationGroup(): ?string
     {

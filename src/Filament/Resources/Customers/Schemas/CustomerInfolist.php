@@ -20,8 +20,9 @@ class CustomerInfolist
                     ->schema([
                         Section::make(__('Customer Details'))
                             ->schema([
-                                TextEntry::make('user.name')
-                                    ->label(__('User')),
+                                TextEntry::make('owner.name')
+                                    ->label(__('Owner'))
+                                    ->placeholder(__('Account deleted')),
 
                                 TextEntry::make('name')
                                     ->label(__('Display Name'))
@@ -57,12 +58,7 @@ class CustomerInfolist
                                         TextEntry::make('status')
                                             ->label(__('Status'))
                                             ->badge()
-                                            ->color(fn (SubscriptionStatus $state): string => match ($state) {
-                                                SubscriptionStatus::Active => 'success',
-                                                SubscriptionStatus::PastDue => 'warning',
-                                                SubscriptionStatus::Cancelled => 'danger',
-                                                SubscriptionStatus::Pending => 'gray',
-                                            }),
+                                            ->color(fn (SubscriptionStatus $state): string => $state->getColor()),
 
                                         TextEntry::make('current_period_ends_at')
                                             ->label(__('Period End'))

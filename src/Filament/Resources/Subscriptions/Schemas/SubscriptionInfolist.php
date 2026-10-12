@@ -27,12 +27,7 @@ class SubscriptionInfolist
                                 TextEntry::make('status')
                                     ->label(__('Status'))
                                     ->badge()
-                                    ->color(fn (SubscriptionStatus $state): string => match ($state) {
-                                        SubscriptionStatus::Active => 'success',
-                                        SubscriptionStatus::PastDue => 'warning',
-                                        SubscriptionStatus::Cancelled => 'danger',
-                                        SubscriptionStatus::Pending => 'gray',
-                                    }),
+                                    ->color(fn (SubscriptionStatus $state): string => $state->getColor()),
 
                                 TextEntry::make('price.product.name')
                                     ->label(__('Product')),
@@ -64,6 +59,11 @@ class SubscriptionInfolist
                                     ->dateTime()
                                     ->hidden(fn ($record) => $record->trial_ends_at === null),
 
+                                TextEntry::make('grace_ends_at')
+                                    ->label(__('Access ends'))
+                                    ->dateTime()
+                                    ->hidden(fn ($record) => $record->grace_ends_at === null),
+
                                 TextEntry::make('cancelled_at')
                                     ->label(__('Cancelled At'))
                                     ->dateTime()
@@ -86,7 +86,7 @@ class SubscriptionInfolist
                     ->schema([
                         Section::make(__('Customer'))
                             ->schema([
-                                TextEntry::make('customer.user.name')
+                                TextEntry::make('customer.name')
                                     ->label(__('Name')),
 
                                 TextEntry::make('customer.email')

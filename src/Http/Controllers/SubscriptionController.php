@@ -2,45 +2,35 @@
 
 namespace Modules\Billing\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use Modules\Billing\Actions\CancelSubscription;
+use Modules\Billing\Actions\ResumeSubscription;
 use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Events\SubscriptionResumed;
-use Modules\Billing\Models\Customer;
-use Modules\Billing\Services\BillingService;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
+use Modules\Billing\Services\BillingOwners;
+use Saucebase\Core\Toast;
 
 class SubscriptionController
 {
     public function __construct(
-        private BillingService $billingService,
+        private CancelSubscription $cancelSubscription,
+        private BillingOwners $owners,
     ) {}
 
-    public function cancel(): RedirectResponse
+    public function cancel(Request $request): RedirectResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
-
-        /** @var Customer|null $customer */
-        $customer = $user->billingCustomer;
-
-        $subscription = $customer
-            ?->subscriptions()
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
-            ->latest()
-            ->first();
+        $subscription = $this->owners->managedBy($request->user())->billingAccount()?->currentSubscription();
 
         if (! $subscription) {
             abort(404);
         }
 
-        $periodEnd = $this->billingService->cancel($subscription, immediately: false);
-
-        $subscription->update([
-            'cancelled_at' => now(),
-            'ends_at' => $periodEnd ?? $subscription->current_period_ends_at,
-            'current_period_ends_at' => $periodEnd ?? $subscription->current_period_ends_at,
-        ]);
+        try {
+            $this->cancelSubscription->handle($subscription);
+        } catch (GatewayOperationFailedException $e) {
+            return $this->unavailable($e);
+        }
 
         return back()->with('toast', [
             'type' => 'success',
@@ -48,15 +38,9 @@ class SubscriptionController
         ]);
     }
 
-    public function resume(): RedirectResponse
+    public function resume(Request $request, ResumeSubscription $resumeSubscription): RedirectResponse
     {
-        /** @var User $user */
-        $user = Auth::user();
-
-        /** @var Customer|null $customer */
-        $customer = $user->billingCustomer;
-
-        $subscription = $customer
+        $subscription = $this->owners->managedBy($request->user())->billingAccount()
             ?->subscriptions()
             ->where('status', SubscriptionStatus::Active)
             ->whereNotNull('cancelled_at')
@@ -67,18 +51,25 @@ class SubscriptionController
             abort(404);
         }
 
-        $this->billingService->resume($subscription);
-
-        $subscription->update([
-            'cancelled_at' => null,
-            'ends_at' => null,
-        ]);
-
-        SubscriptionResumed::dispatch($subscription);
+        try {
+            $resumeSubscription->handle($subscription);
+        } catch (GatewayOperationFailedException $e) {
+            return $this->unavailable($e);
+        }
 
         return back()->with('toast', [
             'type' => 'success',
             'message' => __('Your subscription has been resumed.'),
         ]);
+    }
+
+    /** The provider did not answer: nothing changed, so say so and let them try again. */
+    private function unavailable(GatewayOperationFailedException $e): RedirectResponse
+    {
+        report($e);
+
+        Toast::error(__('We could not reach the payment provider. Nothing was changed; please try again in a moment.'));
+
+        return back();
     }
 }

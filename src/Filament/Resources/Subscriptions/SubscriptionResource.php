@@ -2,8 +2,10 @@
 
 namespace Modules\Billing\Filament\Resources\Subscriptions;
 
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
@@ -17,7 +19,14 @@ class SubscriptionResource extends Resource
 {
     protected static ?string $model = Subscription::class;
 
-    protected static ?int $navigationSort = 2;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPathRoundedSquare;
+
+    protected static ?int $navigationSort = 202;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
 
     public static function getGloballySearchableAttributes(): array
     {

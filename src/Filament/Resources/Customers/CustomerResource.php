@@ -2,8 +2,10 @@
 
 namespace Modules\Billing\Filament\Resources\Customers;
 
+use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Model;
@@ -17,11 +19,18 @@ class CustomerResource extends Resource
 {
     protected static ?string $model = Customer::class;
 
-    protected static ?int $navigationSort = 3;
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedIdentification;
+
+    protected static ?int $navigationSort = 203;
+
+    public static function canAccess(): bool
+    {
+        return auth()->user()?->can('manage billing') ?? false;
+    }
 
     public static function getGloballySearchableAttributes(): array
     {
-        return ['email', 'name', 'user.name'];
+        return ['email', 'name'];
     }
 
     public static function getGlobalSearchResultTitle(Model $record): string|Htmlable

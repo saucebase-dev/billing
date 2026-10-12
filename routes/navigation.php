@@ -1,9 +1,11 @@
 <?php
 
-use App\Facades\Navigation;
-use App\Navigation\Section;
+use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Services\BillingOwners;
+use Saucebase\Core\Facades\Navigation;
+use Saucebase\Core\Navigation\Section;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,22 +18,28 @@ use Modules\Billing\Models\Product;
 */
 
 // Landing Page Navigation
-// Navigation::addWhen(
-//     fn () => Product::displayable()?->exists(),
-//     'Pricing',
-//     route('billing.plans'),
-//     function (Section $section) {
-//         $section->attributes([
-//             'group' => 'landing',
-//             'slug' => 'pricing',
-//             'order' => 1,
-//         ]);
-//     }
-// );
+Navigation::addWhen(
+    fn () => Product::displayable()->exists(),
+    'Pricing',
+    fn () => route('billing.plans'),
+    function (Section $section) {
+        $section->attributes([
+            'group' => 'landing',
+            'slug' => 'pricing',
+            'order' => 1,
+        ]);
+    }
+);
 
 // User menu - Upgrade
 Navigation::addWhen(
-    fn () => ! Auth::user()?->isSubscriber(),
+    // The plan of whoever pays for this user: a workspace member is not asked to
+    // upgrade, and someone with no owner at all has nothing to upgrade.
+    function () {
+        $owner = Auth::user() instanceof User ? app(BillingOwners::class)->for(Auth::user()) : null;
+
+        return $owner !== null && ! $owner->hasPaidPlan();
+    },
     'Upgrade',
     fn () => route('billing.plans'),
     function (Section $section) {
@@ -44,12 +52,3 @@ Navigation::addWhen(
         ]);
     }
 );
-
-Navigation::add('Billing', fn () => route('settings.billing'), function (Section $section) {
-    $section->attributes([
-        'group' => 'settings',
-        'slug' => 'billing',
-        'icon' => 'billing',
-        'order' => 30,
-    ]);
-});

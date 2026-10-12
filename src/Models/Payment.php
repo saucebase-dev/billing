@@ -15,6 +15,7 @@ use Modules\Billing\Enums\PaymentStatus;
  * @property int|null $subscription_id
  * @property int|null $payment_method_id
  * @property int|null $price_id
+ * @property string $provider
  * @property string|null $provider_payment_id
  * @property Currency $currency
  * @property int $amount
@@ -35,6 +36,7 @@ class Payment extends Model
         'subscription_id',
         'payment_method_id',
         'price_id',
+        'provider',
         'provider_payment_id',
         'currency',
         'amount',

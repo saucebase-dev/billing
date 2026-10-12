@@ -14,12 +14,18 @@ use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Modules\Billing\Filament\Actions\PushProductAction;
+use Modules\Billing\Models\Product;
 
 class ProductsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            // PushProductAction reads each product's prices to decide whether to
+            // show itself.
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('prices'))
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Name'))
@@ -36,14 +42,14 @@ class ProductsTable
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
+                // The provider owns this flag once it knows the product, the same
+                // rule the edit form enforces; the list must not be a way around it.
                 ToggleColumn::make('is_active')
-                    ->onColor('success'),
+                    ->disabled(fn (Product $record) => $record->provider_product_id !== null),
 
-                ToggleColumn::make('is_visible')
-                    ->onColor('success'),
+                ToggleColumn::make('is_visible'),
 
-                ToggleColumn::make('is_highlighted')
-                    ->onColor('success'),
+                ToggleColumn::make('is_highlighted'),
 
                 TextColumn::make('created_at')
                     ->label(__('Created At'))
@@ -76,6 +82,7 @@ class ProductsTable
                 ActionGroup::make([
                     ViewAction::make(),
                     EditAction::make(),
+                    PushProductAction::make(),
                 ]),
             ])
             ->toolbarActions([

@@ -2,86 +2,58 @@
 
 namespace Modules\Billing\Http\Controllers;
 
+use App\Models\User;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Inertia\Inertia;
-use Inertia\Response;
-use Modules\Billing\Enums\InvoiceStatus;
-use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Models\Customer;
-use Modules\Billing\Models\Invoice;
-use Modules\Billing\Services\BillingService;
+use Illuminate\Support\Str;
+use Modules\Billing\Actions\FulfillCheckout;
+use Modules\Billing\Models\CheckoutSession;
+use Modules\Billing\Services\BillingOwners;
+use Saucebase\Core\Settings\SettingsSection;
 
 class SettingsBillingController
 {
-    public function show(Request $request, BillingService $billingService): Response
+    public function __construct(private BillingOwners $owners) {}
+
+    /**
+     * Land the visitor on the billing section of the settings modal.
+     *
+     * The provider returns here with our `checkout_session` after checkout, so
+     * the fulfilment still has to run server-side before the panel is shown.
+     * The section itself lives behind the `#settings/billing` fragment, which
+     * never reaches the server.
+     */
+    public function show(Request $request, FulfillCheckout $fulfillCheckout): RedirectResponse
     {
-        $user = Auth::user();
+        $session = $this->ownCheckout($request->query('checkout_session'), $request->user());
+        $paid = $session && $fulfillCheckout->handle($session);
 
-        /** @var Customer|null $customer */
-        $customer = $user->billingCustomer;
+        // A query parameter rather than a flash message: the panel is addressed by
+        // a URL fragment the server never sees, so it is reached by a fresh visit
+        // that would have dropped the flash. The panel clears it after toasting.
+        return redirect()->to(
+            $paid
+                ? route('home', ['checkout' => 'success']).'#settings/billing'
+                : SettingsSection::url('billing'),
+        );
+    }
 
-        if ($sessionId = $request->query('session_id')) {
-            $billingService->fulfillCheckoutIfNeeded($sessionId);
-            /** @var Customer|null $customer */
-            $customer = $user->billingCustomer()->first();
+    /**
+     * The ID arrives in the URL, so anyone can put someone else's in it: an
+     * unguessable ID is not permission. Only a checkout of the owner the user
+     * manages fulfils and congratulates; any other is completed by its webhook.
+     * With no account there is nothing of theirs, and a null `customer_id`
+     * would match every checkout nobody has claimed yet.
+     */
+    private function ownCheckout(mixed $uuid, ?User $user): ?CheckoutSession
+    {
+        $owner = $user ? $this->owners->for($user) : null;
+        $account = $owner?->canManageBilling($user) ? $owner->billingAccount() : null;
+
+        if (! is_string($uuid) || ! Str::isUuid($uuid) || ! $account) {
+            return null;
         }
 
-        if (! $customer) {
-            return Inertia::render('Billing::SettingsBilling', [
-                'subscription' => null,
-                'paymentMethod' => null,
-                'invoices' => [],
-                'billingPortalUrl' => route('billing.portal'),
-            ]);
-        }
-
-        $subscription = $customer
-            ->subscriptions()
-            ->with(['price.product', 'paymentMethod'])
-            ->whereIn('status', [SubscriptionStatus::Active, SubscriptionStatus::PastDue])
-            ->latest()
-            ->first();
-
-        $defaultPaymentMethod = $customer
-            ->paymentMethods()
-            ->where('is_default', true)
-            ->first();
-
-        $invoices = Invoice::where('customer_id', $customer->id)
-            ->whereIn('status', [InvoiceStatus::Paid, InvoiceStatus::Posted, InvoiceStatus::Unpaid])
-            ->orderByDesc('paid_at')
-            ->limit(20)
-            ->get();
-
-        // TODO: move it to a resource?
-
-        return Inertia::render('Billing::SettingsBilling', [
-            'subscription' => $subscription ? [
-                'id' => $subscription->id,
-                'status' => $subscription->status->value,
-                'current_period_starts_at' => $subscription->current_period_starts_at?->toISOString(),
-                'current_period_ends_at' => $subscription->current_period_ends_at?->toISOString(),
-                'cancelled_at' => $subscription->cancelled_at?->toISOString(),
-                'ends_at' => $subscription->ends_at?->toISOString(),
-                'plan_name' => $subscription->price?->product?->name,
-                'interval' => $subscription->price?->interval,
-            ] : null,
-            'paymentMethod' => $defaultPaymentMethod ? [
-                'type' => $defaultPaymentMethod->type->value,
-                'category' => $defaultPaymentMethod->type->category(),
-                'details' => $defaultPaymentMethod->details,
-            ] : null,
-            'invoices' => $invoices->map(fn (Invoice $invoice) => [
-                'id' => $invoice->id,
-                'number' => $invoice->number,
-                'total' => $invoice->total,
-                'currency' => $invoice->currency->value,
-                'status' => $invoice->status->value,
-                'paid_at' => $invoice->paid_at?->toISOString(),
-                'hosted_invoice_url' => $invoice->hosted_invoice_url,
-            ])->values(),
-            'billingPortalUrl' => route('billing.portal'),
-        ]);
+        return CheckoutSession::where('uuid', $uuid)->where('customer_id', $account->id)->first();
     }
 }

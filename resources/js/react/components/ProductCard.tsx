@@ -1,0 +1,238 @@
+import { router } from '@inertiajs/react';
+import { confirm } from '@saucebase/react/hooks/useDialog';
+import { useTranslation } from '@saucebase/react/i18n';
+import { UserLock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+import type {
+    PlanAction,
+    Price,
+    Product,
+} from '@modules/billing/resources/js/types';
+import { getIntervalDisplay } from '../../lib/intervals';
+import { formatMoney } from '../../lib/money';
+
+export default function ProductCard({
+    product,
+    price,
+    action,
+}: {
+    product: Product;
+    price?: Price;
+    action: PlanAction;
+}) {
+    const { t, locale } = useTranslation();
+    const formatPrice = (amount: number | string, currency?: string) =>
+        formatMoney(amount, currency, locale, { wholeUnits: true });
+    const featured = !!product.metadata?.badge || product.is_highlighted;
+    const [isAnimating, setIsAnimating] = useState(false);
+
+    // The amount, not the price object: switching interval swaps the object on
+    // every render, and only a changed figure is worth drawing attention to.
+    useEffect(() => {
+        setIsAnimating(true);
+        const timer = setTimeout(() => setIsAnimating(false), 150);
+
+        return () => clearTimeout(timer);
+    }, [price?.amount]);
+
+    const ctaClasses = featured
+        ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
+        : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset';
+
+    const startsCheckout = action === 'buy' || action === 'trial';
+    const enabled =
+        startsCheckout || action === 'signup' || action === 'owner_only';
+
+    function handleGetStarted() {
+        // Somebody else's plan: say who can change it rather than start a checkout that refuses.
+        if (action === 'owner_only') {
+            confirm({
+                title: t('Ask an owner to change the plan'),
+                description: t(
+                    'This plan is shared, and only its owners can change it.',
+                ),
+                confirmLabel: t('Got it'),
+                cancelLabel: t('Close'),
+                icon: UserLock,
+            });
+            return;
+        }
+
+        if (action === 'signup') {
+            router.visit(route('register'));
+            return;
+        }
+
+        if (startsCheckout && price) {
+            router.post(route('billing.checkout.create'), {
+                price_id: price.id,
+            });
+        }
+    }
+
+    const labels: Partial<Record<PlanAction, string>> = {
+        current: t('Current plan'),
+        included: t('Included in your plan'),
+        later: t('Available when your current plan ends'),
+        unavailable: t('Not available'),
+        owner_only: t('Ask an owner'),
+        trial: t('Start :days-day free trial', {
+            days: String(product.trial_days ?? 0),
+        }),
+    };
+    const buttonLabel = labels[action];
+
+    return (
+        <div
+            data-testid={`product-card-${product.slug}`}
+            className={`relative flex h-full flex-col rounded-3xl p-6 shadow-lg ${
+                featured
+                    ? 'ring-primary bg-card/70 shadow-lg ring-3 lg:scale-[1.05]'
+                    : 'bg-card/70 ring-border ring-1'
+            }`}
+        >
+            {featured && (
+                <span
+                    data-testid="product-badge"
+                    className="bg-primary absolute left-1/2 -translate-x-1/2 -translate-y-2/1 rounded-md px-3 py-1 text-xs font-semibold text-white shadow-2xl"
+                >
+                    {product.metadata?.badge || t('Most popular')}
+                </span>
+            )}
+
+            {/* Plan Name with Badge */}
+            <div className="flex items-center justify-between gap-x-4">
+                <h3
+                    className={`text-2xl font-semibold ${
+                        featured
+                            ? 'text-secondary dark:text-secondary-light'
+                            : 'text-foreground'
+                    }`}
+                >
+                    {product.name}
+                </h3>
+            </div>
+
+            {/* Description */}
+            {product.description && (
+                <p
+                    className="text-foreground/70 mt-2 text-sm"
+                    dangerouslySetInnerHTML={{ __html: product.description }}
+                />
+            )}
+
+            {/* Price */}
+            <div className="mt-2">
+                {/* Original price + discount badge */}
+                {price?.metadata?.original_price || price?.metadata?.badge ? (
+                    <div className="mb-1 flex h-8 items-center gap-2">
+                        {price.metadata?.original_price && (
+                            <span className="text-foreground/50 text-2xl line-through">
+                                {formatPrice(
+                                    price.metadata.original_price,
+                                    price.currency,
+                                )}
+                            </span>
+                        )}
+                        {price.metadata?.badge && (
+                            <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                                {price.metadata.badge}
+                            </span>
+                        )}
+                    </div>
+                ) : (
+                    <div className="h-9" />
+                )}
+
+                {/* Current price */}
+                <div
+                    className={`flex items-baseline gap-x-1 transition-transform duration-150 ${
+                        isAnimating ? 'scale-105' : ''
+                    }`}
+                >
+                    {price ? (
+                        <>
+                            <span className="text-foreground text-5xl font-semibold tracking-tight">
+                                {formatPrice(price.amount, price.currency)}
+                            </span>
+                            <span className="text-foreground/70 text-base">
+                                {getIntervalDisplay(price.interval)}
+                            </span>
+                        </>
+                    ) : (
+                        <span className="text-foreground text-2xl font-semibold">
+                            {t('Contact us')}
+                        </span>
+                    )}
+                </div>
+            </div>
+
+            {/* Tagline from metadata */}
+            {product.metadata?.tagline && (
+                <p className="text-foreground/70 mt-2 text-sm italic">
+                    {product.metadata.tagline}
+                </p>
+            )}
+
+            {/* CTA: plain anchors for links that leave the app, which an Inertia
+                visit would follow over XHR and fail on the provider's CORS. */}
+            {action === 'contact' ? (
+                <a
+                    href={product.metadata?.cta_url}
+                    className={`mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-2xl transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ${ctaClasses}`}
+                >
+                    {product.metadata?.cta_label || t('Get started')}
+                </a>
+            ) : action === 'change' ? (
+                <a
+                    data-testid="change-plan-button"
+                    href={route('billing.plan.change')}
+                    className={`mt-8 block w-full cursor-pointer rounded-xl px-4 py-3 text-center font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 ${ctaClasses}`}
+                >
+                    {t('Change plan')}
+                </a>
+            ) : (
+                <button
+                    data-testid="get-started-button"
+                    data-action={action}
+                    className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${ctaClasses}`}
+                    disabled={!enabled}
+                    onClick={handleGetStarted}
+                >
+                    {buttonLabel ??
+                        (product.metadata?.cta_label || t('Get started'))}
+                </button>
+            )}
+
+            {/* After CTA text from metadata */}
+            {product.metadata?.after_cta && (
+                <div className="text-foreground/70 mt-2 text-center text-sm">
+                    {t(product.metadata.after_cta)}
+                </div>
+            )}
+
+            {/* Features */}
+            {!!product.features?.length && (
+                <ul className="text-foreground/70 mt-6 flex-1 space-y-1 text-sm">
+                    {product.features.map((feature) => (
+                        <li key={feature} className="flex items-start gap-3">
+                            <svg
+                                className="text-primary mt-0.5 h-5 w-5 shrink-0"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                            >
+                                <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                />
+                            </svg>
+                            <span>{feature}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </div>
+    );
+}

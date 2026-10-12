@@ -1,49 +1,37 @@
 <?php
 
+use Modules\Billing\Events\AccessSuspended;
+use Modules\Billing\Events\GraceStarted;
+use Modules\Billing\Events\PaymentSucceeded;
+use Modules\Billing\Events\SubscriptionCancelled;
+use Modules\Billing\Events\SubscriptionCreated;
+use Modules\Billing\Events\SubscriptionResumed;
+use Modules\Billing\Events\SubscriptionUpdated;
+use Modules\Billing\Events\TrialEnding;
+use Modules\Billing\Notifications\AccessSuspendedNotification;
+use Modules\Billing\Notifications\GraceStartedNotification;
+use Modules\Billing\Notifications\PaymentSucceededNotification;
+use Modules\Billing\Notifications\SubscriptionCancelledNotification;
+use Modules\Billing\Notifications\SubscriptionCreatedNotification;
+use Modules\Billing\Notifications\SubscriptionResumedNotification;
+use Modules\Billing\Notifications\SubscriptionUpdatedNotification;
+use Modules\Billing\Notifications\TrialEndingNotification;
+
+// Everything a merchant can decide lives in BillingSettings (admin → Settings →
+// Billing). Provider credentials stay in config/services.php.
 return [
     'name' => 'Billing',
 
-    /*
-    |--------------------------------------------------------------------------
-    | Default Currency
-    |--------------------------------------------------------------------------
-    |
-    | The default currency for billing operations.
-    | Uses ISO 4217 currency codes (e.g., EUR, BRL, USD,...).
-    |
-    */
-    'default_currency' => env('BILLING_DEFAULT_CURRENCY', 'EUR'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Default Payment Gateway
-    |--------------------------------------------------------------------------
-    |
-    | Select which payment gateway to use by default.
-    | Available options: 'stripe', 'paddle', 'lemonsqueezy'
-    |
-    */
-    'default_gateway' => env('BILLING_GATEWAY', 'stripe'),
-
-    /*
-    |--------------------------------------------------------------------------
-    | Payment Gateway Logging
-    |--------------------------------------------------------------------------
-    |
-    | Enable or disable logging of payment gateway operations.
-    | Useful for debugging and monitoring payment flows.
-    |
-    */
-    'logging' => [
-        'enabled' => env('BILLING_LOGGING_ENABLED', true),
-        'channel' => env('BILLING_LOG_CHANNEL', 'stack'),
-    ],
-
-    'checkout' => [
-        // Minutes before a pending session with no action is marked Abandoned. Default: 60 (1 hour).
-        'abandon_after_minutes' => env('BILLING_CHECKOUT_ABANDON_MINUTES', 60),
-
-        // Minutes before a pending session is fully Expired. Default: 1440 (24h) — matches Stripe's TTL.
-        'expire_after_minutes' => env('BILLING_CHECKOUT_EXPIRE_MINUTES', 1440),
+    // The mail each event sends to the customer's owner. Remove an entry to stop it, map
+    // a subclass to change it, or add your own.
+    'notifications' => [
+        SubscriptionCreated::class => [SubscriptionCreatedNotification::class],
+        SubscriptionUpdated::class => [SubscriptionUpdatedNotification::class],
+        SubscriptionCancelled::class => [SubscriptionCancelledNotification::class],
+        SubscriptionResumed::class => [SubscriptionResumedNotification::class],
+        TrialEnding::class => [TrialEndingNotification::class],
+        GraceStarted::class => [GraceStartedNotification::class],
+        AccessSuspended::class => [AccessSuspendedNotification::class],
+        PaymentSucceeded::class => [PaymentSucceededNotification::class],
     ],
 ];

@@ -23,8 +23,35 @@ export interface Price {
     metadata?: PriceMetadata;
 }
 
+/**
+ * What a pricing card's button does, decided on the server (`PlanActions`).
+ * Mirrors the PHP `PlanAction` enum; change one, change the other. `buy`,
+ * `trial`, `signup`, `change` and `contact` act; `owner_only` explains who can; the rest
+ * are disabled labels.
+ */
+export type PlanAction =
+    | 'buy'
+    | 'signup'
+    | 'change'
+    | 'contact'
+    | 'current'
+    | 'included'
+    | 'later'
+    | 'unavailable'
+    | 'trial'
+    | 'owner_only';
+
+/** Button per displayed price, and per plan shown without a price. */
+export interface PlanActions {
+    priceActions: Record<number, PlanAction>;
+    productActions: Record<number, PlanAction>;
+}
+
 export interface Product {
     id: number;
+    kind?: 'free' | 'subscription' | 'lifetime' | 'one_off';
+    /** Days of free trial, offered once per customer. */
+    trial_days?: number | null;
     name: string;
     slug?: string;
     description: string | null;
@@ -59,6 +86,16 @@ export interface Subscription {
     ends_at: string | null;
     plan_name: string | null;
     interval: string | null;
+    /** Ending at period end because a lifetime plan replaces it. */
+    replaced_by_lifetime: boolean;
+    trial_ends_at: string | null;
+    on_trial: boolean;
+    /** When a subscription behind on payment stops working; null when nothing is owed. */
+    grace_ends_at: string | null;
+    /** The grace period ran out: recoverable, but granting nothing. */
+    suspended: boolean;
+    /** A nudge to add a card, never a verdict on what the provider will do. */
+    needs_payment_method: boolean;
 }
 
 export interface Invoice {

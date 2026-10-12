@@ -13,20 +13,30 @@ Route::middleware('web')->group(function (): void {
 
     Route::post('/billing/checkout', [CheckoutController::class, 'create'])->middleware('throttle:10,1')->name('billing.checkout.create');
 
-    Route::middleware(RedirectToRegister::class)->group(function (): void {
+    Route::middleware([RedirectToRegister::class, 'throttle:10,1'])->group(function (): void {
         Route::get('/billing/checkout/{checkout_session}', [CheckoutController::class, 'show'])
             ->name('billing.checkout')
+            ->whereUuid('checkout_session')
             ->missing(fn () => auth()->guest() ? redirect()->route('register') : abort(404));
         Route::post('/billing/checkout/{checkout_session}', [CheckoutController::class, 'store'])
             ->name('billing.checkout.store')
+            ->whereUuid('checkout_session')
             ->missing(fn () => auth()->guest() ? redirect()->route('register') : abort(404));
     });
 
     Route::middleware('auth')->group(function (): void {
         Route::get('/billing/portal', BillingPortalController::class)->name('billing.portal');
+        Route::get('/billing/plan/change', [BillingPortalController::class, 'changePlan'])->middleware('throttle:10,1')->name('billing.plan.change');
+        // A failed hand-off retried for this same checkout: same request, same idempotency key.
+        Route::post('/billing/checkout/{checkout_session}/retry', [CheckoutController::class, 'retry'])
+            ->whereUuid('checkout_session')
+            ->middleware('throttle:10,1')
+            ->name('billing.checkout.retry');
         Route::post('/billing/subscription/cancel', [SubscriptionController::class, 'cancel'])->name('billing.subscription.cancel');
         Route::post('/billing/subscription/resume', [SubscriptionController::class, 'resume'])->name('billing.subscription.resume');
 
+        // Stripe returns here after checkout; it fulfils the session and then
+        // hands off to the billing section of the settings modal.
         Route::get('/settings/billing', [SettingsBillingController::class, 'show'])->name('settings.billing');
     });
 });

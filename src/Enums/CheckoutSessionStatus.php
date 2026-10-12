@@ -2,9 +2,7 @@
 
 namespace Modules\Billing\Enums;
 
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-#[TypeScript]
 enum CheckoutSessionStatus: string
 {
     case Pending = 'pending';
