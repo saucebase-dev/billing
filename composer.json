@@ -1,45 +1,45 @@
 {
-    "name": "saucebase/billing",
-    "description": "Payment gateway and subscription management module for Saucebase",
-    "type": "saucebase-module",
-    "version": "v2.1.4",
-    "authors": [
-        {
-            "name": "Saucebase",
-            "email": "hello@saucebase.dev"
-        }
-    ],
-    "require": {
-        "saucebase/core": "^1.6",
-        "stripe/stripe-php": "^21.0"
-    },
-    "license": "proprietary",
-    "minimum-stability": "stable",
-    "extra": {
-        "laravel": {
-            "providers": [
-                "Modules\\Billing\\Providers\\BillingServiceProvider"
-            ],
-            "aliases": {}
-        },
-        "saucebase": {
-            "frameworks": [
-                "vue",
-                "react"
-            ]
-        }
-    },
-    "autoload": {
-        "psr-4": {
-            "Modules\\Billing\\": "src/",
-            "Modules\\Billing\\Database\\Factories\\": "database/factories/",
-            "Modules\\Billing\\Database\\Seeders\\": "database/seeders/",
-            "Modules\\Billing\\Tests\\Support\\": "tests/Support/"
-        }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Modules\\Billing\\Tests\\": "tests/"
-        }
+  "name": "saucebase/billing",
+  "description": "Payment gateway and subscription management module for Saucebase",
+  "type": "saucebase-module",
+  "version": "v3.0.0",
+  "authors": [
+    {
+      "name": "Saucebase",
+      "email": "hello@saucebase.dev"
     }
+  ],
+  "require": {
+    "saucebase/core": "^1.6",
+    "stripe/stripe-php": "^21.0"
+  },
+  "license": "proprietary",
+  "minimum-stability": "stable",
+  "extra": {
+    "laravel": {
+      "providers": [
+        "Modules\\Billing\\Providers\\BillingServiceProvider"
+      ],
+      "aliases": {}
+    },
+    "saucebase": {
+      "frameworks": [
+        "vue",
+        "react"
+      ]
+    }
+  },
+  "autoload": {
+    "psr-4": {
+      "Modules\\Billing\\": "src/",
+      "Modules\\Billing\\Database\\Factories\\": "database/factories/",
+      "Modules\\Billing\\Database\\Seeders\\": "database/seeders/",
+      "Modules\\Billing\\Tests\\Support\\": "tests/Support/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Modules\\Billing\\Tests\\": "tests/"
+    }
+  }
 }
