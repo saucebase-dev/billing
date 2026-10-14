@@ -1,0 +1,5 @@
+{
+    "name": "@saucebase/billing",
+    "private": true,
+    "type": "module"
+}
