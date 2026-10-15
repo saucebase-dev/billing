@@ -38,7 +38,7 @@ class DemoCustomerSeeder extends Seeder
 
         // Hashed once: bcrypt per user is what made this seeder slow, and every
         // demo account shares the same public password anyway.
-        $password = Hash::make('password');
+        $password = Hash::make(config('saucebase.demo_password'));
 
         $index = 0;
 

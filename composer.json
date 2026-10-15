@@ -1,6 +1,6 @@
 {
   "name": "saucebase/billing",
-  "description": "Payment gateway and subscription management module for Saucebase",
+  "description": "Stripe billing for Saucebase: checkout, subscriptions, trials, a pricing page and invoices.",
   "type": "saucebase-module",
   "version": "v3.1.1",
   "authors": [
@@ -10,8 +10,8 @@
     }
   ],
   "require": {
-    "saucebase/core": "^1.6",
-    "stripe/stripe-php": "^21.0"
+    "saucebase/core": "^1.13",
+    "stripe/stripe-php": "^22.0"
   },
   "license": "MIT",
   "minimum-stability": "stable",

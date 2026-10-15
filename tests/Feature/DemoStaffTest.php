@@ -4,6 +4,7 @@ namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Modules\Billing\Database\Seeders\DatabaseSeeder;
 use Modules\Billing\Database\Seeders\DemoBillingDatabaseSeeder;
 use Tests\TestCase;
@@ -24,5 +25,14 @@ class DemoStaffTest extends TestCase
 
         $this->assertSame(['billing admin'], $staff->getRoleNames()->all());
         $this->assertEqualsCanonicalizing(['access admin panel', 'manage billing'], $staff->getAllPermissions()->pluck('name')->all());
+    }
+
+    public function test_demo_accounts_use_the_configured_demo_password(): void
+    {
+        config(['saucebase.demo_password' => 'not-the-old-default']);
+
+        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
+
+        $this->assertTrue(Hash::check('not-the-old-default', User::where('email', 'billing@saucebase.dev')->value('password')));
     }
 }

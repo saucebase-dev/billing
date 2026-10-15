@@ -24,7 +24,7 @@ class DemoBillingDatabaseSeeder extends Seeder
         Role::findOrCreate('billing admin')->syncPermissions(['access admin panel', 'manage billing']);
         $staff = User::firstOrCreate(
             ['email' => 'billing@saucebase.dev'],
-            ['name' => 'Billing Admin', 'password' => bcrypt('secretsauce')],
+            ['name' => 'Billing Admin', 'password' => bcrypt(config('saucebase.demo_password'))],
         );
         $staff->syncRoles('billing admin');
 

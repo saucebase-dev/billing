@@ -240,15 +240,13 @@ Unsupported events are acknowledged (200). Events for unknown customers are ackn
 
 **Commands.** `billing:expire-checkout-sessions` prints expired / abandoned / kept / unresolved and exits 1 when anything is unresolved (each reported with its checkout). *Kept* means the buyer completed it — not a failure. A crashed hand-off past the 24-hour replay window is logged, not counted, so it cannot fail every run forever; that is sc-787's reconciliation. `billing:end-grace-periods` isolates rows, reports a failed one, exits 1 when any failed.
 
-**Debugging.** Search logs for `billing_error_id`; `provider_request_id` finds the call in Stripe's dashboard (Developers → Logs). A burst of `webhook_dependency_not_ready` at info level is normal event reordering; one that never clears means the creating event is not subscribed to (check the `stripe listen --events` list).
+**Debugging.** Search logs for `billing_error_id`; `provider_request_id` finds the call in Stripe's dashboard (Developers → Logs). A burst of `webhook_dependency_not_ready` at info level is normal event reordering; one that never clears means the creating event is not subscribed to (check the production webhook's events against the README).
 
 ## Debugging Billing Issues
 
 Before diving into code, verify the external dependencies are running:
 
-- **Stripe CLI listener** — webhooks won't fire locally without it. Run the Stripe CLI with the event list it requires:
-  `stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.paid,invoice.payment_succeeded,invoice.payment_failed,charge.refunded,payment_method.attached,payment_method.detached,customer.updated --forward-to <app-url>/billing/webhooks/stripe`
-  Then confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener.
+- **Stripe CLI listener** — webhooks won't fire locally without it: `task billing:webhook:stripe:listen` (or `stripe listen --all-snapshot --forward-to <app-url>/billing/webhooks/stripe --skip-verify`). It forwards every event; billing acknowledges the ones it doesn't handle. Then confirm the webhook secret in `.env` (`STRIPE_WEBHOOK_SECRET`) matches the CLI output. Most "subscription not created" or "event not fired" bugs in local dev are just a missing or misconfigured listener. The events billing handles are `StripeGateway::EVENT_MAP`; the README lists them for the production webhook, and `WebhookEventListTest` keeps the two equal.
 - **Stripe keys** — confirm `STRIPE_SECRET_KEY` and `STRIPE_PUBLISHABLE_KEY` are set and match the environment (test vs. live). A mismatched key causes silent 401s from Stripe with no local exception.
 - **Queue worker** — if listeners appear registered but notifications don't go out, check whether jobs are being queued but not processed (`php artisan queue:work`).
 
