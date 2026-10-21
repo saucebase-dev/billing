@@ -6,6 +6,7 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Modules\Billing\Actions\CancelSubscription;
 use Modules\Billing\Actions\StartCheckout;
 use Modules\Billing\Data\CheckoutResultData;
@@ -1502,5 +1503,118 @@ class WebhookHandlerTest extends TestCase
         ]);
 
         Event::assertDispatched(PaymentSucceeded::class);
+    }
+
+    /** A plan change made in the provider's portal comes back as an update naming the new price. */
+    public function test_a_plan_change_moves_the_subscription_to_the_local_price(): void
+    {
+        $subscription = Subscription::factory()->create(['provider_subscription_id' => 'sub_change', 'status' => SubscriptionStatus::Active]);
+        $yearly = Price::factory()->create(['provider' => 'stripe', 'provider_price_id' => 'price_yearly', 'interval' => 'year']);
+
+        $this->deliverOne(WebhookEventType::SubscriptionUpdated, 'evt_change', [
+            'id' => 'sub_change',
+            'status' => 'active',
+            'items' => ['data' => [['price' => ['id' => 'price_yearly']]]],
+        ]);
+
+        $this->assertSame($yearly->id, $subscription->fresh()->price_id);
+    }
+
+    public function test_a_plan_change_to_a_price_unknown_here_keeps_the_current_one(): void
+    {
+        Log::spy();
+        $subscription = Subscription::factory()->create(['provider_subscription_id' => 'sub_unknown_price', 'status' => SubscriptionStatus::Active]);
+
+        $this->deliverOne(WebhookEventType::SubscriptionUpdated, 'evt_unknown_price', [
+            'id' => 'sub_unknown_price',
+            'status' => 'active',
+            'items' => ['data' => [['price' => ['id' => 'price_not_synced']]]],
+        ]);
+
+        $this->assertSame($subscription->price_id, $subscription->fresh()->price_id);
+        // The warning is how an operator learns to run the catalog sync.
+        Log::shouldHaveReceived('warning')->with('Subscription moved to a price unknown here; run the catalog sync', ['provider_price_id' => 'price_not_synced']);
+    }
+
+    public function test_a_default_card_change_for_an_unknown_customer_is_acknowledged(): void
+    {
+        $this->deliverOne(WebhookEventType::CustomerUpdated, 'evt_unknown_cus', [
+            'id' => 'cus_nobody',
+            'invoice_settings' => ['default_payment_method' => 'pm_nobody'],
+        ]);
+
+        $this->assertDatabaseCount('payment_methods', 0);
+    }
+
+    public function test_a_paid_invoice_keeps_its_tax_and_links(): void
+    {
+        Customer::factory()->create(['provider_customer_id' => 'cus_links']);
+
+        $this->deliverOne(WebhookEventType::InvoicePaid, 'evt_links', [
+            'id' => 'in_links',
+            'customer' => 'cus_links',
+            'number' => 'INV-002',
+            'currency' => 'usd',
+            'subtotal' => 2900,
+            'tax' => 580,
+            'total' => 3480,
+            'hosted_invoice_url' => 'https://stripe.test/invoice/links',
+            'invoice_pdf' => 'https://stripe.test/invoice/links/pdf',
+        ]);
+
+        $this->assertDatabaseHas('invoices', [
+            'provider_invoice_id' => 'in_links',
+            'tax' => 580,
+            'hosted_invoice_url' => 'https://stripe.test/invoice/links',
+            'pdf_url' => 'https://stripe.test/invoice/links/pdf',
+        ]);
+    }
+
+    public function test_a_paid_invoice_without_a_period_leaves_the_subscription_dates_alone(): void
+    {
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_noperiod']);
+        $subscription = Subscription::factory()->create([
+            'customer_id' => $customer->id,
+            'provider_subscription_id' => 'sub_noperiod',
+            'current_period_ends_at' => '2030-01-01 00:00:00',
+        ]);
+
+        $this->deliverOne(WebhookEventType::InvoicePaid, 'evt_noperiod', [
+            'id' => 'in_noperiod',
+            'customer' => 'cus_noperiod',
+            'subscription' => 'sub_noperiod',
+            'currency' => 'usd',
+            'subtotal' => 100,
+            'tax' => 0,
+            'total' => 100,
+        ]);
+
+        $this->assertSame('2030-01-01 00:00:00', $subscription->fresh()->current_period_ends_at->format('Y-m-d H:i:s'));
+    }
+
+    public function test_a_deleted_subscription_records_when_it_happened(): void
+    {
+        $subscription = Subscription::factory()->create(['provider_subscription_id' => 'sub_deleted_at', 'status' => SubscriptionStatus::Active]);
+        $occurredAt = CarbonImmutable::parse('2026-05-01 12:00:00');
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
+            type: WebhookEventType::SubscriptionDeleted,
+            provider: 'stripe',
+            providerEventId: 'evt_deleted_at',
+            payload: ['id' => 'sub_deleted_at'],
+            occurredAt: $occurredAt,
+        ));
+        $this->billingService->handle('stripe', request());
+
+        $this->assertEquals($occurredAt, $subscription->fresh()->last_event_at);
+    }
+
+    private function deliverOne(WebhookEventType $type, string $eventId, array $payload): void
+    {
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(
+            StripeWebhook::make(type: $type, provider: 'stripe', providerEventId: $eventId, payload: $payload),
+        );
+
+        $this->billingService->handle('stripe', request());
     }
 }
