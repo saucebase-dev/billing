@@ -216,6 +216,57 @@ class StripeEventMapperTest extends TestCase
         $this->assertSame(50, $partial->amountRefunded);
     }
 
+    /** Ending a lifetime plan needs Stripe to say so; silence is not a full refund. */
+    public function test_a_refund_that_does_not_say_refunded_is_not_full(): void
+    {
+        $refund = StripeEventMapper::map(WebhookEventType::PaymentRefunded, ['id' => 'ch_1', 'payment_intent' => 'pi_1', 'amount_refunded' => 50]);
+
+        $this->assertInstanceOf(RefundData::class, $refund);
+        $this->assertFalse($refund->fullyRefunded);
+    }
+
+    /** A subscription checkout carries both; the card is read off the subscription. */
+    public function test_a_checkout_with_both_references_reads_the_card_off_the_subscription(): void
+    {
+        $session = StripeEventMapper::checkoutSession(['id' => 'cs_1', 'subscription' => 'sub_1', 'payment_intent' => 'pi_1', 'currency' => 'usd']);
+
+        $this->assertSame('sub_1', $session->paymentMethodReference);
+    }
+
+    public function test_amounts_default_to_zero_and_ids_are_strings(): void
+    {
+        $session = StripeEventMapper::checkoutSession(['id' => 123, 'currency' => 'usd']);
+        $payment = StripeEventMapper::map(WebhookEventType::PaymentSucceeded, ['id' => 456, 'customer' => 'cus_1', 'currency' => 'usd']);
+        $customer = StripeEventMapper::map(WebhookEventType::CustomerUpdated, ['id' => 789]);
+
+        $this->assertSame(0, $session->amount);
+        $this->assertSame('123', $session->sessionId);
+        $this->assertInstanceOf(InvoicePaymentData::class, $payment);
+        $this->assertSame(0, $payment->amount);
+        $this->assertSame('456', $payment->providerPaymentId);
+        $this->assertInstanceOf(CustomerDefaultsData::class, $customer);
+        $this->assertSame('789', $customer->providerCustomerId);
+    }
+
+    public function test_an_invoice_without_subtotal_or_tax_has_zero_of_each(): void
+    {
+        $invoice = StripeEventMapper::map(WebhookEventType::InvoicePaid, ['id' => 'in_1', 'customer' => 'cus_1', 'currency' => 'usd', 'total' => 100]);
+
+        $this->assertInstanceOf(InvoiceData::class, $invoice);
+        $this->assertSame(0, $invoice->subtotal);
+        $this->assertSame(0, $invoice->tax);
+    }
+
+    public function test_amounts_sent_as_strings_become_integers(): void
+    {
+        $session = StripeEventMapper::checkoutSession(['id' => 'cs_1', 'currency' => 'usd', 'amount_total' => '1500']);
+        $payment = StripeEventMapper::map(WebhookEventType::PaymentSucceeded, ['id' => 'in_1', 'customer' => 'cus_1', 'currency' => 'usd', 'amount_paid' => '900']);
+
+        $this->assertSame(1500, $session->amount);
+        $this->assertInstanceOf(InvoicePaymentData::class, $payment);
+        $this->assertSame(900, $payment->amount);
+    }
+
     public function test_a_payment_method_change_keeps_its_own_id_for_removal(): void
     {
         $data = StripeEventMapper::map(WebhookEventType::PaymentMethodDetached, ['id' => 'pm_1', 'customer' => null]);
