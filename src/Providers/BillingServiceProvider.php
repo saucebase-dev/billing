@@ -32,14 +32,22 @@ class BillingServiceProvider extends ModuleServiceProvider
 
         $this->loadViewsFrom(module_path('billing', 'resources/views'), 'billing');
 
-        Inertia::share('billing.plan', fn () => $this->app->make(BillingOwners::class)
-            ->for(Auth::user() instanceof User ? Auth::user() : null)?->planName());
-
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
             $schedule->command('billing:sync-catalog')->daily();
             $schedule->command('billing:end-grace-periods')->hourly();
         });
+    }
+
+    protected function shareInertiaData(): void
+    {
+        Inertia::share(
+            'billing.plan',
+            fn () => $this->app
+                ->make(BillingOwners::class)
+                ->for(Auth::user() instanceof User ? Auth::user() : null)
+                ?->planName()
+        );
     }
 
     /**
