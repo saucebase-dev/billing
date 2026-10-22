@@ -7,5 +7,5 @@ import PlanName from './components/PlanName';
 export function setup() {
     registerIcon('billing', IconCreditCard);
     registerIcon('upgrade', IconSparkles);
-    registerGlobalComponent('user-subtitle', PlanName);
+    registerGlobalComponent('dashboard::user-menu.subtitle', PlanName);
 }
