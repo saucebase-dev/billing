@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    "saucebase/core": "^1.13",
+    "saucebase/core": "^2.0",
     "stripe/stripe-php": "^22.0"
   },
   "license": "MIT",
