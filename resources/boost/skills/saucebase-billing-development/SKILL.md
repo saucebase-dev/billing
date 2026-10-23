@@ -36,7 +36,7 @@ The screens live under `resources/js/`: `pages/Plans`, `pages/Checkout`, `pages/
 
 The pricing page lists every active price, not only `purchasable()` ones, so plans show before they are pushed. Each card's button is the action the server sends (`priceActions` / `productActions`, see *Plans, Kinds and Entitlements*); `ProductCard` only renders it — `change` is a plain anchor to `billing.plan.change`, `contact` the plan's `cta_url`.
 
-The sidebar's user menu shows the plan under the user's first name: billing shares `billing.plan` (`BillingOwner::planName()` — the subscription's plan, else a lifetime plan, else the free one) and registers `PlanName` in core's `user-subtitle` global-component slot, which falls back to the email.
+The sidebar's user menu shows the plan under the user's first name: billing shares `billing.plan` (`BillingOwner::planName()` — the subscription's plan, else a lifetime plan, else the free one) and registers `PlanName` in core's `dashboard::user-menu.subtitle` global-component slot, which falls back to the email.
 
 `resources/js/lib/intervals.ts` is the only place that knows `monthly` and `month` are the same interval.
 

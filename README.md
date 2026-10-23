@@ -100,6 +100,76 @@ Locally, forward them with `stripe listen --all-snapshot --forward-to localhost/
 
 The rest is in the admin panel, under **Settings → Billing**: currency, checkout flow, grace period and trials.
 
+## Show plans on the homepage (optional)
+
+The plans live at `/pricing`. To also list them on the homepage, use core's `home::content.after` slot. Paths below are relative to the module's `resources/js/`. A flat install keeps one stack there; a checkout with both keeps them in `vue/` and `react/`, so use the folder of the stack you run.
+
+1. Share the plans on the homepage only, from `shareInertiaData()` in `src/Providers/BillingServiceProvider.php` (core's hook for shared props, called from `boot()`). This is the same payload `BillingPlansController` builds:
+
+   ```php
+   use Modules\Billing\Models\Product;
+   use Modules\Billing\Services\BillingOwners;
+   use Modules\Billing\Services\PlanActions;
+
+   protected function shareInertiaData(): void
+   {
+       Inertia::share('billing.home', function () {
+           if (! request()->routeIs('index')) {
+               return null;
+           }
+
+           $products = Product::displayable()->get();
+           $user = request()->user();
+
+           return [
+               'products' => $products,
+               ...$this->app->make(PlanActions::class)->for($this->app->make(BillingOwners::class)->for($user), $products, $user),
+           ];
+       });
+   }
+   ```
+
+2. Add `components/HomePricing`, next to `ProductSection`:
+
+   ```vue
+   <!-- Vue: components/HomePricing.vue -->
+   <script setup lang="ts">
+   import { usePage } from '@inertiajs/vue3';
+   import { computed } from 'vue';
+   import ProductSection from './ProductSection.vue';
+
+   const home = computed(() => usePage().props.billing?.home);
+   </script>
+
+   <template>
+       <ProductSection v-if="home?.products.length" v-bind="home" />
+   </template>
+   ```
+
+   ```tsx
+   // React: components/HomePricing.tsx
+   import { usePage } from '@inertiajs/react';
+   import ProductSection from './ProductSection';
+
+   export function HomePricing() {
+       const home = usePage().props.billing?.home;
+
+       return home?.products.length ? <ProductSection {...home} /> : null;
+   }
+   ```
+
+3. Register it inside `setup()` in the module's `app` entry. A lower `order` renders first. Use your stack's alias, `@saucebase/vue` or `@saucebase/react`:
+
+   ```ts
+   // registerGlobalComponent is already imported there, from '@saucebase/<stack>/lib/globalComponents'
+   import HomePricing from './components/HomePricing.vue'; // React: import { HomePricing } from './components/HomePricing';
+
+   // inside setup()
+   registerGlobalComponent('home::content.after', HomePricing, { order: 10 });
+   ```
+
+Run `npm run build` afterwards.
+
 ## Demo data
 
 ```bash
