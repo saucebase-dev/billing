@@ -9,9 +9,9 @@ use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
-use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 class CheckoutSessionValidationTest extends TestCase
 {

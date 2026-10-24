@@ -2,7 +2,6 @@
 
 namespace Modules\Billing\Enums;
 
-
 enum CheckoutSessionStatus: string
 {
     case Pending = 'pending';

@@ -11,10 +11,10 @@ use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use Tests\TestCase;
-use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 #[AllowMockObjectsWithoutExpectations]
 class SubscriptionCancelTest extends TestCase
