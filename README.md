@@ -43,11 +43,8 @@ It installs PHP and Composer if they're missing. With the CLI already installed,
 **Already have a Saucebase app?** Add it with:
 
 ```bash
-composer require saucebase/billing
-git apply modules/billing/patches/user.patch
-php artisan migrate
-php artisan modules:seed --module=billing
-npm run build
+php artisan saucebase:module-install billing
+npm install && npm run build
 ```
 
 Then create your plans in Stripe and import them with `php artisan billing:sync-catalog`. They arrive hidden: describe them in the admin panel, under **Billing → Products**, and turn on **Visible**.
