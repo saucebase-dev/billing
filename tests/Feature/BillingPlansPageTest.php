@@ -9,8 +9,8 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
-use Tests\TestCase;
 use Modules\Billing\Tests\Support\Traits\BillsTheUser;
+use Tests\TestCase;
 
 class BillingPlansPageTest extends TestCase
 {

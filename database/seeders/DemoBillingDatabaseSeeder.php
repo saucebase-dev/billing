@@ -2,11 +2,11 @@
 
 namespace Modules\Billing\Database\Seeders;
 
+use App\Models\User;
 use Illuminate\Database\Seeder;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
-use App\Models\User;
 use Spatie\Permission\Models\Role;
 
 /**

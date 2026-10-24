@@ -36,10 +36,10 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\WebhookHandler;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 use Saucebase\Core\Settings\SettingsSection;
 use Spatie\LaravelData\Optional;
 use Tests\TestCase;
-use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * A provider that is not Stripe, speaking only the module's data. If billing

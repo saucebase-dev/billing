@@ -14,8 +14,8 @@ use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Settings\BillingSection;
-use Tests\TestCase;
 use Modules\Billing\Tests\Support\Traits\BillsTheUser;
+use Tests\TestCase;
 
 /**
  * What the billing panel in the settings modal says about the owner's plans.

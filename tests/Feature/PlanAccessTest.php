@@ -24,12 +24,12 @@ use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\PurchaseEligibility;
 use Modules\Billing\Services\WebhookHandler;
 use Modules\Billing\Tests\Support\StripeWebhook;
+use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use RuntimeException;
 use Saucebase\Core\Settings\SettingsSection;
 use Tests\TestCase;
-use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 
 /**
  * One plan per customer: a subscription or lifetime access, never paid for
