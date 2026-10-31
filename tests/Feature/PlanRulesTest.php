@@ -117,11 +117,21 @@ class PlanRulesTest extends TestCase
         $this->assertTrue($plan->fresh()->entitlements()->allows('exports'));
     }
 
-    public function test_entitlement_keys_are_snake_case(): void
+    /** Any key, like a permission name: `export data`, `packages:vendor/name.x`. */
+    public function test_an_entitlement_key_may_hold_any_characters(): void
+    {
+        $plan = Product::factory()->create(['entitlements' => ['features' => ['export data' => true, 'packages:saucebase/api-tokens.x' => true]]]);
+
+        $this->assertTrue($plan->fresh()->entitlements()->allows('export data'));
+        $this->assertTrue($plan->fresh()->entitlements()->allows('packages:saucebase/api-tokens.x'));
+    }
+
+    /** A stray edge space would make a key no code ever matches. */
+    public function test_an_entitlement_key_has_no_edge_spaces(): void
     {
         $this->expectException(ValidationException::class);
 
-        Product::factory()->create(['entitlements' => ['features' => ['Export Data' => true]]]);
+        Product::factory()->create(['entitlements' => ['features' => [' export' => true]]]);
     }
 
     public function test_a_limit_is_a_whole_number_or_unlimited(): void

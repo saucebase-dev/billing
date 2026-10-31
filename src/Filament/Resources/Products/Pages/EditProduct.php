@@ -10,6 +10,7 @@ use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Modules\Billing\Filament\Actions\PushProductAction;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
+use Modules\Billing\Filament\Resources\Products\Schemas\ProductForm;
 use Modules\Billing\Models\Product;
 
 class EditProduct extends EditRecord
@@ -18,6 +19,19 @@ class EditProduct extends EditRecord
 
     /** The save and its lock below share one transaction. */
     protected ?bool $hasDatabaseTransactions = true;
+
+    /**
+     * Entitlements become rows before the form hydrates. The repeater would
+     * otherwise read `features` and `limits` as two rows, and its `unlimited`
+     * toggle would write a stray `unlimited` key into each.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        return [...$data, 'entitlements' => ProductForm::entitlementRows($data['entitlements'] ?? null)];
+    }
 
     /**
      * Takes the plan's row lock, the same one checkout takes before opening a
@@ -36,6 +50,7 @@ class EditProduct extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            ProductForm::guideAction(),
             PushProductAction::make(),
             ViewAction::make(),
             DeleteAction::make()

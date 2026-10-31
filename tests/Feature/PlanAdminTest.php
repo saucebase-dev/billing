@@ -42,6 +42,24 @@ class PlanAdminTest extends TestCase
         $this->assertSame($pro->id, $plan->fresh()->replaces_product_id);
     }
 
+    /** Editing shows exactly the stored entitlements, and saving untouched keeps them. */
+    public function test_an_existing_plans_entitlements_load_one_row_each(): void
+    {
+        $stored = ['features' => ['webhooks' => true], 'limits' => ['projects' => null, 'api_requests' => 1000]];
+        $plan = Product::factory()->create(['entitlements' => $stored]);
+
+        $page = Livewire::test(EditProduct::class, ['record' => $plan->getKey()]);
+
+        $this->assertSame(
+            ['webhooks', 'projects', 'api_requests'],
+            array_column(array_values($page->get('data.entitlements')), 'key'),
+        );
+
+        $page->call('save')->assertHasNoFormErrors();
+
+        $this->assertSame($stored, $plan->fresh()->entitlements);
+    }
+
     /** One row per entitlement in the form; the stored shape the resolver reads. */
     public function test_entitlements_are_stored_as_features_and_limits(): void
     {
@@ -62,12 +80,25 @@ class PlanAdminTest extends TestCase
         );
     }
 
-    public function test_an_entitlement_key_must_be_snake_case(): void
+    public function test_an_entitlement_key_may_be_a_package_name(): void
     {
         $plan = Product::factory()->create();
 
         Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
-            ->fillForm(['entitlements' => [['key' => 'Export Data', 'type' => 'feature']]])
+            ->fillForm(['entitlements' => [['key' => 'packages:saucebase/api-tokens', 'type' => 'feature'], ['key' => 'export data', 'type' => 'feature']]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertTrue($plan->fresh()->entitlements()->allows('packages:saucebase/api-tokens'));
+        $this->assertTrue($plan->fresh()->entitlements()->allows('export data'));
+    }
+
+    public function test_an_entitlement_key_has_no_edge_spaces(): void
+    {
+        $plan = Product::factory()->create();
+
+        Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
+            ->fillForm(['entitlements' => [['key' => 'export ', 'type' => 'feature']]])
             ->call('save')
             ->assertHasFormErrors();
 

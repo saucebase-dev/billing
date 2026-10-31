@@ -86,6 +86,8 @@ export interface Subscription {
     ends_at: string | null;
     plan_name: string | null;
     interval: string | null;
+    /** Intervals per charge: 3 with `month` is quarterly. */
+    interval_count: number;
     /** Ending at period end because a lifetime plan replaces it. */
     replaced_by_lifetime: boolean;
     trial_ends_at: string | null;
@@ -96,6 +98,28 @@ export interface Subscription {
     suspended: boolean;
     /** A nudge to add a card, never a verdict on what the provider will do. */
     needs_payment_method: boolean;
+    amount: number | null;
+    currency: string | null;
+    features: string[];
+}
+
+/** A lifetime plan the owner bought, with its one payment. */
+export interface LifetimePlan {
+    name: string | null;
+    amount: number;
+    currency: string;
+    paid_at: string | null;
+    /** The plan's marketing features, as on its pricing card. */
+    features: string[];
+}
+
+/** A one-time payment: a lifetime plan's only record, since it has no invoice. */
+export interface OneTimePayment {
+    id: number;
+    amount: number;
+    currency: string;
+    status: 'succeeded' | 'refunded';
+    paid_at: string | null;
 }
 
 export interface Invoice {

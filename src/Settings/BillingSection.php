@@ -6,8 +6,10 @@ use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Modules\Billing\Contracts\BillingOwner;
 use Modules\Billing\Enums\InvoiceStatus;
+use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Invoice;
+use Modules\Billing\Models\Payment;
 use Modules\Billing\Services\BillingOwners;
 use Modules\Billing\Services\PurchaseEligibility;
 use Saucebase\Core\Settings\SettingsSection;
@@ -77,6 +79,7 @@ class BillingSection extends SettingsSection
             return [
                 'subscription' => null,
                 'lifetimePlans' => [],
+                'payments' => [],
                 'paymentMethod' => null,
                 'invoices' => [],
                 'billingPortalUrl' => route('billing.portal'),
@@ -112,6 +115,10 @@ class BillingSection extends SettingsSection
                 'ends_at' => $subscription->ends_at?->toISOString(),
                 'plan_name' => $subscription->price?->product?->name,
                 'interval' => $subscription->price?->interval,
+                'interval_count' => $subscription->price->interval_count ?? 1,
+                'amount' => $subscription->price?->amount,
+                'currency' => $subscription->price?->currency->value,
+                'features' => $subscription->price?->product->features ?? [],
                 // Only once the provider accepted the cancellation: until then
                 // it still renews, and the panel says so.
                 'trial_ends_at' => $subscription->trial_ends_at?->toISOString(),
@@ -127,7 +134,28 @@ class BillingSection extends SettingsSection
                 'replaced_by_lifetime' => $replacedByLifetime,
             ] : null,
             'lifetimePlans' => $customer->lifetimePurchases()
-                ->map(fn ($payment) => ['name' => $payment->price?->plan?->name])
+                ->map(fn (Payment $payment) => [
+                    'name' => $payment->price?->plan?->name,
+                    'amount' => $payment->amount,
+                    'currency' => $payment->currency->value,
+                    'paid_at' => $payment->created_at?->toISOString(),
+                    'features' => $payment->price?->plan->features ?? [],
+                ])
+                ->values(),
+            // One-time payments: a lifetime plan has no invoice, so this is its record.
+            'payments' => $customer->payments()
+                ->whereNull('subscription_id')
+                ->whereIn('status', [PaymentStatus::Succeeded, PaymentStatus::Refunded])
+                ->latest('id')
+                ->limit(20)
+                ->get()
+                ->map(fn (Payment $payment) => [
+                    'id' => $payment->id,
+                    'amount' => $payment->amount,
+                    'currency' => $payment->currency->value,
+                    'status' => $payment->status->value,
+                    'paid_at' => $payment->created_at?->toISOString(),
+                ])
                 ->values(),
             'paymentMethod' => $defaultPaymentMethod ? [
                 'type' => $defaultPaymentMethod->type->value,

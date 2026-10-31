@@ -41,7 +41,13 @@ test.describe.parallel('Settings Billing Basics', () => {
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
         await billingPage.expectPlanName('Pro');
+        await expect(page.getByTestId('plan-kind')).toHaveText('Monthly plan');
+        await expect(page.getByTestId('plan-amount')).toContainText('29.00');
+        await expect(page.getByTestId('plan-amount')).toContainText('month');
         await expect(billingPage.cancelButton).toBeVisible();
+        await expect(
+            page.getByTestId('danger-zone').getByTestId('cancel-button'),
+        ).toBeVisible();
     });
 
     test('opens and closes cancel dialog', async ({
@@ -69,6 +75,7 @@ test.describe.parallel('Settings Billing Basics', () => {
         const billingPage = new SettingsBillingPage(page);
         await billingPage.goto();
         await expect(billingPage.resumeButton).toBeVisible();
+        await expect(page.getByTestId('danger-zone')).toHaveCount(0);
         await expect(page.getByTestId('subscription-cancels-on')).toBeVisible();
     });
 });

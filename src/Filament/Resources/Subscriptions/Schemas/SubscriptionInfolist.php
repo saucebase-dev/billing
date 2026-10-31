@@ -35,9 +35,7 @@ class SubscriptionInfolist
                                 TextEntry::make('price.formatted_price')
                                     ->label(__('Plan Price'))
                                     ->state(fn ($record) => $record->price
-                                        ? '$'.number_format($record->price->amount / 100, 2).' '.
-                                            $record->price->currency->value.
-                                            ($record->price->interval ? '/'.$record->price->interval : ' (one-time)')
+                                        ? $record->price->currency->formatPrice($record->price->amount, $record->price->interval, $record->price->interval_count)
                                         : null
                                     ),
 

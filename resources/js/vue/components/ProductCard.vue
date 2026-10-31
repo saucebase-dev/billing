@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
+import { visitModal } from '@inertiaui/modal-vue';
 import { UserLock } from '@lucide/vue';
 import { trans } from 'laravel-vue-i18n';
 import { computed, ref, watch } from 'vue';
+import { toast } from 'vue-sonner';
 
 import type {
     PlanAction,
@@ -10,6 +12,7 @@ import type {
     Product,
 } from '@modules/billing/resources/js/types';
 import { useDialog } from '@saucebase/vue/composables/useDialog';
+import { useAuth } from '@saucebase/vue/composables/useAuth';
 import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
@@ -38,6 +41,9 @@ const enabled = computed(
 );
 
 const { confirm } = useDialog();
+const { signup } = useAuth();
+const page = usePage();
+const isStartingCheckout = ref(false);
 
 function handleGetStarted() {
     // Somebody else's plan: say who can change it rather than start a checkout that refuses.
@@ -55,11 +61,32 @@ function handleGetStarted() {
     }
 
     if (props.action === 'signup') {
-        router.visit(route('register'));
+        signup();
         return;
     }
 
     if (startsCheckout.value && props.price) {
+        if (!page.props.auth?.user && page.props.auth?.modal_enabled) {
+            isStartingCheckout.value = true;
+            (document.activeElement as HTMLElement | null)?.blur();
+
+            // Keep the pending checkout and its intended URL while registration
+            // opens over the pricing page.
+            visitModal(route('billing.checkout.create'), {
+                method: 'post',
+                data: { price_id: props.price.id },
+                navigate: true,
+            })
+                .catch(() => {
+                    toast.error(
+                        trans('Unable to start checkout. Please try again.'),
+                    );
+                })
+                .finally(() => (isStartingCheckout.value = false));
+
+            return;
+        }
+
         router.post(route('billing.checkout.create'), {
             price_id: props.price.id,
         });
@@ -202,7 +229,7 @@ watch(priceKey, () => {
             :data-action="action"
             class="mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
             :class="ctaClass"
-            :disabled="!enabled"
+            :disabled="!enabled || isStartingCheckout"
             @click="handleGetStarted"
         >
             <template v-if="action === 'current'">{{

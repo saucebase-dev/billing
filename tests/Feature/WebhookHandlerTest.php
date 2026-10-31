@@ -1522,7 +1522,7 @@ class WebhookHandlerTest extends TestCase
 
     public function test_a_plan_change_to_a_price_unknown_here_keeps_the_current_one(): void
     {
-        Log::spy();
+        $log = Log::spy();
         $subscription = Subscription::factory()->create(['provider_subscription_id' => 'sub_unknown_price', 'status' => SubscriptionStatus::Active]);
 
         $this->deliverOne(WebhookEventType::SubscriptionUpdated, 'evt_unknown_price', [
@@ -1533,7 +1533,7 @@ class WebhookHandlerTest extends TestCase
 
         $this->assertSame($subscription->price_id, $subscription->fresh()->price_id);
         // The warning is how an operator learns to run the catalog sync.
-        Log::shouldHaveReceived('warning')->with('Subscription moved to a price unknown here; run the catalog sync', ['provider_price_id' => 'price_not_synced']);
+        $log->shouldHaveReceived('warning')->with('Subscription moved to a price unknown here; run the catalog sync', ['provider_price_id' => 'price_not_synced']);
     }
 
     public function test_a_default_card_change_for_an_unknown_customer_is_acknowledged(): void

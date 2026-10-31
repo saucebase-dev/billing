@@ -10,10 +10,13 @@ use Modules\Billing\Data\WebhookData;
 use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\Currency;
+use Modules\Billing\Enums\PaymentStatus;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Enums\WebhookEventType;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
@@ -273,6 +276,39 @@ class BillingTestHelper
             'id' => 'sub_e2e_'.$user->id,
             'status' => 'active',
         ], 'evt_e2e_recover_'.$user->id);
+    }
+
+    /** The user owns a lifetime plan, bought for 299.00 in the default currency. */
+    /** A paid one-time plan: lifetime by default, or `one_off` (no plan card). */
+    public static function ownLifetime(string $email, string $kind = 'lifetime'): void
+    {
+        $kind = PlanKind::from($kind);
+        $user = User::where('email', $email)->sole();
+        $customer = $user->billingCustomer()->firstOrCreate(
+            [],
+            ['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe'],
+        );
+
+        $plan = Product::firstOrCreate(
+            ['slug' => "e2e-{$kind->value}"],
+            [
+                'sku' => "e2e-{$kind->value}", 'name' => $kind === PlanKind::Lifetime ? 'Lifetime E2E' : 'Onboarding call E2E', 'kind' => $kind, 'is_visible' => false, 'is_active' => true,
+                'features' => ['Unlimited projects', 'Custom domains', 'Webhooks', 'Priority support'],
+            ],
+        );
+        $price = Price::firstOrCreate(
+            ['provider_price_id' => "price_e2e_{$kind->value}"],
+            ['product_id' => $plan->id, 'currency' => Currency::default(), 'amount' => 29900, 'billing_scheme' => BillingScheme::FlatRate, 'is_active' => true],
+        );
+
+        Payment::create([
+            'customer_id' => $customer->id,
+            'price_id' => $price->id,
+            'provider' => 'stripe',
+            'currency' => $price->currency,
+            'amount' => $price->amount,
+            'status' => PaymentStatus::Succeeded,
+        ]);
     }
 
     /**
