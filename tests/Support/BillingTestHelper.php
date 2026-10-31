@@ -22,6 +22,7 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\WebhookHandler;
+use Tests\Support\ModuleSupport;
 use Tests\Support\TestFixtures;
 
 class BillingTestHelper
@@ -194,6 +195,8 @@ class BillingTestHelper
             );
 
             $user->assignRole('user');
+            // Whatever the other installed modules require (a workspace, with tenancy).
+            ModuleSupport::prepareUser($user);
 
             $customer = $user->billingCustomer()->firstOrCreate(
                 [],
@@ -233,6 +236,7 @@ class BillingTestHelper
     public static function subscriberPastTheirDeadline(): array
     {
         $user = User::factory()->create(['password' => Hash::make(TestFixtures::SHARED_PASSWORD), 'email_verified_at' => now()]);
+        ModuleSupport::prepareUser($user);
         $user->assignRole('user');
 
         $customer = $user->billingCustomer()->create(['email' => $user->email, 'name' => $user->name, 'provider' => 'stripe', 'provider_customer_id' => 'cus_e2e_'.$user->id]);
