@@ -194,6 +194,7 @@ test.describe('Buying a plan', () => {
             .click();
 
         await expect(page).toHaveURL(/\/auth\/register/);
+        await expect(page.getByTestId('register-modal')).toBeVisible();
 
         const register = new RegisterPage(page);
         await register.register(

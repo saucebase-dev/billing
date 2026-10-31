@@ -10,9 +10,31 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
+use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 
 class ProductInfolist
 {
+    /**
+     * One line per entitlement, features first: `exports: On`,
+     * `projects: Unlimited`, `api_requests: 1,000,000`.
+     *
+     * @return list<string>
+     */
+    private static function entitlementLines(Product $record): array
+    {
+        $entitlements = $record->entitlements()->toArray();
+
+        return [
+            ...array_map(fn (string $key) => $key.': '.__('On'), array_keys($entitlements['features'])),
+            ...array_map(
+                fn (string $key, ?int $limit) => $key.': '.($limit === null ? __('Unlimited') : number_format($limit)),
+                array_keys($entitlements['limits']),
+                $entitlements['limits'],
+            ),
+        ];
+    }
+
     public static function configure(Schema $schema): Schema
     {
         return $schema
@@ -57,6 +79,31 @@ class ProductInfolist
                             ])
                             ->columns(2),
 
+                        Section::make(__('Plan'))
+                            ->schema([
+                                TextEntry::make('kind')
+                                    ->label(__('Kind'))
+                                    ->badge(),
+
+                                TextEntry::make('replaces.name')
+                                    ->label(__('Replaces plan'))
+                                    ->visible(fn (Product $record) => $record->replaces_product_id !== null),
+
+                                TextEntry::make('trial_days')
+                                    ->label(__('Free trial'))
+                                    ->suffix(' '.__('days'))
+                                    ->visible(fn (Product $record) => $record->trial_days !== null),
+
+                                TextEntry::make('entitlement_list')
+                                    ->label(__('Entitlements'))
+                                    ->state(fn (Product $record) => self::entitlementLines($record))
+                                    ->listWithLineBreaks()
+                                    ->bulleted()
+                                    ->placeholder(__('No entitlements'))
+                                    ->columnSpanFull(),
+                            ])
+                            ->columns(3),
+
                         Section::make(__('Pricing'))
                             ->schema([
                                 RepeatableEntry::make('prices')
@@ -64,10 +111,7 @@ class ProductInfolist
                                     ->schema([
                                         TextEntry::make('formatted_price')
                                             ->label(__('Price'))
-                                            ->state(fn ($record) => '$'.number_format($record->amount / 100, 2).' '.
-                                                $record->currency->value.
-                                                ($record->interval ? '/'.$record->interval : ' (one-time)')
-                                            )
+                                            ->state(fn (Price $record) => $record->currency->formatPrice($record->amount, $record->interval, $record->interval_count))
                                             ->columnSpan(5),
                                         IconEntry::make('is_active')
                                             ->label(__('Active'))

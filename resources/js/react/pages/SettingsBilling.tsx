@@ -1,15 +1,24 @@
+import { DangerZone, EmptyState } from '@/components/ui/saucebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { router } from '@inertiajs/react';
 import { formatDate } from '@saucebase/core/lib/dates';
 import { useDialog } from '@saucebase/react/hooks/useDialog';
 import { useT, useTranslation } from '@saucebase/react/i18n';
 import { CreditCard, Loader2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import PlanFeatures from '../components/PlanFeatures';
 import { getIntervalLabel } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
-import type { Invoice, PaymentMethod, Subscription } from '../../types';
+import type {
+    Invoice,
+    LifetimePlan,
+    OneTimePayment,
+    PaymentMethod,
+    Subscription,
+} from '../../types';
 
 const longDate: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -91,12 +100,14 @@ function PaymentMethodLine({
 export default function SettingsBilling({
     subscription,
     lifetimePlans,
+    payments,
     paymentMethod,
     invoices,
     billingPortalUrl,
 }: {
     subscription: Subscription | null;
-    lifetimePlans: { name: string | null }[];
+    lifetimePlans: LifetimePlan[];
+    payments: OneTimePayment[];
     paymentMethod: PaymentMethod | null;
     invoices: Invoice[];
     billingPortalUrl: string;
@@ -105,6 +116,15 @@ export default function SettingsBilling({
     const { confirm } = useDialog();
     const [isCancelling, setIsCancelling] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
+
+    // Each lifetime plan card already shows its purchase; the table earns its
+    // place with a payment no card shows (a one-off) or a refund.
+    const showPayments = useMemo(
+        () =>
+            payments.length > lifetimePlans.length ||
+            payments.some((payment) => payment.status === 'refunded'),
+        [payments, lifetimePlans],
+    );
 
     /**
      * Congratulate whoever just came back from the payment page.
@@ -127,6 +147,7 @@ export default function SettingsBilling({
         // copy of the URL and re-renders from it, so switching panel would
         // toast again.
         url.searchParams.delete('checkout');
+        url.searchParams.delete('settings');
         router.replace({
             url: url.toString(),
             preserveState: true,
@@ -170,45 +191,128 @@ export default function SettingsBilling({
     return (
         <div className="space-y-8" data-testid="settings-billing-panel">
             <p className="text-muted-foreground text-sm">
-                {t('Manage your subscription, payment method, and invoices')}
+                {!subscription && lifetimePlans.length
+                    ? t('Your plan and payments')
+                    : t('Manage your subscription, payment method, and invoices')}
             </p>
 
             {/* Lifetime plans are owned for good, alongside any subscription */}
-            {lifetimePlans.length > 0 && (
-                <div data-testid="lifetime-plans" className="space-y-1">
-                    <h3 className="font-medium">{t('Lifetime')}</h3>
-                    {lifetimePlans.map((plan, index) => (
-                        <p
-                            key={index}
-                            className="text-foreground text-lg font-semibold"
-                        >
-                            {plan.name ?? t('Unknown Plan')}
-                        </p>
-                    ))}
-                </div>
-            )}
+            {lifetimePlans.map((plan, index) => (
+                <Card
+                    key={index}
+                    data-testid="lifetime-plan"
+                    className="gap-4 px-6"
+                >
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                            <p
+                                data-testid="lifetime-plan-kind"
+                                className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+                            >
+                                {t('Lifetime plan')}
+                            </p>
+                            <p
+                                data-testid="lifetime-plan-name"
+                                className="text-foreground text-lg font-semibold"
+                            >
+                                {plan.name ?? t('Unknown Plan')}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p
+                                data-testid="lifetime-plan-amount"
+                                className="text-foreground font-semibold tabular-nums"
+                            >
+                                {formatMoney(plan.amount, plan.currency, locale)}
+                            </p>
+                            <p className="text-muted-foreground text-xs">
+                                {t('Paid once')}
+                            </p>
+                        </div>
+                    </div>
+
+                    <PlanFeatures features={plan.features} />
+
+                    <p className="text-muted-foreground border-border border-t pt-4 text-sm">
+                        {plan.paid_at && (
+                            <>
+                                {t('Bought on :date', {
+                                    date: formatDate(
+                                        plan.paid_at,
+                                        locale,
+                                        longDate,
+                                    ),
+                                })}{' '}
+                                &middot;{' '}
+                            </>
+                        )}
+                        {t('Yours for good, no renewals.')}
+                    </p>
+                </Card>
+            ))}
 
             {subscription ? (
                 <div data-testid="subscription-section" className="space-y-8">
                     {/* Current plan */}
-                    <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1">
-                            <h3 className="font-medium">{t('Current Plan')}</h3>
-                            <p
-                                data-testid="plan-name"
-                                className="text-foreground text-lg font-semibold"
-                            >
-                                {subscription.plan_name ?? t('Unknown Plan')}
-                            </p>
+                    <Card data-testid="subscription-plan" className="gap-4 px-6">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                                <p
+                                    data-testid="plan-kind"
+                                    className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+                                >
+                                    {subscription.interval
+                                        ? t(':interval plan', {
+                                              interval: t(
+                                                  getIntervalLabel(
+                                                      subscription.interval,
+                                                  ),
+                                              ),
+                                          })
+                                        : t('Subscription')}
+                                </p>
+                                <p
+                                    data-testid="plan-name"
+                                    className="text-foreground text-lg font-semibold"
+                                >
+                                    {subscription.plan_name ?? t('Unknown Plan')}
+                                </p>
+                            </div>
+                            {subscription.amount !== null && (
+                                <p
+                                    data-testid="plan-amount"
+                                    className="text-foreground text-right font-semibold tabular-nums"
+                                >
+                                    {formatMoney(
+                                        subscription.amount,
+                                        subscription.currency,
+                                        locale,
+                                    )}
+                                    {subscription.interval && (
+                                        <span className="text-muted-foreground block text-xs font-normal">
+                                            {(subscription.interval_count ?? 1) > 1
+                                                ? t('every :count :interval', {
+                                                      count: String(
+                                                          subscription.interval_count,
+                                                      ),
+                                                      interval: t(
+                                                          `${subscription.interval}s`,
+                                                      ),
+                                                  })
+                                                : `/ ${t(subscription.interval)}`}
+                                        </span>
+                                    )}
+                                </p>
+                            )}
+                        </div>
+
+                        <PlanFeatures features={subscription.features} />
+
+                        <div className="border-border flex items-center justify-between gap-4 border-t pt-4">
                             <p className="text-muted-foreground text-sm">
-                                {subscription.interval
-                                    ? t(getIntervalLabel(subscription.interval))
-                                    : ''}
                                 {/* Trial, then trouble, then the ordinary dates */}
                                 {subscription.suspended ? (
                                     <>
-                                        {' '}
-                                        &middot;{' '}
                                         <span
                                             className="text-destructive"
                                             data-testid="subscription-suspended"
@@ -220,8 +324,6 @@ export default function SettingsBilling({
                                     </>
                                 ) : subscription.grace_ends_at ? (
                                     <>
-                                        {' '}
-                                        &middot;{' '}
                                         <span
                                             className="text-destructive"
                                             data-testid="subscription-grace"
@@ -241,8 +343,6 @@ export default function SettingsBilling({
                                 ) : subscription.on_trial &&
                                   !subscription.cancelled_at ? (
                                     <>
-                                        {' '}
-                                        &middot;{' '}
                                         <span data-testid="subscription-trial">
                                             {t('Trial ends on :date', {
                                                 date: formatDate(
@@ -255,8 +355,6 @@ export default function SettingsBilling({
                                     </>
                                 ) : subscription.cancelled_at ? (
                                     <>
-                                        {' '}
-                                        &middot;{' '}
                                         {subscription.replaced_by_lifetime ? (
                                             <span data-testid="replaced-by-lifetime">
                                                 {t(
@@ -288,8 +386,6 @@ export default function SettingsBilling({
                                 ) : (
                                     subscription.current_period_ends_at && (
                                         <>
-                                            {' '}
-                                            &middot;{' '}
                                             {t('Renews on :date', {
                                                 date: formatDate(
                                                     subscription.current_period_ends_at,
@@ -301,25 +397,25 @@ export default function SettingsBilling({
                                     )
                                 )}
                             </p>
+                            {subscription.needs_payment_method ? (
+                                <Button
+                                    asChild
+                                    size="sm"
+                                    data-testid="add-payment-method"
+                                >
+                                    <a href={billingPortalUrl}>
+                                        {t('Add payment method')}
+                                    </a>
+                                </Button>
+                            ) : (
+                                <Button asChild variant="outline" size="sm">
+                                    <a href={billingPortalUrl}>
+                                        {t('Adjust plan')}
+                                    </a>
+                                </Button>
+                            )}
                         </div>
-                        {subscription.needs_payment_method ? (
-                            <Button
-                                asChild
-                                size="sm"
-                                data-testid="add-payment-method"
-                            >
-                                <a href={billingPortalUrl}>
-                                    {t('Add payment method')}
-                                </a>
-                            </Button>
-                        ) : (
-                            <Button asChild variant="outline" size="sm">
-                                <a href={billingPortalUrl}>
-                                    {t('Adjust plan')}
-                                </a>
-                            </Button>
-                        )}
-                    </div>
+                    </Card>
 
                     {/* Payment method */}
                     <div className="flex items-start justify-between gap-4">
@@ -354,10 +450,10 @@ export default function SettingsBilling({
                                             <th className="text-muted-foreground pb-2 text-left font-medium">
                                                 {t('Date')}
                                             </th>
-                                            <th className="text-muted-foreground pb-2 text-left font-medium">
+                                            <th className="text-muted-foreground pb-2 text-right font-medium">
                                                 {t('Amount')}
                                             </th>
-                                            <th className="text-muted-foreground pb-2 text-left font-medium">
+                                            <th className="text-muted-foreground pb-2 pl-6 text-left font-medium">
                                                 {t('Status')}
                                             </th>
                                             <th className="text-muted-foreground pb-2 text-right font-medium">
@@ -378,14 +474,14 @@ export default function SettingsBilling({
                                                         longDate,
                                                     )}
                                                 </td>
-                                                <td className="text-foreground py-3">
+                                                <td className="text-foreground py-3 text-right tabular-nums">
                                                     {formatMoney(
                                                         invoice.total,
                                                         invoice.currency,
                                                         locale,
                                                     )}
                                                 </td>
-                                                <td className="py-3">
+                                                <td className="py-3 pl-6">
                                                     <Badge
                                                         variant={statusVariant(
                                                             invoice.status,
@@ -456,7 +552,7 @@ export default function SettingsBilling({
                         </div>
                     ) : (
                         /* Otherwise, the way out */
-                        <div className="space-y-3">
+                        <DangerZone showHeader={false}>
                             <div className="space-y-1">
                                 <h3 className="font-medium">
                                     {t('Cancellation')}
@@ -479,26 +575,81 @@ export default function SettingsBilling({
                                 )}
                                 {t('Cancel subscription')}
                             </Button>
-                        </div>
+                        </DangerZone>
                     )}
                 </div>
             ) : lifetimePlans.length > 0 ? null : (
                 /* Nothing bought yet */
-                <div
+                <EmptyState
+                    title={t('No active subscription')}
+                    description={t(
+                        'Choose a plan to get started with all the features.',
+                    )}
+                    icon={<CreditCard />}
                     data-testid="no-subscription"
-                    className="border-border flex w-full flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center"
                 >
-                    <h3 className="text-foreground font-medium">
-                        {t('No active subscription')}
-                    </h3>
-                    <p className="text-muted-foreground mt-2 text-sm">
-                        {t(
-                            'Choose a plan to get started with all the features.',
-                        )}
-                    </p>
-                    <Button asChild className="mt-4">
+                    <Button asChild>
                         <a href={route('billing.plans')}>{t('View Plans')}</a>
                     </Button>
+                </EmptyState>
+            )}
+
+            {/* One-time payments: a lifetime plan has no invoice to list */}
+            {showPayments && (
+                <div className="space-y-3" data-testid="payments">
+                    <h3 className="font-medium">{t('Payments')}</h3>
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-border border-b">
+                                <th className="text-muted-foreground pb-2 text-left font-medium">
+                                    {t('Date')}
+                                </th>
+                                <th className="text-muted-foreground pb-2 text-right font-medium">
+                                    {t('Amount')}
+                                </th>
+                                <th className="text-muted-foreground pb-2 pl-6 text-left font-medium">
+                                    {t('Status')}
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {payments.map((payment) => (
+                                <tr
+                                    key={payment.id}
+                                    data-testid={`payment-row-${payment.id}`}
+                                    className="border-border border-b last:border-0"
+                                >
+                                    <td className="text-foreground py-3">
+                                        {formatDate(
+                                            payment.paid_at,
+                                            locale,
+                                            longDate,
+                                        )}
+                                    </td>
+                                    <td className="text-foreground py-3 text-right tabular-nums">
+                                        {formatMoney(
+                                            payment.amount,
+                                            payment.currency,
+                                            locale,
+                                        )}
+                                    </td>
+                                    <td className="py-3 pl-6">
+                                        <Badge
+                                            variant={
+                                                payment.status === 'succeeded'
+                                                    ? 'default'
+                                                    : 'outline'
+                                            }
+                                        >
+                                            {payment.status === 'succeeded'
+                                                ? t('Paid')
+                                                : t('Refunded')}
+                                        </Badge>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             )}
         </div>

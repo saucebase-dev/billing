@@ -230,8 +230,8 @@ class Product extends Model
             foreach (['features', 'limits'] as $group) {
                 // The shape rules above report anything that is not a list.
                 foreach (array_keys((array) ($this->entitlements[$group] ?? [])) as $key) {
-                    if (! preg_match('/^[a-z][a-z0-9_]*$/', (string) $key)) {
-                        $validator->errors()->add('entitlements', __('Entitlement keys are snake_case, like max_projects.'));
+                    if (strlen((string) $key) > 255 || ! preg_match('/^\S(.*\S)?$/u', (string) $key)) {
+                        $validator->errors()->add('entitlements', __('Entitlement keys can\'t start or end with a space.'));
                     }
                 }
             }

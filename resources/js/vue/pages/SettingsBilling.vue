@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { DangerZone, EmptyState } from '@/components/ui/saucebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { useDialog } from '@saucebase/vue/composables/useDialog';
 import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { formatDate } from '@saucebase/core/lib/dates';
@@ -8,14 +10,22 @@ import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
 import { toast } from 'vue-sonner';
 import { CreditCard, Loader2 } from '@lucide/vue';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import PlanFeatures from '../components/PlanFeatures.vue';
 import { getIntervalLabel } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
-import type { Invoice, PaymentMethod, Subscription } from '../../types';
+import type {
+    Invoice,
+    LifetimePlan,
+    OneTimePayment,
+    PaymentMethod,
+    Subscription,
+} from '../../types';
 
-defineProps<{
+const props = defineProps<{
     subscription: Subscription | null;
-    lifetimePlans: { name: string | null }[];
+    lifetimePlans: LifetimePlan[];
+    payments: OneTimePayment[];
     paymentMethod: PaymentMethod | null;
     invoices: Invoice[];
     billingPortalUrl: string;
@@ -41,6 +51,7 @@ onMounted(() => {
     // Through the router, not history.replaceState: Inertia keeps its own copy of
     // the URL and re-renders from it, so switching panel would toast again.
     url.searchParams.delete('checkout');
+    url.searchParams.delete('settings');
     router.replace({
         url: url.toString(),
         preserveState: true,
@@ -53,6 +64,14 @@ const isResuming = ref(false);
 const { confirm } = useDialog();
 
 const { language } = useLocalization();
+
+// Each lifetime plan card already shows its purchase; the table earns its
+// place with a payment no card shows (a one-off) or a refund.
+const showPayments = computed(
+    () =>
+        props.payments.length > props.lifetimePlans.length ||
+        props.payments.some((payment) => payment.status === 'refunded'),
+);
 
 const longDate: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -126,50 +145,138 @@ function resumeSubscription() {
 <template>
     <div class="space-y-8" data-testid="settings-billing-panel">
         <p class="text-muted-foreground text-sm">
-            {{ $t('Manage your subscription, payment method, and invoices') }}
+            {{
+                !subscription && lifetimePlans.length
+                    ? $t('Your plan and payments')
+                    : $t(
+                          'Manage your subscription, payment method, and invoices',
+                      )
+            }}
         </p>
 
         <!-- Lifetime plans are owned for good, alongside any subscription -->
-        <div
-            v-if="lifetimePlans.length"
-            data-testid="lifetime-plans"
-            class="space-y-1"
+        <Card
+            v-for="(plan, index) in lifetimePlans"
+            :key="index"
+            data-testid="lifetime-plan"
+            class="gap-4 px-6"
         >
-            <h3 class="font-medium">{{ $t('Lifetime') }}</h3>
+            <div class="flex items-start justify-between gap-4">
+                <div class="space-y-1">
+                    <p
+                        data-testid="lifetime-plan-kind"
+                        class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+                    >
+                        {{ $t('Lifetime plan') }}
+                    </p>
+                    <p
+                        data-testid="lifetime-plan-name"
+                        class="text-foreground text-lg font-semibold"
+                    >
+                        {{ plan.name ?? $t('Unknown Plan') }}
+                    </p>
+                </div>
+                <div class="text-right">
+                    <p
+                        data-testid="lifetime-plan-amount"
+                        class="text-foreground font-semibold tabular-nums"
+                    >
+                        {{ formatMoney(plan.amount, plan.currency, language) }}
+                    </p>
+                    <p class="text-muted-foreground text-xs">
+                        {{ $t('Paid once') }}
+                    </p>
+                </div>
+            </div>
+
+            <PlanFeatures :features="plan.features" />
+
             <p
-                v-for="(plan, index) in lifetimePlans"
-                :key="index"
-                class="text-foreground text-lg font-semibold"
+                class="text-muted-foreground border-border border-t pt-4 text-sm"
             >
-                {{ plan.name ?? $t('Unknown Plan') }}
+                <template v-if="plan.paid_at">
+                    {{
+                        $t('Bought on :date', {
+                            date: formatDate(plan.paid_at, language, longDate),
+                        })
+                    }}
+                    &middot;
+                </template>
+                {{ $t('Yours for good, no renewals.') }}
             </p>
-        </div>
+        </Card>
 
         <template v-if="subscription">
             <div data-testid="subscription-section" class="space-y-8">
                 <!-- Current plan -->
-                <div class="flex items-start justify-between gap-4">
-                    <div class="space-y-1">
-                        <h3 class="font-medium">{{ $t('Current Plan') }}</h3>
+                <Card data-testid="subscription-plan" class="gap-4 px-6">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="space-y-1">
+                            <p
+                                data-testid="plan-kind"
+                                class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
+                            >
+                                {{
+                                    subscription.interval
+                                        ? $t(':interval plan', {
+                                              interval: $t(
+                                                  getIntervalLabel(
+                                                      subscription.interval,
+                                                  ),
+                                              ),
+                                          })
+                                        : $t('Subscription')
+                                }}
+                            </p>
+                            <p
+                                data-testid="plan-name"
+                                class="text-foreground text-lg font-semibold"
+                            >
+                                {{
+                                    subscription.plan_name ?? $t('Unknown Plan')
+                                }}
+                            </p>
+                        </div>
                         <p
-                            data-testid="plan-name"
-                            class="text-foreground text-lg font-semibold"
+                            v-if="subscription.amount !== null"
+                            data-testid="plan-amount"
+                            class="text-foreground text-right font-semibold tabular-nums"
                         >
-                            {{ subscription.plan_name ?? $t('Unknown Plan') }}
-                        </p>
-                        <p class="text-muted-foreground text-sm">
                             {{
-                                subscription.interval
-                                    ? $t(
-                                          getIntervalLabel(
-                                              subscription.interval,
-                                          ),
-                                      )
-                                    : ''
+                                formatMoney(
+                                    subscription.amount,
+                                    subscription.currency,
+                                    language,
+                                )
                             }}
+                            <span
+                                v-if="subscription.interval"
+                                class="text-muted-foreground block text-xs font-normal"
+                            >
+                                {{
+                                    (subscription.interval_count ?? 1) > 1
+                                        ? $t('every :count :interval', {
+                                              count: String(
+                                                  subscription.interval_count,
+                                              ),
+                                              interval: $t(
+                                                  `${subscription.interval}s`,
+                                              ),
+                                          })
+                                        : `/ ${$t(subscription.interval)}`
+                                }}
+                            </span>
+                        </p>
+                    </div>
+
+                    <PlanFeatures :features="subscription.features" />
+
+                    <div
+                        class="border-border flex items-center justify-between gap-4 border-t pt-4"
+                    >
+                        <p class="text-muted-foreground text-sm">
                             <!-- Trial, then trouble, then the ordinary dates -->
                             <template v-if="subscription.suspended">
-                                &middot;
                                 <span
                                     class="text-destructive"
                                     data-testid="subscription-suspended"
@@ -182,7 +289,6 @@ function resumeSubscription() {
                                 </span>
                             </template>
                             <template v-else-if="subscription.grace_ends_at">
-                                &middot;
                                 <span
                                     class="text-destructive"
                                     data-testid="subscription-grace"
@@ -207,7 +313,6 @@ function resumeSubscription() {
                                     !subscription.cancelled_at
                                 "
                             >
-                                &middot;
                                 <span data-testid="subscription-trial">
                                     {{
                                         $t('Trial ends on :date', {
@@ -221,7 +326,6 @@ function resumeSubscription() {
                                 </span>
                             </template>
                             <template v-else-if="subscription.cancelled_at">
-                                &middot;
                                 <span
                                     v-if="subscription.replaced_by_lifetime"
                                     data-testid="replaced-by-lifetime"
@@ -258,7 +362,6 @@ function resumeSubscription() {
                             <template
                                 v-else-if="subscription.current_period_ends_at"
                             >
-                                &middot;
                                 {{
                                     $t('Renews on :date', {
                                         date: formatDate(
@@ -270,26 +373,26 @@ function resumeSubscription() {
                                 }}
                             </template>
                         </p>
+                        <Button
+                            v-if="subscription.needs_payment_method"
+                            as="a"
+                            :href="billingPortalUrl"
+                            size="sm"
+                            data-testid="add-payment-method"
+                        >
+                            {{ $t('Add payment method') }}
+                        </Button>
+                        <Button
+                            v-else
+                            as="a"
+                            :href="billingPortalUrl"
+                            variant="outline"
+                            size="sm"
+                        >
+                            {{ $t('Adjust plan') }}
+                        </Button>
                     </div>
-                    <Button
-                        v-if="subscription.needs_payment_method"
-                        as="a"
-                        :href="billingPortalUrl"
-                        size="sm"
-                        data-testid="add-payment-method"
-                    >
-                        {{ $t('Add payment method') }}
-                    </Button>
-                    <Button
-                        v-else
-                        as="a"
-                        :href="billingPortalUrl"
-                        variant="outline"
-                        size="sm"
-                    >
-                        {{ $t('Adjust plan') }}
-                    </Button>
-                </div>
+                </Card>
 
                 <!-- Payment method -->
                 <div class="flex items-start justify-between gap-4">
@@ -379,12 +482,12 @@ function resumeSubscription() {
                                         {{ $t('Date') }}
                                     </th>
                                     <th
-                                        class="text-muted-foreground pb-2 text-left font-medium"
+                                        class="text-muted-foreground pb-2 text-right font-medium"
                                     >
                                         {{ $t('Amount') }}
                                     </th>
                                     <th
-                                        class="text-muted-foreground pb-2 text-left font-medium"
+                                        class="text-muted-foreground pb-2 pl-6 text-left font-medium"
                                     >
                                         {{ $t('Status') }}
                                     </th>
@@ -410,7 +513,9 @@ function resumeSubscription() {
                                             )
                                         }}
                                     </td>
-                                    <td class="text-foreground py-3">
+                                    <td
+                                        class="text-foreground py-3 text-right tabular-nums"
+                                    >
                                         {{
                                             formatMoney(
                                                 invoice.total,
@@ -419,7 +524,7 @@ function resumeSubscription() {
                                             )
                                         }}
                                     </td>
-                                    <td class="py-3">
+                                    <td class="py-3 pl-6">
                                         <Badge
                                             :variant="
                                                 statusVariant(invoice.status)
@@ -487,7 +592,7 @@ function resumeSubscription() {
 
                 <!-- Otherwise, the way out; a subscription a lifetime plan
                      replaces is already ending -->
-                <div v-else-if="!subscription.cancelled_at" class="space-y-3">
+                <DangerZone v-else-if="!subscription.cancelled_at" :show-header="false">
                     <div class="space-y-1">
                         <h3 class="font-medium">{{ $t('Cancellation') }}</h3>
                         <p class="text-muted-foreground text-sm">
@@ -511,25 +616,89 @@ function resumeSubscription() {
                         />
                         {{ $t('Cancel subscription') }}
                     </Button>
-                </div>
+                </DangerZone>
             </div>
         </template>
 
         <!-- Nothing bought yet -->
-        <div
+        <EmptyState
             v-else-if="!lifetimePlans.length"
+            :title="$t('No active subscription')"
+            :description="
+                $t('Choose a plan to get started with all the features.')
+            "
             data-testid="no-subscription"
-            class="border-border flex w-full flex-col items-center justify-center rounded-lg border border-dashed p-12 text-center"
         >
-            <h3 class="text-foreground font-medium">
-                {{ $t('No active subscription') }}
-            </h3>
-            <p class="text-muted-foreground mt-2 text-sm">
-                {{ $t('Choose a plan to get started with all the features.') }}
-            </p>
-            <Button as="a" :href="route('billing.plans')" class="mt-4">
+            <template #icon><CreditCard /></template>
+            <Button as="a" :href="route('billing.plans')">
                 {{ $t('View Plans') }}
             </Button>
+        </EmptyState>
+
+        <!-- One-time payments: a lifetime plan has no invoice to list -->
+        <div v-if="showPayments" class="space-y-3" data-testid="payments">
+            <h3 class="font-medium">{{ $t('Payments') }}</h3>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-border border-b">
+                        <th
+                            class="text-muted-foreground pb-2 text-left font-medium"
+                        >
+                            {{ $t('Date') }}
+                        </th>
+                        <th
+                            class="text-muted-foreground pb-2 text-right font-medium"
+                        >
+                            {{ $t('Amount') }}
+                        </th>
+                        <th
+                            class="text-muted-foreground pb-2 pl-6 text-left font-medium"
+                        >
+                            {{ $t('Status') }}
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr
+                        v-for="payment in payments"
+                        :key="payment.id"
+                        :data-testid="`payment-row-${payment.id}`"
+                        class="border-border border-b last:border-0"
+                    >
+                        <td class="text-foreground py-3">
+                            {{
+                                formatDate(payment.paid_at, language, longDate)
+                            }}
+                        </td>
+                        <td
+                            class="text-foreground py-3 text-right tabular-nums"
+                        >
+                            {{
+                                formatMoney(
+                                    payment.amount,
+                                    payment.currency,
+                                    language,
+                                )
+                            }}
+                        </td>
+                        <td class="py-3 pl-6">
+                            <Badge
+                                :variant="
+                                    payment.status === 'succeeded'
+                                        ? 'default'
+                                        : 'outline'
+                                "
+                            >
+                                {{
+                                    payment.status === 'succeeded'
+                                        ? $t('Paid')
+                                        : $t('Refunded')
+                                }}
+                            </Badge>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
 </template>

@@ -31,7 +31,7 @@ class StripeCheckoutPayloadTest extends TestCase
 
         ApiRequestor::setHttpClient(new class($this->sent) implements ClientInterface
         {
-            public function __construct(private array &$sent) {}
+            public function __construct(public array &$sent) {}
 
             public function request($method, $absUrl, $headers, $params, $hasFile, $apiMode = 'v1', $maxNetworkRetries = null)
             {

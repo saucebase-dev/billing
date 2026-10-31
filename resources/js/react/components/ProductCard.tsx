@@ -1,8 +1,11 @@
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
+import { useModalStack } from '@inertiaui/modal-react';
+import { useAuth } from '@saucebase/react/hooks/useAuth';
 import { confirm } from '@saucebase/react/hooks/useDialog';
 import { useTranslation } from '@saucebase/react/i18n';
 import { UserLock } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import type {
     PlanAction,
@@ -22,6 +25,10 @@ export default function ProductCard({
     action: PlanAction;
 }) {
     const { t, locale } = useTranslation();
+    const { signup } = useAuth();
+    const { visitModal } = useModalStack();
+    const page = usePage();
+    const [isStartingCheckout, setIsStartingCheckout] = useState(false);
     const formatPrice = (amount: number | string, currency?: string) =>
         formatMoney(amount, currency, locale, { wholeUnits: true });
     const featured = !!product.metadata?.badge || product.is_highlighted;
@@ -60,11 +67,37 @@ export default function ProductCard({
         }
 
         if (action === 'signup') {
-            router.visit(route('register'));
+            signup();
             return;
         }
 
         if (startsCheckout && price) {
+            const auth = page.props.auth as {
+                user?: unknown;
+                modal_enabled?: boolean;
+            } | undefined;
+
+            if (!auth?.user && auth?.modal_enabled) {
+                setIsStartingCheckout(true);
+                (document.activeElement as HTMLElement | null)?.blur();
+
+                // Keep the pending checkout and its intended URL while registration
+                // opens over the pricing page.
+                visitModal(route('billing.checkout.create'), {
+                    method: 'post',
+                    data: { price_id: price.id },
+                    navigate: true,
+                })
+                    .catch(() => {
+                        toast.error(
+                            t('Unable to start checkout. Please try again.'),
+                        );
+                    })
+                    .finally(() => setIsStartingCheckout(false));
+
+                return;
+            }
+
             router.post(route('billing.checkout.create'), {
                 price_id: price.id,
             });
@@ -197,7 +230,7 @@ export default function ProductCard({
                     data-testid="get-started-button"
                     data-action={action}
                     className={`mt-8 w-full cursor-pointer rounded-xl px-4 py-3 font-semibold shadow-lg transition-all duration-200 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${ctaClasses}`}
-                    disabled={!enabled}
+                    disabled={!enabled || isStartingCheckout}
                     onClick={handleGetStarted}
                 >
                     {buttonLabel ??

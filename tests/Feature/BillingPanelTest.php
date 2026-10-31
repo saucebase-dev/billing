@@ -73,6 +73,56 @@ class BillingPanelTest extends TestCase
         $this->assertSame(['Lifetime'], array_column($this->props()['lifetimePlans'], 'name'));
     }
 
+    /** The subscription card shows its price and what the plan includes, like the lifetime one. */
+    public function test_a_subscription_carries_its_price_and_features(): void
+    {
+        $this->pro->update(['features' => ['Unlimited projects', 'Webhooks']]);
+        $subscription = $this->subscribeToPro();
+
+        $props = $this->props()['subscription'];
+
+        $this->assertSame($subscription->price->amount, $props['amount']);
+        $this->assertSame($subscription->price->currency->value, $props['currency']);
+        $this->assertSame(['Unlimited projects', 'Webhooks'], $props['features']);
+    }
+
+    /** A quarterly price is "every 3 months", not "/ month". */
+    public function test_a_subscription_carries_its_interval_count(): void
+    {
+        $subscription = $this->subscribeToPro();
+        $subscription->price->update(['interval_count' => 3]);
+
+        $this->assertSame(3, $this->props()['subscription']['interval_count']);
+    }
+
+    /** A lifetime plan shows what was paid and when, like a subscription shows its renewal. */
+    public function test_a_lifetime_plan_carries_its_purchase(): void
+    {
+        $this->ownLifetimePro();
+        $payment = Payment::latest('id')->first();
+
+        $plan = $this->props()['lifetimePlans'][0];
+
+        $this->assertSame($payment->amount, $plan['amount']);
+        $this->assertSame($payment->currency->value, $plan['currency']);
+        $this->assertSame($payment->created_at->toISOString(), $plan['paid_at']);
+        $this->assertSame($payment->price->plan->features ?? [], $plan['features']);
+    }
+
+    /** One-time payments have no invoice to list, so they get their own list; refunds included. */
+    public function test_one_time_payments_are_listed_and_subscription_payments_are_not(): void
+    {
+        $this->ownLifetimePro();
+        $refunded = Payment::factory()->refunded()->create(['customer_id' => $this->customer->id, 'price_id' => Price::factory()->oneTime()]);
+        Payment::factory()->create(['customer_id' => $this->customer->id, 'subscription_id' => $this->subscribeToPro()->id]);
+
+        $payments = $this->props()['payments'];
+
+        $this->assertCount(2, $payments);
+        $this->assertSame($refunded->id, $payments[0]['id']);
+        $this->assertSame('refunded', $payments[0]['status']);
+    }
+
     public function test_a_subscription_lifetime_replaces_says_so_once_its_end_is_scheduled(): void
     {
         $this->subscribeToPro(['cancelled_at' => now(), 'ends_at' => now()->addWeek()]);

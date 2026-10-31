@@ -227,7 +227,7 @@ class NeutralGatewayTest extends TestCase
         $this->gateway->checkouts['fcs_1'] = $this->completed('fcs_1');
 
         $this->actingAs($this->user)->get(route('settings.billing', ['checkout_session' => $session->uuid]))
-            ->assertRedirect(route('home', ['checkout' => 'success']).'#settings/billing');
+            ->assertRedirect(route('home', ['checkout' => 'success', 'settings' => 'billing']).'#settings/billing');
 
         $this->assertSame(CheckoutSessionStatus::Completed, $session->fresh()->status);
     }

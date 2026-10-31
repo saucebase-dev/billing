@@ -71,7 +71,17 @@ test.describe.parallel('Pricing page', () => {
         ).toHaveAttribute('data-action', 'buy');
     });
 
-    test('sends a guest who picks a plan to register', async ({ page }) => {
+    test('opens signup over pricing when a guest picks a free plan', async ({ page }) => {
+        await page.goto('/pricing');
+        await page
+            .getByTestId('product-card-starter')
+            .getByTestId('get-started-button')
+            .click();
+
+        await expect(page.getByTestId('register-modal')).toBeVisible();
+    });
+
+    test('opens signup over pricing when a guest picks a paid plan', async ({ page }) => {
         await page.goto('/pricing');
 
         await page
@@ -80,9 +90,13 @@ test.describe.parallel('Pricing page', () => {
             )
             .click();
 
-        // The click posts and the server redirects; under a full parallel run
-        // that round trip outlasts the default assertion timeout.
         await expect(page).toHaveURL(/\/auth\/register/, { timeout: 15_000 });
+        await expect(page.getByTestId('register-modal')).toBeVisible();
+
+        await page.keyboard.press('Escape');
+        await expect(page.getByTestId('register-modal')).toHaveCount(0);
+        await expect(page).toHaveURL(/\/pricing$/);
+        await expect(page.getByTestId('product-card-pro')).toBeVisible();
     });
 
     test('shows a subscriber their plan and offers a change to the others', async ({
