@@ -60,10 +60,10 @@ trait Billable
     public function entitlements(): Entitlements
     {
         $entitlements = Product::where('kind', PlanKind::Free)->first()?->entitlements() ?? Entitlements::none();
-        $subscribed = $this->accessGrantingSubscription()?->price?->plan;
+        $subscription = $this->accessGrantingSubscription();
 
-        if ($subscribed) {
-            $entitlements = $entitlements->merge($subscribed->entitlements());
+        if ($subscription?->price?->plan) {
+            $entitlements = $entitlements->merge($subscription->price->plan->entitlements(trial: $subscription->onTrial()));
         }
 
         foreach ($this->heldLifetimePurchases() as $purchase) {

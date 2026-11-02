@@ -32,6 +32,7 @@ use Modules\Billing\Enums\PlanKind;
  * @property bool $is_active
  * @property PlanKind $kind
  * @property array<string, mixed>|null $entitlements
+ * @property array{features?: array<string, bool>, limits?: array<string, int|null>}|null $trial_entitlements
  * @property int|null $trial_days
  * @property int|null $replaces_product_id
  * @property Carbon|null $created_at
@@ -91,6 +92,7 @@ class Product extends Model
         'is_active',
         'kind',
         'entitlements',
+        'trial_entitlements',
         'trial_days',
         'replaces_product_id',
     ];
@@ -115,6 +117,7 @@ class Product extends Model
             'deleted_at' => 'datetime',
             'kind' => PlanKind::class,
             'entitlements' => 'array',
+            'trial_entitlements' => 'array',
             'trial_days' => 'integer',
         ];
     }
@@ -163,12 +166,14 @@ class Product extends Model
             ->with(['prices' => fn ($prices) => $prices->where('is_active', true)]);
     }
 
-    public function entitlements(): Entitlements
+    /** What the plan grants; during a free trial, with `trial_entitlements` on top. */
+    public function entitlements(bool $trial = false): Entitlements
     {
         /** @var array{features?: array<string, bool>, limits?: array<string, int|null>}|null $stored */
         $stored = $this->entitlements;
+        $entitlements = Entitlements::fromArray($stored);
 
-        return Entitlements::fromArray($stored);
+        return $trial ? $entitlements->override($this->trial_entitlements) : $entitlements;
     }
 
     /**
@@ -220,28 +225,38 @@ class Product extends Model
             'trial_days' => ['nullable', 'integer', 'min:1', 'max:730'],
         ])->validate();
 
-        Validator::make(['entitlements' => $this->entitlements ?? []], [
-            'entitlements' => ['array:features,limits'],
-            'entitlements.features' => ['array'],
-            'entitlements.features.*' => ['accepted'],
-            'entitlements.limits' => ['array'],
-            'entitlements.limits.*' => ['nullable', 'integer', 'min:0'],
-        ])->after(function ($validator): void {
-            foreach (['features', 'limits'] as $group) {
-                // The shape rules above report anything that is not a list.
-                foreach (array_keys((array) ($this->entitlements[$group] ?? [])) as $key) {
-                    if (strlen((string) $key) > 255 || ! preg_match('/^\S(.*\S)?$/u', (string) $key)) {
-                        $validator->errors()->add('entitlements', __('Entitlement keys can\'t start or end with a space.'));
-                    }
-                }
-            }
-        })->validate();
+        // A trial's override may also switch a feature off; a plan only lists what it turns on.
+        $this->assertValidEntitlements('entitlements', 'accepted');
+        $this->assertValidEntitlements('trial_entitlements', 'boolean');
 
         if ($this->exists && $this->isDirty(self::LOCKED_WHEN_SOLD) && $this->isSold()) {
             throw ValidationException::withMessages([
                 'kind' => __('This plan has been sold, so its kind, slug and replacement are fixed. Create a new plan instead.'),
             ]);
         }
+    }
+
+    /** @throws ValidationException */
+    private function assertValidEntitlements(string $attribute, string $featureRule): void
+    {
+        $stored = $this->{$attribute} ?? [];
+
+        Validator::make([$attribute => $stored], [
+            $attribute => ['array:features,limits'],
+            "{$attribute}.features" => ['array'],
+            "{$attribute}.features.*" => [$featureRule],
+            "{$attribute}.limits" => ['array'],
+            "{$attribute}.limits.*" => ['nullable', 'integer', 'min:0'],
+        ])->after(function ($validator) use ($attribute, $stored): void {
+            foreach (['features', 'limits'] as $group) {
+                // The shape rules above report anything that is not a list.
+                foreach (array_keys((array) ($stored[$group] ?? [])) as $key) {
+                    if (strlen((string) $key) > 255 || ! preg_match('/^\S(.*\S)?$/u', (string) $key)) {
+                        $validator->errors()->add($attribute, __('Entitlement keys can\'t start or end with a space.'));
+                    }
+                }
+            }
+        })->validate();
     }
 
     /**

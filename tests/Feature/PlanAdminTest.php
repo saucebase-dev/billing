@@ -104,4 +104,26 @@ class PlanAdminTest extends TestCase
 
         $this->assertNull($plan->fresh()->entitlements);
     }
+
+    /** Trial rows can also switch a feature off; they load back as they were saved. */
+    public function test_trial_entitlements_are_edited_like_entitlements(): void
+    {
+        $plan = Product::factory()->create(['trial_days' => 14]);
+
+        Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
+            ->fillForm(['trial_entitlements' => [
+                ['key' => 'webhooks', 'type' => 'off'],
+                ['key' => 'api_requests', 'type' => 'limit', 'unlimited' => false, 'limit' => 1000],
+            ]])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $stored = ['features' => ['webhooks' => false], 'limits' => ['api_requests' => 1000]];
+        $this->assertSame($stored, $plan->fresh()->trial_entitlements);
+
+        $page = Livewire::test(EditProduct::class, ['record' => $plan->getKey()]);
+        $this->assertSame(['off', 'limit'], array_column(array_values($page->get('data.trial_entitlements')), 'type'));
+        $page->call('save')->assertHasNoFormErrors();
+        $this->assertSame($stored, $plan->fresh()->trial_entitlements);
+    }
 }

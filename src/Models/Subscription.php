@@ -115,6 +115,11 @@ class Subscription extends Model
         };
     }
 
+    public function onTrial(): bool
+    {
+        return $this->trial_ends_at?->isFuture() ?? false;
+    }
+
     /**
      * @return BelongsTo<Customer, $this>
      */

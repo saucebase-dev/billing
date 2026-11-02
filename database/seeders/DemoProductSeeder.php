@@ -50,6 +50,7 @@ class DemoProductSeeder extends Seeder
                     'metadata' => $plan['metadata'],
                     'kind' => $plan['kind'],
                     'entitlements' => $plan['entitlements'],
+                    'trial_entitlements' => $plan['trial_entitlements'] ?? null,
                     'replaces_product_id' => isset($plan['replaces'])
                         ? Product::where('slug', $plan['replaces'])->value('id')
                         : null,
@@ -72,7 +73,7 @@ class DemoProductSeeder extends Seeder
     }
 
     /**
-     * @return list<array{slug: string, name: string, kind: PlanKind, trial_days?: int, entitlements: array<string, mixed>, replaces?: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
+     * @return list<array{slug: string, name: string, kind: PlanKind, trial_days?: int, entitlements: array<string, mixed>, trial_entitlements?: array<string, mixed>, replaces?: string, description: string, features: list<string>, metadata: array<string, string>, prices: list<array{interval: ?string, amount: int, metadata?: array<string, string>}>}>
      */
     private function plans(): array
     {
@@ -100,6 +101,7 @@ class DemoProductSeeder extends Seeder
                 'kind' => PlanKind::Subscription,
                 'trial_days' => 14,
                 'entitlements' => self::PRO_ENTITLEMENTS,
+                'trial_entitlements' => ['features' => ['custom_domains' => false], 'limits' => ['api_requests' => 10000]],
                 'description' => 'No limits on projects, and the tools to run them in production.',
                 'features' => ['Unlimited projects', '1M API requests / month', 'Custom domains', 'Webhooks', 'Priority email support'],
                 'metadata' => [

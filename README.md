@@ -18,7 +18,7 @@ A module for [Saucebase](https://github.com/saucebase-dev/saucebase), the AI-rea
 - **Stripe checkout**, straight to Stripe or through your own checkout page
 - **Subscriptions** that cancel at period end and can be resumed
 - **Customer portal** for cards, invoices and plan changes
-- **Free trials**, one per customer, with or without a card up front
+- **Free trials**, one per customer, with or without a card up front, optionally with their own entitlements (fewer API requests, a feature off)
 - **Grace period** after a failed payment, with emails at each step
 - **Plan kinds**: free, subscription, lifetime and one-off
 - **Entitlements**: each plan turns features on and sets limits your app checks

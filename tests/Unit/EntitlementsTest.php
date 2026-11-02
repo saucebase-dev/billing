@@ -64,4 +64,26 @@ class EntitlementsTest extends TestCase
         $this->assertFalse($entitlements->declares('seats'));
         $this->assertFalse(Entitlements::none()->declares('members'));
     }
+
+    /** A trial's override: listed features switch on or off, listed limits replace; the rest is the plan's. */
+    public function test_an_override_changes_only_what_it_lists(): void
+    {
+        $plan = Entitlements::fromArray(['features' => ['exports' => true, 'sso' => true], 'limits' => ['projects' => null, 'seats' => 5]]);
+
+        $trial = $plan->override(['features' => ['sso' => false, 'beta' => true], 'limits' => ['projects' => 3]]);
+
+        $this->assertTrue($trial->allows('exports'));
+        $this->assertFalse($trial->allows('sso'));
+        $this->assertTrue($trial->allows('beta'));
+        $this->assertSame(3, $trial->limit('projects'));
+        $this->assertSame(5, $trial->limit('seats'));
+    }
+
+    public function test_an_empty_override_changes_nothing(): void
+    {
+        $plan = Entitlements::fromArray(['features' => ['exports' => true], 'limits' => ['projects' => 3]]);
+
+        $this->assertSame($plan->toArray(), $plan->override(null)->toArray());
+        $this->assertSame($plan->toArray(), $plan->override([])->toArray());
+    }
 }

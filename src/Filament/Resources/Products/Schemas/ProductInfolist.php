@@ -16,21 +16,24 @@ use Modules\Billing\Models\Product;
 class ProductInfolist
 {
     /**
-     * One line per entitlement, features first: `exports: On`,
-     * `projects: Unlimited`, `api_requests: 1,000,000`.
+     * One line per entitlement, features first: `exports: On`, `webhooks: Off`
+     * (trials only), `projects: Unlimited`, `api_requests: 1,000,000`.
      *
+     * @param  array{features?: array<string, bool>, limits?: array<string, int|null>}|null  $stored
      * @return list<string>
      */
-    private static function entitlementLines(Product $record): array
+    private static function entitlementLines(?array $stored): array
     {
-        $entitlements = $record->entitlements()->toArray();
-
         return [
-            ...array_map(fn (string $key) => $key.': '.__('On'), array_keys($entitlements['features'])),
+            ...array_map(
+                fn (string $key, bool $on) => $key.': '.($on ? __('On') : __('Off')),
+                array_keys($stored['features'] ?? []),
+                $stored['features'] ?? [],
+            ),
             ...array_map(
                 fn (string $key, ?int $limit) => $key.': '.($limit === null ? __('Unlimited') : number_format($limit)),
-                array_keys($entitlements['limits']),
-                $entitlements['limits'],
+                array_keys($stored['limits'] ?? []),
+                $stored['limits'] ?? [],
             ),
         ];
     }
@@ -96,10 +99,18 @@ class ProductInfolist
 
                                 TextEntry::make('entitlement_list')
                                     ->label(__('Entitlements'))
-                                    ->state(fn (Product $record) => self::entitlementLines($record))
+                                    ->state(fn (Product $record) => self::entitlementLines($record->entitlements()->toArray()))
                                     ->listWithLineBreaks()
                                     ->bulleted()
                                     ->placeholder(__('No entitlements'))
+                                    ->columnSpanFull(),
+
+                                TextEntry::make('trial_entitlement_list')
+                                    ->label(__('Trial entitlements'))
+                                    ->state(fn (Product $record) => self::entitlementLines($record->trial_entitlements))
+                                    ->listWithLineBreaks()
+                                    ->bulleted()
+                                    ->visible(fn (Product $record) => $record->trial_days !== null && filled($record->trial_entitlements))
                                     ->columnSpanFull(),
                             ])
                             ->columns(3),

@@ -188,4 +188,35 @@ class EntitlementResolutionTest extends TestCase
 
         $this->assertTrue($this->user->hasPaidPlan());
     }
+
+    /** A trial gets the plan with its trial entitlements on top; afterwards, the plan. */
+    public function test_a_trial_gets_the_plans_trial_entitlements(): void
+    {
+        $plan = Product::factory()->create([
+            'entitlements' => ['features' => ['exports' => true, 'webhooks' => true], 'limits' => ['api_requests' => 1000000]],
+            'trial_entitlements' => ['features' => ['webhooks' => false], 'limits' => ['api_requests' => 1000]],
+        ]);
+        $subscription = $this->subscribeTo($plan, attributes: ['trial_starts_at' => now()->subDay(), 'trial_ends_at' => now()->addDays(13)]);
+
+        $this->assertTrue($this->user->canUseFeature('exports'));
+        $this->assertFalse($this->user->canUseFeature('webhooks'));
+        $this->assertSame(1000, $this->user->planLimit('api_requests'));
+
+        $subscription->update(['trial_ends_at' => now()->subMinute()]);
+
+        $this->assertTrue($this->user->fresh()->canUseFeature('webhooks'));
+        $this->assertSame(1000000, $this->user->fresh()->planLimit('api_requests'));
+    }
+
+    /** What else the owner holds still counts in full: a trial only narrows its own plan. */
+    public function test_a_trial_never_takes_away_what_another_plan_grants(): void
+    {
+        $this->buy(Product::factory()->lifetime()->create(['entitlements' => ['features' => ['webhooks' => true]]]));
+        $this->subscribeTo(
+            Product::factory()->create(['entitlements' => ['features' => ['webhooks' => true]], 'trial_entitlements' => ['features' => ['webhooks' => false]]]),
+            attributes: ['trial_starts_at' => now(), 'trial_ends_at' => now()->addDays(7)],
+        );
+
+        $this->assertTrue($this->user->canUseFeature('webhooks'));
+    }
 }

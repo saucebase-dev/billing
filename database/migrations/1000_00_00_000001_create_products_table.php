@@ -27,6 +27,7 @@ return new class extends Migration
             // What buying it gives, and what it grants: see PlanKind and Entitlements
             $table->string('kind')->default('subscription');
             $table->json('entitlements')->nullable();
+            $table->json('trial_entitlements')->nullable();
 
             // Days of free trial this plan offers, once per customer.
             $table->unsignedSmallInteger('trial_days')->nullable();
