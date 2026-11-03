@@ -167,4 +167,19 @@ class PlanRulesTest extends TestCase
     {
         $this->assertNull(Product::factory()->create(['trial_days' => null])->trial_days);
     }
+
+    /** Trial entitlements may switch a feature off, which plan entitlements never store. */
+    public function test_trial_entitlements_may_turn_a_feature_off(): void
+    {
+        $plan = Product::factory()->create(['trial_entitlements' => ['features' => ['exports' => false], 'limits' => ['projects' => 1]]]);
+
+        $this->assertSame(['features' => ['exports' => false], 'limits' => ['projects' => 1]], $plan->fresh()->trial_entitlements);
+    }
+
+    public function test_trial_entitlements_follow_the_same_key_and_limit_rules(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        Product::factory()->create(['trial_entitlements' => ['limits' => [' projects' => -1]]]);
+    }
 }

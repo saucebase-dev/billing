@@ -52,6 +52,27 @@ final class Entitlements
         return new self($this->features + $other->features, $limits);
     }
 
+    /**
+     * This plan as a trial sees it: each listed feature switched on or off, each
+     * listed limit replaced. Anything not listed stays as the plan has it.
+     *
+     * @param  array{features?: array<string, bool>, limits?: array<string, int|null>}|null  $override
+     */
+    public function override(?array $override): self
+    {
+        $features = $this->features;
+
+        foreach ($override['features'] ?? [] as $key => $on) {
+            if ($on) {
+                $features[$key] = true;
+            } else {
+                unset($features[$key]);
+            }
+        }
+
+        return new self($features, array_replace($this->limits, $override['limits'] ?? []));
+    }
+
     public function allows(string $feature): bool
     {
         return isset($this->features[$feature]);

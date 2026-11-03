@@ -31,6 +31,16 @@ test.describe('Settings Billing Lifetime', () => {
         await expect(plan).toContainText('Bought on');
         await expect(plan).toContainText('Unlimited projects');
         await expect(plan).toContainText('+1 more');
+        await expect(plan).not.toContainText('Priority support');
+
+        const featuresToggle = plan.getByTestId('plan-features-toggle');
+        await expect(featuresToggle).toHaveAttribute('aria-expanded', 'false');
+        await featuresToggle.click();
+        await expect(plan).toContainText('Priority support');
+        await expect(featuresToggle).toHaveAttribute('aria-expanded', 'true');
+        await featuresToggle.press('Enter');
+        await expect(plan).not.toContainText('Priority support');
+        await expect(featuresToggle).toHaveAttribute('aria-expanded', 'false');
 
         // One purchase: the card says it all, so no table repeats it.
         await expect(page.getByTestId('payments')).toHaveCount(0);

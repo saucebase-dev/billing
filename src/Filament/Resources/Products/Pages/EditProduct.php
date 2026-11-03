@@ -30,7 +30,11 @@ class EditProduct extends EditRecord
      */
     protected function mutateFormDataBeforeFill(array $data): array
     {
-        return [...$data, 'entitlements' => ProductForm::entitlementRows($data['entitlements'] ?? null)];
+        return [
+            ...$data,
+            'entitlements' => ProductForm::entitlementRows($data['entitlements'] ?? null),
+            'trial_entitlements' => ProductForm::entitlementRows($data['trial_entitlements'] ?? null),
+        ];
     }
 
     /**

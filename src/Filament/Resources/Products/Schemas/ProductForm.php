@@ -56,8 +56,8 @@ class ProductForm
     {
         $rows = [];
 
-        foreach (array_keys($stored['features'] ?? []) as $key) {
-            $rows[] = ['key' => $key, 'type' => 'feature'];
+        foreach ($stored['features'] ?? [] as $key => $on) {
+            $rows[] = ['key' => $key, 'type' => $on ? 'feature' : 'off'];
         }
 
         foreach ($stored['limits'] ?? [] as $key => $limit) {
@@ -71,7 +71,7 @@ class ProductForm
      * The form's rows back in the stored shape; an empty list stores nothing.
      *
      * @param  array<array-key, array{key?: string, type?: string, unlimited?: bool, limit?: int|string|null}>|null  $rows
-     * @return array{features: array<string, true>, limits: array<string, int|null>}|null
+     * @return array{features: array<string, bool>, limits: array<string, int|null>}|null
      */
     private static function storedEntitlements(?array $rows): ?array
     {
@@ -81,11 +81,59 @@ class ProductForm
             if (($row['type'] ?? null) === 'limit') {
                 $stored['limits'][$row['key']] = ($row['unlimited'] ?? false) ? null : (int) $row['limit'];
             } else {
-                $stored['features'][$row['key']] = true;
+                $stored['features'][$row['key']] = ($row['type'] ?? null) !== 'off';
             }
         }
 
         return $stored === ['features' => [], 'limits' => []] ? null : $stored;
+    }
+
+    /**
+     * One row per entitlement. A trial's rows may also switch a feature off.
+     */
+    private static function entitlementsRepeater(string $name, bool $trial = false): Repeater
+    {
+        return Repeater::make($name)
+            ->schema([
+                TextInput::make('key')
+                    ->label(__('Key'))
+                    ->required()
+                    ->regex('/^\S(.*\S)?$/u')
+                    ->maxLength(255)
+                    ->distinct()
+                    ->placeholder('max_projects')
+                    // What the modules offer (core's `billing` capabilities); any other key still works.
+                    ->datalist(fn (): array => array_keys(app(Capabilities::class)->group('billing'))),
+                Select::make('type')
+                    ->label(__('Type'))
+                    ->options($trial
+        ? ['feature' => __('Feature on'), 'off' => __('Feature off'), 'limit' => __('Limit')]
+        : ['feature' => __('Feature'), 'limit' => __('Limit')])
+                    ->default('feature')
+                    ->required()
+                    ->live(),
+                Toggle::make('unlimited')
+                    ->label(__('Unlimited'))
+                    ->live()
+                    ->visible(fn (Get $get) => $get('type') === 'limit'),
+                TextInput::make('limit')
+                    ->label(__('Limit'))
+                    ->integer()
+                    ->minValue(0)
+                    ->required(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited'))
+                    ->visible(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited')),
+            ])
+            ->table([
+                TableColumn::make(__('Key')),
+                TableColumn::make(__('Type')),
+                TableColumn::make(__('Unlimited')),
+                TableColumn::make(__('Limit')),
+            ])
+            ->defaultItems(0)
+            ->addActionLabel(__('Add entitlement'))
+                // Replaces the repeater's own mutation, which would turn the
+                // stored shape back into a list of rows.
+            ->mutateDehydratedStateUsing(fn (?array $state) => self::storedEntitlements($state));
     }
 
     /**
@@ -189,50 +237,19 @@ class ProductForm
                             ->integer()
                             ->minValue(1)
                             ->maxValue(730)
+                            // Trial entitlements only show once a plan has trial days.
+                            ->live(onBlur: true)
                             ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Subscription))
                             ->helperText(__('Each customer gets one trial, ever. Whether payment details are collected first is a billing setting.')),
 
-                        Repeater::make('entitlements')
+                        self::entitlementsRepeater('entitlements')
                             ->label(__('Entitlements'))
-                            ->helperText(__('Features the plan turns on and limits the app enforces. Changes apply to existing customers straight away.'))
-                            ->schema([
-                                TextInput::make('key')
-                                    ->label(__('Key'))
-                                    ->required()
-                                    ->regex('/^\S(.*\S)?$/u')
-                                    ->maxLength(255)
-                                    ->distinct()
-                                    ->placeholder('max_projects')
-                                    // What the modules offer (core's `billing` capabilities); any other key still works.
-                                    ->datalist(fn (): array => array_keys(app(Capabilities::class)->group('billing'))),
-                                Select::make('type')
-                                    ->label(__('Type'))
-                                    ->options(['feature' => __('Feature'), 'limit' => __('Limit')])
-                                    ->default('feature')
-                                    ->required()
-                                    ->live(),
-                                Toggle::make('unlimited')
-                                    ->label(__('Unlimited'))
-                                    ->live()
-                                    ->visible(fn (Get $get) => $get('type') === 'limit'),
-                                TextInput::make('limit')
-                                    ->label(__('Limit'))
-                                    ->integer()
-                                    ->minValue(0)
-                                    ->required(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited'))
-                                    ->visible(fn (Get $get) => $get('type') === 'limit' && ! $get('unlimited')),
-                            ])
-                            ->table([
-                                TableColumn::make(__('Key')),
-                                TableColumn::make(__('Type')),
-                                TableColumn::make(__('Unlimited')),
-                                TableColumn::make(__('Limit')),
-                            ])
-                            ->defaultItems(0)
-                            ->addActionLabel(__('Add entitlement'))
-                            // Replaces the repeater's own mutation, which would turn the
-                            // stored shape back into a list of rows.
-                            ->mutateDehydratedStateUsing(fn (?array $state) => self::storedEntitlements($state)),
+                            ->helperText(__('Features the plan turns on and limits the app enforces. Changes apply to existing customers straight away.')),
+
+                        self::entitlementsRepeater('trial_entitlements', trial: true)
+                            ->label(__('Trial entitlements'))
+                            ->helperText(__('What changes during the free trial: switch features on or off, or set other limits. Anything not listed is the plan\'s. Changes apply to current trials straight away.'))
+                            ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Subscription) && filled($get('trial_days'))),
                     ]),
 
             ]],

@@ -1,7 +1,8 @@
 import { useTranslation } from '@saucebase/react/i18n';
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 
-/** A plan's marketing features, as on its pricing card: the first few, then a count. */
+/** A plan's marketing features, with an expandable preview. */
 export default function PlanFeatures({
     features,
     limit = 3,
@@ -10,6 +11,8 @@ export default function PlanFeatures({
     limit?: number;
 }) {
     const { t } = useTranslation();
+    const [expanded, setExpanded] = useState(false);
+    const visibleFeatures = expanded ? features : features.slice(0, limit);
 
     if (!features.length) {
         return null;
@@ -17,7 +20,7 @@ export default function PlanFeatures({
 
     return (
         <ul className="text-muted-foreground space-y-1 text-sm">
-            {features.slice(0, limit).map((feature) => (
+            {visibleFeatures.map((feature) => (
                 <li key={feature} className="flex items-center gap-2">
                     <Check className="text-primary size-4 shrink-0" />
                     {feature}
@@ -25,9 +28,19 @@ export default function PlanFeatures({
             ))}
             {features.length > limit && (
                 <li className="pl-6">
-                    {t('+:count more', {
-                        count: String(features.length - limit),
-                    })}
+                    <button
+                        type="button"
+                        aria-expanded={expanded}
+                        data-testid="plan-features-toggle"
+                        className="hover:text-foreground cursor-pointer hover:underline"
+                        onClick={() => setExpanded(!expanded)}
+                    >
+                        {expanded
+                            ? t('Show less')
+                            : t('+:count more', {
+                                  count: String(features.length - limit),
+                              })}
+                    </button>
                 </li>
             )}
         </ul>
