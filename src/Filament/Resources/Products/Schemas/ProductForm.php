@@ -237,6 +237,8 @@ class ProductForm
                             ->integer()
                             ->minValue(1)
                             ->maxValue(730)
+                            // Trial entitlements only show once a plan has trial days.
+                            ->live(onBlur: true)
                             ->visible(fn (Get $get) => self::kindIs($get('kind'), PlanKind::Subscription))
                             ->helperText(__('Each customer gets one trial, ever. Whether payment details are collected first is a billing setting.')),
 
