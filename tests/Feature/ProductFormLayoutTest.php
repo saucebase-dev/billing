@@ -56,6 +56,16 @@ class ProductFormLayoutTest extends TestCase
         $this->assertTrue($plan->entitlements()->allows('export data'));
     }
 
+    public function test_a_plan_with_a_price_opens_for_editing(): void
+    {
+        $plan = Product::factory()->create();
+        $plan->prices()->create(['amount' => 900, 'currency' => 'USD', 'interval' => 'month', 'interval_count' => 1]);
+
+        Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
+            ->assertOk()
+            ->assertSee('$9.00');
+    }
+
     public function test_the_wizard_stops_on_a_missing_name(): void
     {
         Livewire::test(CreateProduct::class)
