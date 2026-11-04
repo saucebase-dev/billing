@@ -45,6 +45,18 @@ class ProductForm
         return ($state instanceof PlanKind ? $state : PlanKind::tryFrom((string) $state)) === $kind;
     }
 
+    /** @param array<string, mixed> $state A price row: its currency is the enum once saved, a string while unsaved. */
+    private static function priceLabel(array $state): ?string
+    {
+        if (blank($state['amount'] ?? null) || blank($state['currency'] ?? null)) {
+            return null;
+        }
+
+        $currency = $state['currency'] instanceof Currency ? $state['currency'] : Currency::from($state['currency']);
+
+        return $currency->formatPrice((int) $state['amount'], $state['interval'] ?? null, (int) ($state['interval_count'] ?? 1));
+    }
+
     /**
      * The stored `{features, limits}` as one row per entitlement. `EditProduct`
      * fills the form with it.
@@ -329,10 +341,7 @@ class ProductForm
                             ->defaultItems(0)
                             ->columnSpanFull()
                             ->collapsible()
-                            ->itemLabel(fn (array $state): ?string => filled($state['amount'] ?? null) && filled($state['currency'] ?? null)
-                                    ? Currency::from($state['currency'])->formatPrice((int) $state['amount'], $state['interval'] ?? null, (int) ($state['interval_count'] ?? 1))
-                                    : null
-                            ),
+                            ->itemLabel(fn (array $state): ?string => self::priceLabel($state)),
                     ]),
 
             ]],
