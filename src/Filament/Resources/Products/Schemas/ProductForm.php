@@ -40,9 +40,14 @@ class ProductForm
         return filled($get('provider_price_id'));
     }
 
+    private static function kindOf(mixed $state): ?PlanKind
+    {
+        return $state instanceof PlanKind ? $state : PlanKind::tryFrom((string) $state);
+    }
+
     private static function kindIs(mixed $state, PlanKind $kind): bool
     {
-        return ($state instanceof PlanKind ? $state : PlanKind::tryFrom((string) $state)) === $kind;
+        return self::kindOf($state) === $kind;
     }
 
     /** @param array<string, mixed> $state A price row: its currency is the enum once saved, a string while unsaved. */
@@ -230,9 +235,10 @@ class ProductForm
                             ->required()
                             ->live()
                             ->disabled(fn (?Product $record) => $record?->isSold() ?? false)
-                            ->helperText(fn (?Product $record) => $record?->isSold()
-                                ? __('Fixed: this plan has been sold. Create a new plan to change it.')
-                                : __('Free is everyone\'s baseline and is never sold. One-off plans grant nothing.')),
+                            ->helperText(fn (Get $get, ?Product $record) => trim(
+                                ($record?->isSold() ? __('Fixed: this plan has been sold. Create a new plan to change it.').' ' : '')
+                                .self::kindOf($get('kind'))?->description(),
+                            )),
 
                         Select::make('replaces_product_id')
                             ->label(__('Replaces plan'))
@@ -421,7 +427,8 @@ class ProductForm
                     ]),
                 Section::make(__('2. Plan'))
                     ->schema([
-                        Text::make(__('Kind decides what buying it means. Free: everyone\'s baseline, never sold, one at most. Subscription: recurring prices, grants its entitlements while paid (and through the grace period). Lifetime: one payment, grants its entitlements until fully refunded. One-off: one payment, grants nothing; for services the app handles itself.')),
+                        Text::make(__('Kind decides what buying it means.')),
+                        ...array_map(fn (PlanKind $kind) => Text::make($kind->getLabel().': '.$kind->description()), PlanKind::cases()),
                         Text::make(__('A lifetime plan can replace a subscription plan: buying it ends that subscription at the end of its period.')),
                         Text::make(__('Kind, slug and replaced plan are fixed once the plan is sold. To change them, create a new plan and hide this one.')),
                         Text::make(__('A trial is offered once per customer, ever.')),
