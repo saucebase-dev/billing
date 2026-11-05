@@ -3,6 +3,7 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
@@ -16,6 +17,7 @@ class BillingHistorySurvivesTest extends TestCase
     /** What was charged has to stay answerable after the account is gone. */
     public function test_deleting_a_user_detaches_the_customer_and_keeps_the_history(): void
     {
+        Queue::fake(); // The cancel it queues is OwnerDeletionCancelsTest's.
         $user = $this->createUser();
         $customer = Customer::factory()->for($user, 'owner')->create();
         $subscription = Subscription::factory()->create(['customer_id' => $customer->id]);

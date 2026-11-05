@@ -5,6 +5,7 @@ namespace Modules\Billing\Traits;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
+use Modules\Billing\Actions\CancelSubscription;
 use Modules\Billing\Data\Entitlements;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Customer;
@@ -29,11 +30,23 @@ trait Billable
     public static function bootBillable(): void
     {
         static::deleted(function (self $owner): void {
+            // Nobody is left to cancel it, and a deleted owner can't reach billing. Queued so
+            // an unreachable provider retries instead of failing the delete. A soft delete
+            // cancels too: restoring keeps paying to the period end, and Resume undoes it.
+            $subscription = $owner->billingAccount()?->currentSubscription();
+            if ($subscription && ! $subscription->cancelled_at) {
+                dispatch(fn () => app(CancelSubscription::class)
+                    ->handle($subscription))
+                    ->afterCommit();
+            }
+
             if (method_exists($owner, 'isForceDeleting') && ! $owner->isForceDeleting()) {
                 return;
             }
 
-            $owner->billingCustomer()->getQuery()->update(['owner_type' => null, 'owner_id' => null]);
+            $owner->billingCustomer()
+                ->getQuery()
+                ->update(['owner_type' => null, 'owner_id' => null]);
         });
     }
 
