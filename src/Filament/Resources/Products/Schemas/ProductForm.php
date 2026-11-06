@@ -121,7 +121,8 @@ class ProductForm
 
     /**
      * Catalogue entries matching the search by label or key, then what was typed, so a key
-     * the catalogue doesn't list can still be used.
+     * the catalogue doesn't list can still be used. The typed option says it's a raw key: it
+     * can read like a catalogue label ("Seats") without carrying that entry's type.
      *
      * @return array<string, string>
      */
@@ -133,7 +134,9 @@ class ProductForm
             ->map(fn (array $entry): string => $entry['label'])
             ->all();
 
-        return $search === '' || isset($matches[$search]) ? $matches : [...$matches, $search => $search];
+        return $search === '' || isset($matches[$search])
+            ? $matches
+            : [...$matches, $search => __('Use the key ":key"', ['key' => $search])];
     }
 
     /**

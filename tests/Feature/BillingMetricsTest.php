@@ -104,6 +104,16 @@ class BillingMetricsTest extends TestCase
         $this->assertSame(0, $this->metrics->activeAt(now()));
     }
 
+    /** A provider can report Cancelled with no dates: it ended by its last update, not never. */
+    public function test_a_cancelled_subscription_without_dates_ends_at_its_last_update(): void
+    {
+        $subscription = $this->subscription(Price::factory()->create(['amount' => 1000, 'interval' => 'month']), '2026-01-01', ['status' => 'cancelled']);
+        $subscription->forceFill(['updated_at' => '2026-11-02 12:00:00'])->saveQuietly();
+
+        $this->assertSame(1, $this->metrics->activeAt(Carbon::parse('2026-11-01')));
+        $this->assertSame(0, $this->metrics->activeAt(now()));
+    }
+
     public function test_churn_is_cancellations_over_subscriptions_active_at_the_start(): void
     {
         $price = Price::factory()->create(['interval' => 'month']);

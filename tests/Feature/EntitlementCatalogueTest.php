@@ -3,7 +3,10 @@
 namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
+use Filament\Resources\Events\RecordSaved;
+use Filament\Support\Exceptions\Halt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Filament\Resources\Products\Pages\EditProduct;
@@ -46,6 +49,15 @@ class EntitlementCatalogueTest extends TestCase
     {
         $this->assertArrayHasKey('max_projects', ProductForm::entitlementSearch('max_projects'));
         $this->assertSame('max_projects', ProductForm::entitlementLabel('max_projects'));
+    }
+
+    /** Typing a catalogue label must not offer a second "Seats" that is only the typed text. */
+    public function test_the_typed_option_reads_differently_from_a_catalogue_match(): void
+    {
+        $options = ProductForm::entitlementSearch('Seats');
+
+        $this->assertSame('Seats', $options['seats']);
+        $this->assertSame('Use the key "Seats"', $options['Seats']);
     }
 
     /** The catalogue says what a key is: picking a feature after a limit must not keep Limit. */
@@ -91,5 +103,16 @@ class EntitlementCatalogueTest extends TestCase
             ->assertNotified(__('Not in the catalogue: :keys', ['keys' => 'legacy_flag']));
 
         $this->assertSame(['features' => ['legacy_flag' => true], 'limits' => []], $plan->fresh()->entitlements);
+    }
+
+    /** The warning says "Saved": a listener rolling the save back must not leave it behind. */
+    public function test_a_rolled_back_save_sends_no_warning(): void
+    {
+        $plan = Product::factory()->create(['entitlements' => ['features' => ['legacy_flag' => true], 'limits' => []]]);
+        Event::listen(RecordSaved::class, fn () => throw (new Halt)->rollBackDatabaseTransaction());
+
+        Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
+            ->call('save')
+            ->assertNotNotified(__('Not in the catalogue: :keys', ['keys' => 'legacy_flag']));
     }
 }

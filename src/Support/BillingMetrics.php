@@ -223,12 +223,14 @@ final class BillingMetrics
 
     /**
      * Started by `$at` and not yet ended. Pending never started. A suspension ends it at
-     * `grace_ends_at`, which suspending always sets (`updated_at` for older rows without it).
+     * `grace_ends_at`, which suspending always sets. Without its own date, a suspended or
+     * cancelled one ended by its last update (`updated_at`), never "still running".
      */
     private function activeQuery(DateTimeInterface $at): Builder
     {
         $suspended = SubscriptionStatus::Suspended->value;
-        $endedAt = "coalesce(subscriptions.ends_at, subscriptions.cancelled_at, case when subscriptions.status = '{$suspended}' then coalesce(subscriptions.grace_ends_at, subscriptions.updated_at) end)";
+        $cancelled = SubscriptionStatus::Cancelled->value;
+        $endedAt = "coalesce(subscriptions.ends_at, subscriptions.cancelled_at, case subscriptions.status when '{$suspended}' then coalesce(subscriptions.grace_ends_at, subscriptions.updated_at) when '{$cancelled}' then subscriptions.updated_at end)";
 
         return Subscription::query()
             ->where('subscriptions.status', '!=', SubscriptionStatus::Pending)
