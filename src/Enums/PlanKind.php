@@ -19,7 +19,7 @@ enum PlanKind: string implements HasLabel
     /** Grants its entitlements for good, until fully refunded. */
     case Lifetime = 'lifetime';
 
-    /** Paid once, grants nothing: a service or anything the app handles itself. */
+    /** Paid once. Grants only what a module reads off a one-time payment, such as packages; else a service the app handles. */
     case OneOff = 'one_off';
 
     public function getLabel(): string
@@ -29,6 +29,17 @@ enum PlanKind: string implements HasLabel
             self::Subscription => __('Subscription'),
             self::Lifetime => __('Lifetime'),
             self::OneOff => __('One-off'),
+        };
+    }
+
+    /** What the kind means, for admins: the form, the view page and the guide all show this. */
+    public function description(): string
+    {
+        return match ($this) {
+            self::Free => __('Every customer gets this plan\'s features automatically. It can\'t be bought, and you can only have one.'),
+            self::Subscription => __('Customers pay on a recurring schedule and keep the features while the subscription is active.'),
+            self::Lifetime => __('Customers pay once and keep the features unless the payment is fully refunded.'),
+            self::OneOff => __('Customers pay once. Use it for services such as an onboarding call, or to sell packages. It gives no other features.'),
         };
     }
 

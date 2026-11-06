@@ -56,6 +56,16 @@ class ProductFormLayoutTest extends TestCase
         $this->assertTrue($plan->entitlements()->allows('export data'));
     }
 
+    /** A new price row is empty until filled: deciding whether it can be deleted mustn't validate it. */
+    public function test_adding_a_price_row_does_not_validate_it(): void
+    {
+        Livewire::test(CreateProduct::class)
+            ->set('data.prices', ['new-row' => ['amount' => null, 'currency' => null]])
+            ->goToWizardStep(3)
+            ->assertOk()
+            ->assertHasNoFormErrors();
+    }
+
     public function test_a_plan_with_a_price_opens_for_editing(): void
     {
         $plan = Product::factory()->create();
@@ -132,13 +142,13 @@ class ProductFormLayoutTest extends TestCase
     }
 
     /** Keys the modules offer are suggested; anything else can still be typed. */
-    public function test_entitlement_keys_suggest_the_billing_capabilities(): void
+    /** Picking is by label from the catalogue (EntitlementCatalogueTest); a key outside it still saves. */
+    public function test_a_key_outside_the_billing_capabilities_still_saves(): void
     {
         app(Capabilities::class)->add('billing', fn (): array => ['webhooks' => ['label' => 'Webhooks']]);
         $plan = Product::factory()->create(['entitlements' => ['features' => ['custom key' => true]]]);
 
         Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
-            ->assertSeeHtml('value="webhooks"')
             ->call('save')
             ->assertHasNoFormErrors();
 

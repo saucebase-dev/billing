@@ -10,6 +10,7 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Alignment;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 
@@ -45,48 +46,17 @@ class ProductInfolist
             ->components([
                 Grid::make(1)
                     ->schema([
-                        Section::make(__('Basic Information'))
+                        Section::make(__('Plan'))
                             ->schema([
                                 TextEntry::make('name')
                                     ->label(__('Name'))
                                     ->columnSpanFull(),
 
-                                TextEntry::make('slug')
-                                    ->label(__('Slug'))
-                                    ->copyable()
-                                    ->columnSpanFull(),
-
-                                TextEntry::make('sku')
-                                    ->label(__('SKU'))
-                                    ->copyable(),
-
-                                TextEntry::make('description')
-                                    ->label(__('Description'))
-                                    ->html()
-                                    ->columnSpanFull(),
-
-                                TextEntry::make('created_at')
-                                    ->label(__('Created At'))
-                                    ->dateTime(),
-
-                                TextEntry::make('updated_at')
-                                    ->label(__('Updated At'))
-                                    ->dateTime(),
-
-                                TextEntry::make('deleted_at')
-                                    ->label(__('Deleted At'))
-                                    ->dateTime()
-                                    ->icon('heroicon-o-trash')
-                                    ->color('danger')
-                                    ->hidden(fn ($record) => $record->deleted_at === null),
-                            ])
-                            ->columns(2),
-
-                        Section::make(__('Plan'))
-                            ->schema([
                                 TextEntry::make('kind')
                                     ->label(__('Kind'))
-                                    ->badge(),
+                                    ->badge()
+                                    ->belowContent(fn (Product $record) => $record->kind->description())
+                                    ->columnSpanFull(),
 
                                 TextEntry::make('replaces.name')
                                     ->label(__('Replaces plan'))
@@ -103,6 +73,8 @@ class ProductInfolist
                                     ->listWithLineBreaks()
                                     ->bulleted()
                                     ->placeholder(__('No entitlements'))
+                                    // A one-off plan gives none by design: an empty line would read as missing.
+                                    ->hidden(fn (Product $record) => $record->kind === PlanKind::OneOff && blank(self::entitlementLines($record->entitlements()->toArray())))
                                     ->columnSpanFull(),
 
                                 TextEntry::make('trial_entitlement_list')
@@ -113,7 +85,7 @@ class ProductInfolist
                                     ->visible(fn (Product $record) => $record->trial_days !== null && filled($record->trial_entitlements))
                                     ->columnSpanFull(),
                             ])
-                            ->columns(3),
+                            ->columns(2),
 
                         Section::make(__('Pricing'))
                             ->schema([
@@ -194,6 +166,40 @@ class ProductInfolist
                                     ->color('gray')
                                     ->hidden(fn ($record) => ! empty($record->features)),
                             ])->collapsible(),
+
+                        Section::make(__('Details'))
+                            ->schema([
+                                TextEntry::make('slug')
+                                    ->label(__('Slug'))
+                                    ->copyable()
+                                    ->columnSpanFull(),
+
+                                TextEntry::make('sku')
+                                    ->label(__('SKU'))
+                                    ->copyable(),
+
+                                TextEntry::make('description')
+                                    ->label(__('Description'))
+                                    ->html()
+                                    ->columnSpanFull(),
+
+                                TextEntry::make('created_at')
+                                    ->label(__('Created At'))
+                                    ->dateTime(),
+
+                                TextEntry::make('updated_at')
+                                    ->label(__('Updated At'))
+                                    ->dateTime(),
+
+                                TextEntry::make('deleted_at')
+                                    ->label(__('Deleted At'))
+                                    ->dateTime()
+                                    ->icon('heroicon-o-trash')
+                                    ->color('danger')
+                                    ->hidden(fn ($record) => $record->deleted_at === null),
+                            ])
+                            ->columns(2)
+                            ->collapsible(),
 
                         Section::make(__('Metadata'))
                             ->schema([

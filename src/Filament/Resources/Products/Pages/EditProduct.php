@@ -8,6 +8,7 @@ use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Modules\Billing\Filament\Actions\PushProductAction;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Filament\Resources\Products\Schemas\ProductForm;
@@ -49,6 +50,19 @@ class EditProduct extends EditRecord
         Product::whereKey($record->getKey())->lockForUpdate()->first();
 
         return parent::handleRecordUpdate($record, $data);
+    }
+
+    /**
+     * Saved either way: an app may check a key it never declared. The warning catches a typo.
+     * It says "Saved", so it waits for the commit: a listener can still roll the save back.
+     */
+    protected function afterSave(): void
+    {
+        $record = $this->getRecord();
+
+        if ($record instanceof Product) {
+            DB::afterCommit(fn () => ProductForm::warnAboutUnknownKeys($record));
+        }
     }
 
     protected function getHeaderActions(): array

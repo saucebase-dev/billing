@@ -2,127 +2,51 @@
 
 namespace Modules\Billing\Filament\Widgets;
 
-use Filament\Widgets\StatsOverviewWidget as BaseWidget;
+use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
-use Livewire\Attributes\On;
-use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\Currency;
-use Modules\Billing\Enums\PaymentStatus;
-use Modules\Billing\Enums\SubscriptionStatus;
-use Modules\Billing\Models\CheckoutSession;
-use Modules\Billing\Models\Payment;
-use Modules\Billing\Models\Subscription;
+use Modules\Billing\Filament\Resources\Products\ProductResource;
+use Modules\Billing\Models\Product;
+use Modules\Billing\Support\BillingMetrics;
+use Saucebase\Core\Filament\Concerns\ReadsPeriod;
+use Saucebase\Core\Filament\TrendStat;
 
-class BillingSaasStatsWidget extends BaseWidget
+/** Revenue, MRR and new subscriptions: on both the main dashboard (stats band, 12, full width) and billing's. */
+class BillingSaasStatsWidget extends StatsOverviewWidget
 {
-    protected static ?int $sort = 1;
+    use ReadsPeriod;
+
+    protected static ?int $sort = 12;
 
     protected ?string $pollingInterval = null;
 
-    public string $startDate = '';
-
-    public string $endDate = '';
+    protected int|string|array $columnSpan = 'full';
 
     public static function canView(): bool
     {
         return auth()->user()?->can('manage billing') ?? false;
     }
 
-    public function mount(): void
-    {
-        $this->startDate = now()->subDays(30)->startOfDay()->toDateTimeString();
-        $this->endDate = now()->toDateTimeString();
-    }
-
-    #[On('billing-filter-updated')]
-    public function billingFilterUpdated(string $start, string $end): void
-    {
-        $this->startDate = $start;
-        $this->endDate = $end;
-        $this->cachedStats = null;
-    }
-
     protected function getStats(): array
     {
+        if (! Product::exists()) {
+            return [
+                Stat::make(__('Billing'), __('Set up billing'))
+                    ->description(__('Add your first plan to start selling'))
+                    ->descriptionIcon('heroicon-m-arrow-right')
+                    ->url(ProductResource::getUrl('create')),
+            ];
+        }
+
+        $metrics = new BillingMetrics;
+        $period = $this->period();
+        $previous = $period->previous();
+        $money = fn (int|float $amount): string => Currency::default()->formatAmount((int) $amount);
+
         return [
-            $this->mrrStat(),
-            $this->activeSubscriptionsStat(),
-            $this->totalRevenueStat(),
-            $this->conversionRateStat(),
+            TrendStat::make(__('Revenue'), $metrics->revenue($period), $metrics->revenue($previous), $metrics->revenueSeries($period), format: $money),
+            TrendStat::make(__('MRR'), $metrics->mrrAt($period->end), $metrics->mrrAt($period->start), format: $money),
+            TrendStat::make(__('New subscriptions'), $metrics->newSubscriptions($period), $metrics->newSubscriptions($previous), $metrics->newSubscriptionsSeries($period)),
         ];
-    }
-
-    private function mrrStat(): Stat
-    {
-        // One currency only: amounts in different currencies do not add up.
-        $mrr = (int) Subscription::query()
-            ->where('status', SubscriptionStatus::Active)
-            ->whereHas('price', fn ($query) => $query->where('currency', Currency::default()))
-            ->with('price')
-            ->get()
-            ->sum(function (Subscription $subscription): float {
-                $price = $subscription->price;
-
-                if (! $price || ! $price->interval) {
-                    return 0;
-                }
-
-                $divisor = match ($price->interval) {
-                    'month' => $price->interval_count ?? 1,
-                    'year' => ($price->interval_count ?? 1) * 12,
-                    default => 1,
-                };
-
-                return $price->amount / $divisor;
-            });
-
-        return Stat::make(__('MRR'), Currency::default()->formatAmount($mrr))
-            ->description(__('Recurring monthly revenue'))
-            ->descriptionIcon('heroicon-m-arrow-trending-up')
-            ->color('success');
-    }
-
-    private function activeSubscriptionsStat(): Stat
-    {
-        $count = Subscription::where('status', SubscriptionStatus::Active)->count();
-
-        return Stat::make(__('Active Subscriptions'), number_format($count))
-            ->description(__('Active right now'))
-            ->descriptionIcon('heroicon-m-user-group')
-            ->color('info');
-    }
-
-    private function totalRevenueStat(): Stat
-    {
-        $total = (int) Payment::where('status', PaymentStatus::Succeeded)
-            ->where('currency', Currency::default())
-            ->whereBetween('created_at', [$this->startDate, $this->endDate])
-            ->sum('amount');
-
-        return Stat::make(__('Total Revenue'), Currency::default()->formatAmount($total))
-            ->description(__('Succeeded :currency payments in period', ['currency' => Currency::default()->value]))
-            ->descriptionIcon('heroicon-m-banknotes')
-            ->color('warning');
-    }
-
-    private function conversionRateStat(): Stat
-    {
-        $result = CheckoutSession::whereBetween('created_at', [$this->startDate, $this->endDate])
-            ->whereIn('status', [
-                CheckoutSessionStatus::Completed->value,
-                CheckoutSessionStatus::Abandoned->value,
-                CheckoutSessionStatus::Expired->value,
-            ])
-            ->selectRaw('SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as completed, COUNT(*) as total', [CheckoutSessionStatus::Completed->value])
-            ->first();
-
-        $total = $result ? (int) $result->getAttribute('total') : 0;
-        $completed = $result ? (int) $result->getAttribute('completed') : 0;
-        $rate = $total > 0 ? round($completed / $total * 100, 1) : 0;
-
-        return Stat::make(__('Checkout Conversion Rate'), $rate.'%')
-            ->description(__('Completed checkouts in period'))
-            ->descriptionIcon('heroicon-m-shopping-cart')
-            ->color('info');
     }
 }

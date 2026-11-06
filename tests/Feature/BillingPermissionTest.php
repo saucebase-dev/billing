@@ -11,8 +11,10 @@ use Modules\Billing\Filament\Pages\BillingSettings;
 use Modules\Billing\Filament\Resources\Customers\CustomerResource;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Filament\Resources\Subscriptions\SubscriptionResource;
+use Modules\Billing\Filament\Widgets\BillingHealthWidget;
 use Modules\Billing\Filament\Widgets\BillingSaasStatsWidget;
 use Modules\Billing\Filament\Widgets\ConversionChartWidget;
+use Modules\Billing\Filament\Widgets\RevenueByPlanChartWidget;
 use Modules\Billing\Filament\Widgets\RevenueChartWidget;
 use Modules\Billing\Filament\Widgets\SubscriptionsChartWidget;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -79,6 +81,8 @@ class BillingPermissionTest extends TestCase
             'revenue' => [RevenueChartWidget::class],
             'subscriptions' => [SubscriptionsChartWidget::class],
             'conversion' => [ConversionChartWidget::class],
+            'health' => [BillingHealthWidget::class],
+            'revenue by plan' => [RevenueByPlanChartWidget::class],
         ];
     }
 

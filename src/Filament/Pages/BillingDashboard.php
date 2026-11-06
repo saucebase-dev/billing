@@ -3,31 +3,23 @@
 namespace Modules\Billing\Filament\Pages;
 
 use BackedEnum;
-use Carbon\Carbon;
-use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
-use Livewire\Attributes\Url;
+use Modules\Billing\Filament\Widgets\BillingHealthWidget;
+use Modules\Billing\Filament\Widgets\BillingSaasStatsWidget;
+use Modules\Billing\Filament\Widgets\ConversionChartWidget;
+use Modules\Billing\Filament\Widgets\RevenueByPlanChartWidget;
+use Modules\Billing\Filament\Widgets\RevenueChartWidget;
+use Modules\Billing\Filament\Widgets\SubscriptionsChartWidget;
+use Saucebase\Core\Filament\Pages\Dashboard;
 
-class BillingDashboard extends Page
+/** Core's dashboard, period picker included, with billing's own widgets. */
+class BillingDashboard extends Dashboard
 {
+    protected static string $routePath = 'billing-dashboard';
+
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBarSquare;
 
     protected static ?int $navigationSort = 200;
-
-    protected string $view = 'billing::filament.pages.billing-dashboard';
-
-    #[Url]
-    public string $preset = '30d';
-
-    #[Url]
-    public ?string $customStart = null;
-
-    #[Url]
-    public ?string $customEnd = null;
-
-    public string $startDate = '';
-
-    public string $endDate = '';
 
     public static function canAccess(): bool
     {
@@ -44,89 +36,25 @@ class BillingDashboard extends Page
         return __('Dashboard');
     }
 
-    public function mount(): void
+    public function getTitle(): string
     {
-        if ($this->preset === 'custom' && $this->customStart && $this->customEnd) {
-            $start = Carbon::parse($this->customStart)->startOfDay()->toDateTimeString();
-            $end = Carbon::parse($this->customEnd)->endOfDay()->toDateTimeString();
-            $this->startDate = $start;
-            $this->endDate = $end;
-            $this->dispatch('billing-filter-updated', start: $start, end: $end);
-        } else {
-            $this->applyPreset($this->preset !== 'custom' ? $this->preset : '30d');
-        }
+        return __('Billing');
     }
 
-    public function updatedPreset(string $value): void
-    {
-        if ($value !== 'custom') {
-            $this->applyPreset($value);
-        } else {
-            $this->customStart = null;
-            $this->customEnd = null;
-        }
-    }
-
-    public function updatedCustomStart(): void
-    {
-        if ($this->customStart && $this->customEnd) {
-            $start = Carbon::parse($this->customStart)->startOfDay()->toDateTimeString();
-            $end = Carbon::parse($this->customEnd)->endOfDay()->toDateTimeString();
-            $this->startDate = $start;
-            $this->endDate = $end;
-            $this->dispatch('billing-filter-updated', start: $start, end: $end);
-        }
-    }
-
-    public function updatedCustomEnd(): void
-    {
-        if ($this->customStart && $this->customEnd) {
-            $start = Carbon::parse($this->customStart)->startOfDay()->toDateTimeString();
-            $end = Carbon::parse($this->customEnd)->endOfDay()->toDateTimeString();
-            $this->startDate = $start;
-            $this->endDate = $end;
-            $this->dispatch('billing-filter-updated', start: $start, end: $end);
-        }
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    public function getPresetOptions(): array
+    public function getWidgets(): array
     {
         return [
-            'today' => __('Today'),
-            '7d' => __('Last 7 days'),
-            '30d' => __('Last 30 days'),
-            '90d' => __('Last 3 months'),
-            '12m' => __('Last 12 months'),
-            'custom' => __('Custom range'),
+            BillingSaasStatsWidget::class,
+            BillingHealthWidget::class,
+            RevenueChartWidget::class,
+            SubscriptionsChartWidget::class,
+            ConversionChartWidget::class,
+            RevenueByPlanChartWidget::class,
         ];
     }
 
-    private function applyPreset(string $preset): void
+    public function getColumns(): int|array
     {
-        [$start, $end] = $this->computeDateRange($preset);
-        $this->startDate = $start;
-        $this->endDate = $end;
-        $this->dispatch('billing-filter-updated', start: $start, end: $end);
-    }
-
-    /**
-     * @return array{string, string}
-     */
-    private function computeDateRange(string $preset): array
-    {
-        $end = now();
-        $start = match ($preset) {
-            'today' => now()->startOfDay(),
-            '7d' => now()->subDays(7)->startOfDay(),
-            '30d' => now()->subDays(30)->startOfDay(),
-            '90d' => now()->subDays(90)->startOfDay(),
-            '12m' => now()->subMonths(12)->startOfDay(),
-            default => now()->subDays(30)->startOfDay(),
-        };
-
-        return [$start->toDateTimeString(), $end->toDateTimeString()];
+        return 2;
     }
 }
