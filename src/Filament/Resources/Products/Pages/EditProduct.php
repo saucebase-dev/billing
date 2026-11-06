@@ -51,6 +51,16 @@ class EditProduct extends EditRecord
         return parent::handleRecordUpdate($record, $data);
     }
 
+    /** Saved either way: an app may check a key it never declared. The warning catches a typo. */
+    protected function afterSave(): void
+    {
+        $record = $this->getRecord();
+
+        if ($record instanceof Product) {
+            ProductForm::warnAboutUnknownKeys($record);
+        }
+    }
+
     protected function getHeaderActions(): array
     {
         return [

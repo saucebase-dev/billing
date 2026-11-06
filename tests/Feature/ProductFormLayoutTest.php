@@ -132,13 +132,13 @@ class ProductFormLayoutTest extends TestCase
     }
 
     /** Keys the modules offer are suggested; anything else can still be typed. */
-    public function test_entitlement_keys_suggest_the_billing_capabilities(): void
+    /** Picking is by label from the catalogue (EntitlementCatalogueTest); a key outside it still saves. */
+    public function test_a_key_outside_the_billing_capabilities_still_saves(): void
     {
         app(Capabilities::class)->add('billing', fn (): array => ['webhooks' => ['label' => 'Webhooks']]);
         $plan = Product::factory()->create(['entitlements' => ['features' => ['custom key' => true]]]);
 
         Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
-            ->assertSeeHtml('value="webhooks"')
             ->call('save')
             ->assertHasNoFormErrors();
 

@@ -7,6 +7,7 @@ use Filament\Resources\Pages\CreateRecord\Concerns\HasWizard;
 use Filament\Schemas\Components\Wizard\Step;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Filament\Resources\Products\Schemas\ProductForm;
+use Modules\Billing\Models\Product;
 
 class CreateProduct extends CreateRecord
 {
@@ -18,6 +19,15 @@ class CreateProduct extends CreateRecord
     protected function getSteps(): array
     {
         return ProductForm::steps();
+    }
+
+    protected function afterCreate(): void
+    {
+        $record = $this->getRecord();
+
+        if ($record instanceof Product) {
+            ProductForm::warnAboutUnknownKeys($record);
+        }
     }
 
     protected function getHeaderActions(): array

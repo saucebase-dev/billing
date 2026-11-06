@@ -10,6 +10,7 @@ use Filament\Forms\Components\RichEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
@@ -17,6 +18,7 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Components\Wizard\Step;
 use Filament\Schemas\Schema;
 use Modules\Billing\Enums\Currency;
@@ -105,6 +107,66 @@ class ProductForm
         return $stored === ['features' => [], 'limits' => []] ? null : $stored;
     }
 
+    /** @return array<string, array<string, mixed>> core's `billing` capabilities, by key */
+    private static function catalogue(): array
+    {
+        return app(Capabilities::class)->group('billing');
+    }
+
+    /** A key's label, or the key itself when the catalogue doesn't list it. */
+    public static function entitlementLabel(string $key): string
+    {
+        return self::catalogue()[$key]['label'] ?? $key;
+    }
+
+    /**
+     * Catalogue entries matching the search by label or key, then what was typed, so a key
+     * the catalogue doesn't list can still be used.
+     *
+     * @return array<string, string>
+     */
+    public static function entitlementSearch(string $search): array
+    {
+        $search = trim($search);
+        $matches = collect(self::catalogue())
+            ->filter(fn (array $entry, string $key): bool => $search === '' || str_contains(mb_strtolower($entry['label'].' '.$key), mb_strtolower($search)))
+            ->map(fn (array $entry): string => $entry['label'])
+            ->all();
+
+        return $search === '' || isset($matches[$search]) ? $matches : [...$matches, $search => $search];
+    }
+
+    /**
+     * The keys of a stored entitlements value the catalogue doesn't list, for a warning.
+     *
+     * @param  array{features?: array<string, bool>, limits?: array<string, int|null>}|null  $stored
+     * @return list<string>
+     */
+    public static function unknownKeys(?array $stored): array
+    {
+        $keys = [...array_keys($stored['features'] ?? []), ...array_keys($stored['limits'] ?? [])];
+
+        return array_values(array_diff($keys, array_keys(self::catalogue())));
+    }
+
+    /** Tell the admin which keys the catalogue doesn't list, so a typo doesn't sell nothing unnoticed. */
+    public static function warnAboutUnknownKeys(Product $product): void
+    {
+        $unknown = array_values(array_unique([
+            ...self::unknownKeys($product->entitlements),
+            ...self::unknownKeys($product->trial_entitlements),
+        ]));
+
+        if ($unknown !== []) {
+            Notification::make()
+                ->warning()
+                ->title(__('Not in the catalogue: :keys', ['keys' => implode(', ', $unknown)]))
+                ->body(__('Saved. Check the spelling, or declare the key in routes/capabilities.php so it can be picked.'))
+                ->persistent()
+                ->send();
+        }
+    }
+
     /**
      * One row per entitlement. A trial's rows may also switch a feature off.
      */
@@ -112,15 +174,30 @@ class ProductForm
     {
         return Repeater::make($name)
             ->schema([
-                TextInput::make('key')
+                // Picked by label from what the modules offer (core's `billing` capabilities);
+                // a typed key the catalogue doesn't list still works, and saving warns about it.
+                Select::make('key')
                     ->label(__('Key'))
                     ->required()
-                    ->regex('/^\S(.*\S)?$/u')
-                    ->maxLength(255)
+                    ->searchable()
+                    ->getSearchResultsUsing(fn (string $search): array => self::entitlementSearch($search))
+                    ->getOptionLabelUsing(fn (?string $value): ?string => $value === null ? null : self::entitlementLabel($value))
+                    ->rules(['string', 'max:255', 'regex:/^\S(.*\S)?$/u'])
                     ->distinct()
-                    ->placeholder('max_projects')
-                    // What the modules offer (core's `billing` capabilities); any other key still works.
-                    ->datalist(fn (): array => array_keys(app(Capabilities::class)->group('billing'))),
+                    ->placeholder(__('Search, or type a key such as max_projects'))
+                    ->live()
+                    // A catalogue entry sets its type: `type: limit` (`package_updates_days`) a
+                    // limit, anything else a feature, so a package never saves as a limit. A key
+                    // the catalogue doesn't list keeps what the admin chose.
+                    ->afterStateUpdated(function (?string $state, Get $get, Set $set): void {
+                        $entry = self::catalogue()[$state] ?? null;
+
+                        if ($entry !== null) {
+                            $limit = ($entry['type'] ?? null) === 'limit';
+                            // A trial row's `off` is still a feature: keep it.
+                            $set('type', $limit ? 'limit' : ($get('type') === 'off' ? 'off' : 'feature'));
+                        }
+                    }),
                 Select::make('type')
                     ->label(__('Type'))
                     ->options($trial
