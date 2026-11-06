@@ -356,7 +356,7 @@ class ProductForm
                             ->relationship()
                             ->label(__('Prices'))
                             ->deleteAction(fn (Action $action) => $action->hidden(
-                                fn (array $arguments, Repeater $component) => filled($component->getItemState($arguments['item'])['provider_price_id'] ?? null),
+                                fn (array $arguments, Repeater $component) => filled($component->getRawItemState($arguments['item'])['provider_price_id'] ?? null),
                             ))
                             ->schema([
                                 Grid::make(3)->schema([

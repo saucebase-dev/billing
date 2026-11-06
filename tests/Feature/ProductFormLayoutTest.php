@@ -56,6 +56,16 @@ class ProductFormLayoutTest extends TestCase
         $this->assertTrue($plan->entitlements()->allows('export data'));
     }
 
+    /** A new price row is empty until filled: deciding whether it can be deleted mustn't validate it. */
+    public function test_adding_a_price_row_does_not_validate_it(): void
+    {
+        Livewire::test(CreateProduct::class)
+            ->set('data.prices', ['new-row' => ['amount' => null, 'currency' => null]])
+            ->goToWizardStep(3)
+            ->assertOk()
+            ->assertHasNoFormErrors();
+    }
+
     public function test_a_plan_with_a_price_opens_for_editing(): void
     {
         $plan = Product::factory()->create();
