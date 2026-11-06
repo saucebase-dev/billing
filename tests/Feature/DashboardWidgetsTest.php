@@ -2,107 +2,122 @@
 
 namespace Modules\Billing\Tests\Feature;
 
-use Filament\Widgets\StatsOverviewWidget\Stat;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Exceptions;
-use Modules\Billing\Enums\CheckoutSessionStatus;
-use Modules\Billing\Enums\PaymentStatus;
+use Livewire\Livewire;
+use Modules\Billing\Filament\Pages\BillingDashboard;
+use Modules\Billing\Filament\Widgets\BillingAttentionWidget;
+use Modules\Billing\Filament\Widgets\BillingHealthWidget;
 use Modules\Billing\Filament\Widgets\BillingSaasStatsWidget;
 use Modules\Billing\Filament\Widgets\ConversionChartWidget;
+use Modules\Billing\Filament\Widgets\RevenueByPlanChartWidget;
 use Modules\Billing\Filament\Widgets\RevenueChartWidget;
 use Modules\Billing\Filament\Widgets\SubscriptionsChartWidget;
-use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Payment;
-use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
 
 /**
- * The admin dashboard's numbers, on whichever database the app runs: the
- * queries group by month and count matches in SQL, which each engine spells
- * differently. A widget that fails reports it and shows an empty chart, so
- * the tests also check nothing was reported.
+ * The cards and charts read the period from the dashboard's picker; the
+ * numbers themselves are BillingMetricsTest's.
  */
 class DashboardWidgetsTest extends TestCase
 {
     use RefreshDatabase;
+
+    private const WEEK = ['pageFilters' => ['period' => '7d']];
 
     protected function setUp(): void
     {
         parent::setUp();
 
         Exceptions::fake();
-        $this->travelTo('2026-03-15 12:00:00');
+        Carbon::setTestNow('2026-11-06 15:00:00');
+        $admin = User::factory()->create();
+        $admin->assignRole('admin');
+        $this->actingAs($admin);
     }
 
-    /**
-     * @template T of object
-     *
-     * @param  class-string<T>  $widget
-     * @return T
-     */
-    private function widget(string $widget): object
+    public function test_the_billing_dashboard_has_the_period_picker_and_its_widgets(): void
     {
-        return tap(new $widget, function (object $widget): void {
-            $widget->startDate = '2026-01-01 00:00:00';
-            $widget->endDate = '2026-03-31 23:59:59';
-        });
+        Livewire::test(BillingDashboard::class)
+            ->assertOk()
+            ->assertActionExists('filter');
+
+        $this->assertSame([
+            BillingSaasStatsWidget::class,
+            BillingHealthWidget::class,
+            RevenueChartWidget::class,
+            SubscriptionsChartWidget::class,
+            ConversionChartWidget::class,
+            RevenueByPlanChartWidget::class,
+        ], (new BillingDashboard)->getWidgets());
     }
 
-    /** @return list<int|float> */
-    private function chart(object $widget): array
+    public function test_the_headline_cards_compare_with_the_previous_period(): void
     {
-        return (fn () => $this->getData())->call($widget)['datasets'][0]['data'];
-    }
+        Product::factory()->create();
+        Payment::factory()->create(['amount' => 3000, 'amount_refunded' => 0, 'created_at' => '2026-11-05']);
+        Payment::factory()->create(['amount' => 1000, 'amount_refunded' => 0, 'created_at' => '2026-10-28']);
 
-    private function checkout(CheckoutSessionStatus $status, string $at): void
-    {
-        CheckoutSession::create(['price_id' => Price::factory()->create()->id, 'status' => $status, 'expires_at' => now()])
-            ->forceFill(['created_at' => $at])->save();
-    }
-
-    public function test_revenue_is_summed_per_month(): void
-    {
-        Payment::factory()->create(['status' => PaymentStatus::Succeeded, 'amount' => 1000, 'created_at' => '2026-01-10']);
-        Payment::factory()->create(['status' => PaymentStatus::Succeeded, 'amount' => 500, 'created_at' => '2026-01-20']);
-        Payment::factory()->create(['status' => PaymentStatus::Succeeded, 'amount' => 700, 'created_at' => '2026-03-02']);
-        Payment::factory()->create(['status' => PaymentStatus::Failed, 'amount' => 9999, 'created_at' => '2026-03-03']);
-
-        $this->assertSame([1500, 0, 700], $this->chart($this->widget(RevenueChartWidget::class)));
+        Livewire::test(BillingSaasStatsWidget::class, self::WEEK)
+            ->assertSee(['Revenue', '+200% vs previous period', 'MRR', 'New subscriptions']);
         Exceptions::assertNothingReported();
     }
 
-    public function test_new_subscriptions_are_counted_per_month(): void
+    /** A new install has no plans: one pointer to set billing up, not a row of zeros. */
+    public function test_without_plans_the_headline_says_how_to_start(): void
     {
-        Subscription::factory()->create(['created_at' => '2026-02-01']);
-        Subscription::factory()->create(['created_at' => '2026-02-28']);
-        Subscription::factory()->create(['created_at' => '2026-03-01']);
+        Livewire::test(BillingSaasStatsWidget::class, self::WEEK)
+            ->assertSee('Set up billing')
+            ->assertDontSee('MRR');
+    }
 
-        $this->assertSame([0, 2, 1], $this->chart($this->widget(SubscriptionsChartWidget::class)));
+    public function test_the_health_cards(): void
+    {
+        Subscription::factory()->create();
+
+        Livewire::test(BillingHealthWidget::class, self::WEEK)
+            ->assertSee(['Active subscriptions', 'Churn', 'ARPU', 'Checkout conversion', 'Refunds', 'Failed payments']);
         Exceptions::assertNothingReported();
     }
 
-    public function test_checkout_conversion_is_worked_out_per_month(): void
+    public function test_charts_follow_the_period(): void
     {
-        $this->checkout(CheckoutSessionStatus::Completed, '2026-01-05');
-        $this->checkout(CheckoutSessionStatus::Abandoned, '2026-01-06');
-        $this->checkout(CheckoutSessionStatus::Completed, '2026-03-07');
-        $this->checkout(CheckoutSessionStatus::Pending, '2026-03-08');
+        Payment::factory()->create(['amount' => 700, 'amount_refunded' => 0, 'created_at' => '2026-11-05']);
 
-        $this->assertSame([50.0, 0.0, 100.0], $this->chart($this->widget(ConversionChartWidget::class)));
+        foreach ([RevenueChartWidget::class, SubscriptionsChartWidget::class, ConversionChartWidget::class, RevenueByPlanChartWidget::class] as $chart) {
+            Livewire::test($chart, self::WEEK)->assertOk();
+        }
+
+        $data = (fn () => $this->getData())->call(tap(new RevenueChartWidget, fn ($w) => $w->pageFilters = self::WEEK['pageFilters']));
+        $this->assertCount(7, $data['labels']);
+        $this->assertSame(7.0, $data['datasets'][0]['data'][5]); // shown in major units
         Exceptions::assertNothingReported();
     }
 
-    public function test_the_overall_conversion_rate_counts_completed_checkouts(): void
+    /** Shown only when something needs an admin. */
+    public function test_attention_shows_only_with_something_to_do(): void
     {
-        $this->checkout(CheckoutSessionStatus::Completed, '2026-01-05');
-        $this->checkout(CheckoutSessionStatus::Expired, '2026-02-06');
-        $this->checkout(CheckoutSessionStatus::Abandoned, '2026-03-06');
-        $this->checkout(CheckoutSessionStatus::Completed, '2026-03-07');
+        $this->assertFalse(BillingAttentionWidget::canView());
 
-        /** @var list<Stat> $stats */
-        $stats = (fn () => $this->getStats())->call($this->widget(BillingSaasStatsWidget::class));
+        Subscription::factory()->pastDue()->create();
+        Payment::factory()->failed()->create();
 
-        $this->assertSame('50%', $stats[3]->getValue());
+        $this->assertTrue(BillingAttentionWidget::canView());
+        Livewire::test(BillingAttentionWidget::class)->assertSee(['Past due subscriptions', 'Failed payments']);
+    }
+
+    /** A zero isn't something to attend to. */
+    public function test_attention_lists_only_what_needs_doing(): void
+    {
+        Subscription::factory()->pastDue()->create();
+
+        Livewire::test(BillingAttentionWidget::class)
+            ->assertSee('Past due subscriptions')
+            ->assertDontSee('Failed payments');
     }
 }
