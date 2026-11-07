@@ -261,6 +261,7 @@ purpose allows it by pattern, e.g.
 
 - **Runs on SQLite, MySQL and PostgreSQL.** Raw SQL that differs between them goes through one place: month grouping is `Filament\Traits\GroupsByMonth::monthOf()`, and counting matches is `SUM(CASE WHEN … THEN 1 ELSE 0 END)` (PostgreSQL cannot `SUM` a boolean). Any value typed into a URL that reaches a `uuid` column must be checked first (`whereUuid()` on routes, `Str::isUuid()` otherwise): PostgreSQL rejects a malformed UUID with an error, not an empty result. The suite passes on PostgreSQL with `DB_CONNECTION=pgsql` and the usual `DB_*` variables
 
+- `Product::description` is rich-editor HTML, also imported from the provider, rendered with `v-html` on the pricing and checkout pages. It is cast with core's `SanitizedHtml` (`Str::sanitizeHtml()` on read, stored as written), so every read is safe markup (sc-1131)
 - `CheckoutSession` uses `uuid` as the route key (not `id`) — always resolve via UUID in URLs
 - Every `provider_*_id` is namespaced by a `provider` column (the gateway driver slug). Look rows up with both, never by the provider ID alone; uniqueness is `(provider, provider_x_id)`
 - `subscriptions.last_event_at` is when the last applied provider event happened. `SubscriptionUpdated`/`Deleted` skip events older than it, so a late delivery cannot roll state back
