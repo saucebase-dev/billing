@@ -60,6 +60,24 @@ class ProductAdminGuardsTest extends TestCase
         $this->assertSame('Renamed', $product->fresh()->name);
     }
 
+    /**
+     * A form opened before the price was pushed still offers to remove it. Saving then
+     * keeps the price, with an error, instead of a 500 from the model's guard.
+     */
+    public function test_removing_a_price_pushed_after_the_form_opened_keeps_it(): void
+    {
+        $product = Product::factory()->create(['provider_product_id' => null]);
+        $price = Price::factory()->create(['product_id' => $product->id, 'provider_price_id' => null]);
+
+        $page = Livewire::test(EditProduct::class, ['record' => $product->getKey()]);
+
+        $price->forceFill(['provider' => 'stripe', 'provider_price_id' => 'price_pushed'])->save();
+
+        $page->fillForm(['prices' => []])->call('save');
+
+        $this->assertModelExists($price);
+    }
+
     public function test_a_gateway_managed_price_keeps_its_amount(): void
     {
         $product = Product::factory()->create([
