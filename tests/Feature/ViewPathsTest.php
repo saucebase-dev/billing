@@ -3,6 +3,7 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Support\Facades\View;
+use Illuminate\View\FileViewFinder;
 use Tests\TestCase;
 
 /**
@@ -13,12 +14,13 @@ class ViewPathsTest extends TestCase
 {
     public function test_every_view_folder_billing_registers_exists(): void
     {
-        $paths = View::getFinder()->getHints()['billing'] ?? [];
+        $finder = View::getFinder();
+        $this->assertInstanceOf(FileViewFinder::class, $finder);
+
+        $paths = $finder->getHints()['billing'] ?? [];
 
         foreach ($paths as $path) {
             $this->assertDirectoryExists($path);
         }
-
-        $this->addToAssertionCount(1);
     }
 }
