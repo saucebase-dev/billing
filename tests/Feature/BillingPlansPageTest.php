@@ -49,6 +49,20 @@ class BillingPlansPageTest extends TestCase
             );
     }
 
+    /** The description is rendered as HTML for every visitor, so markup that runs is stripped. */
+    public function test_a_plan_description_is_sanitised(): void
+    {
+        $this->plan('Pro', ['description' => '<p><em>Best</em><img src=x onerror="alert(1)"><script>alert(2)</script></p>']);
+
+        $this->get(route('billing.plans'))
+            ->assertInertia(
+                fn (AssertableInertia $page) => $page
+                    ->where('products.0.description', fn (string $html): bool => str_contains($html, '<em>Best</em>')
+                        && ! str_contains($html, 'onerror')
+                        && ! str_contains($html, '<script'))
+            );
+    }
+
     /** The admin's drag order is what the page shows, without the controller asking. */
     public function test_plans_come_back_in_the_admin_order(): void
     {

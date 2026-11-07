@@ -15,6 +15,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\Billing\Data\Entitlements;
 use Modules\Billing\Enums\CheckoutSessionStatus;
 use Modules\Billing\Enums\PlanKind;
+use Saucebase\Core\Casts\SanitizedHtml;
 
 /**
  * @property int $id
@@ -119,6 +120,8 @@ class Product extends Model
             'entitlements' => 'array',
             'trial_entitlements' => 'array',
             'trial_days' => 'integer',
+            // The pricing and checkout pages render it as markup; also imported from the provider.
+            'description' => SanitizedHtml::class,
         ];
     }
 
