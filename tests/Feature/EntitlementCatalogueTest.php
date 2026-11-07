@@ -6,6 +6,7 @@ use App\Models\User;
 use Filament\Resources\Events\RecordSaved;
 use Filament\Support\Exceptions\Halt;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Livewire\Livewire;
 use Modules\Billing\Enums\PlanKind;
@@ -114,5 +115,21 @@ class EntitlementCatalogueTest extends TestCase
         Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
             ->call('save')
             ->assertNotNotified(__('Not in the catalogue: :keys', ['keys' => 'legacy_flag']));
+    }
+
+    /** The sanitiser cuts input at 500,000 bytes: saving another field must not write the cut copy back. */
+    public function test_saving_another_field_keeps_a_long_description_whole(): void
+    {
+        $description = str_repeat('<p>Long description.</p>', 25_000);
+        $plan = Product::factory()->create(['kind' => PlanKind::OneOff, 'description' => $description]);
+        $this->assertGreaterThan(500_000, strlen($description));
+
+        Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
+            ->fillForm(['name' => 'Renamed'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $stored = (string) DB::table('products')->where('id', $plan->getKey())->value('description');
+        $this->assertSame(strlen($description), strlen($stored), 'the stored description was cut');
     }
 }

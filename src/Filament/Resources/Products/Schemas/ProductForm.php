@@ -298,6 +298,9 @@ class ProductForm
 
                         RichEditor::make('description')
                             ->label(__('Description'))
+                            // What is stored, not the sanitised read: the sanitiser cuts input
+                            // at 500,000 bytes, and saving any field would write the cut copy back.
+                            ->formatStateUsing(fn (?Product $record, mixed $state): mixed => $record?->getRawOriginal('description') ?? $state)
                             ->nullable()
                             ->columnSpanFull(),
                     ])
