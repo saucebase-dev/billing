@@ -30,8 +30,6 @@ class BillingServiceProvider extends ModuleServiceProvider
     {
         parent::boot();
 
-        $this->loadViewsFrom(module_path('billing', 'resources/views'), 'billing');
-
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             $schedule->command('billing:expire-checkout-sessions')->everyThirtyMinutes();
             $schedule->command('billing:sync-catalog')->daily();
