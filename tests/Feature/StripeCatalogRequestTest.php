@@ -62,6 +62,16 @@ class StripeCatalogRequestTest extends TestCase
         parent::tearDown();
     }
 
+    /** An emptied rich editor saves `<p></p>`; Stripe rejects an empty description outright. */
+    public function test_an_empty_description_is_not_sent(): void
+    {
+        $product = Product::factory()->create(['description' => '<p></p>']);
+
+        $this->gateway()->createProduct($product);
+
+        $this->assertArrayNotHasKey('description', $this->requests[0]['params']);
+    }
+
     public function test_a_products_features_are_sent_as_stripe_marketing_features(): void
     {
         $product = Product::factory()->create([
