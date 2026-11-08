@@ -105,6 +105,39 @@ class PlanActionsTest extends TestCase
         $this->assertSame(PlanAction::Buy, $actions['priceActions'][$this->priceOf($this->pro)->id]);
     }
 
+    /** A one-off can be bought again (another call, renewed package updates); the button says so. */
+    public function test_a_one_off_already_bought_is_offered_again(): void
+    {
+        $call = Product::factory()->oneOff()->create();
+        $price = Price::factory()->oneTime()->create(['product_id' => $call->id]);
+        Payment::factory()->create(['customer_id' => $this->customer->id, 'price_id' => $price->id]);
+
+        $this->assertSame(PlanAction::BuyAgain, $this->actions($this->user, $call)['priceActions'][$price->id]);
+    }
+
+    /** Bought under a price that has since been replaced: still a repeat purchase. */
+    public function test_a_one_off_bought_under_a_retired_price_is_offered_again(): void
+    {
+        $call = Product::factory()->oneOff()->create();
+        $old = Price::factory()->oneTime()->create(['product_id' => $call->id, 'is_active' => false]);
+        $new = Price::factory()->oneTime()->create(['product_id' => $call->id]);
+        Payment::factory()->create(['customer_id' => $this->customer->id, 'price_id' => $old->id]);
+
+        $plan = $call->fresh()->setRelation('prices', $new->newCollection([$new]));
+        $actions = app(PlanActions::class)->for($this->user, collect([$plan]));
+
+        $this->assertSame(PlanAction::BuyAgain, $actions['priceActions'][$new->id]);
+    }
+
+    public function test_a_refunded_one_off_is_bought_as_new(): void
+    {
+        $call = Product::factory()->oneOff()->create();
+        $price = Price::factory()->oneTime()->create(['product_id' => $call->id]);
+        Payment::factory()->refunded()->create(['customer_id' => $this->customer->id, 'price_id' => $price->id]);
+
+        $this->assertSame(PlanAction::Buy, $this->actions($this->user, $call)['priceActions'][$price->id]);
+    }
+
     public function test_a_user_with_nothing_bought_is_on_free(): void
     {
         $this->assertSame(PlanAction::Current, $this->actions($this->user, $this->free)['priceActions'][$this->priceOf($this->free)->id]);

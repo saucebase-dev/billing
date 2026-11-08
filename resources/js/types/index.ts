@@ -26,11 +26,12 @@ export interface Price {
 /**
  * What a pricing card's button does, decided on the server (`PlanActions`).
  * Mirrors the PHP `PlanAction` enum; change one, change the other. `buy`,
- * `trial`, `signup`, `change` and `contact` act; `owner_only` explains who can; the rest
+ * `buy_again`, `trial`, `signup`, `change` and `contact` act; `owner_only` explains who can; the rest
  * are disabled labels.
  */
 export type PlanAction =
     | 'buy'
+    | 'buy_again'
     | 'signup'
     | 'change'
     | 'contact'
@@ -116,6 +117,8 @@ export interface LifetimePlan {
 /** A one-time payment: a lifetime plan's only record, since it has no invoice. */
 export interface OneTimePayment {
     id: number;
+    /** The plan bought; null once its price is gone. */
+    name: string | null;
     amount: number;
     currency: string;
     status: 'succeeded' | 'refunded';

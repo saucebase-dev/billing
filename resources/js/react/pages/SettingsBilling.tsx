@@ -1,7 +1,7 @@
-import { DangerZone, EmptyState } from '@/components/ui/saucebase';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { DangerZone, EmptyState } from '@/components/ui/saucebase';
 import { router } from '@inertiajs/react';
 import { formatDate } from '@saucebase/core/lib/dates';
 import { useDialog } from '@saucebase/react/hooks/useDialog';
@@ -9,7 +9,6 @@ import { useT, useTranslation } from '@saucebase/react/i18n';
 import { CreditCard, Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import PlanFeatures from '../components/PlanFeatures';
 import { getIntervalLabel } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
 import type {
@@ -19,6 +18,7 @@ import type {
     PaymentMethod,
     Subscription,
 } from '../../types';
+import PlanFeatures from '../components/PlanFeatures';
 
 const longDate: Intl.DateTimeFormatOptions = {
     year: 'numeric',
@@ -193,7 +193,9 @@ export default function SettingsBilling({
             <p className="text-muted-foreground text-sm">
                 {!subscription && lifetimePlans.length
                     ? t('Your plan and payments')
-                    : t('Manage your subscription, payment method, and invoices')}
+                    : t(
+                          'Manage your subscription, payment method, and invoices',
+                      )}
             </p>
 
             {/* Lifetime plans are owned for good, alongside any subscription */}
@@ -223,7 +225,11 @@ export default function SettingsBilling({
                                 data-testid="lifetime-plan-amount"
                                 className="text-foreground font-semibold tabular-nums"
                             >
-                                {formatMoney(plan.amount, plan.currency, locale)}
+                                {formatMoney(
+                                    plan.amount,
+                                    plan.currency,
+                                    locale,
+                                )}
                             </p>
                             <p className="text-muted-foreground text-xs">
                                 {t('Paid once')}
@@ -254,7 +260,10 @@ export default function SettingsBilling({
             {subscription ? (
                 <div data-testid="subscription-section" className="space-y-8">
                     {/* Current plan */}
-                    <Card data-testid="subscription-plan" className="gap-4 px-6">
+                    <Card
+                        data-testid="subscription-plan"
+                        className="gap-4 px-6"
+                    >
                         <div className="flex items-start justify-between gap-4">
                             <div className="space-y-1">
                                 <p
@@ -275,7 +284,8 @@ export default function SettingsBilling({
                                     data-testid="plan-name"
                                     className="text-foreground text-lg font-semibold"
                                 >
-                                    {subscription.plan_name ?? t('Unknown Plan')}
+                                    {subscription.plan_name ??
+                                        t('Unknown Plan')}
                                 </p>
                             </div>
                             {subscription.amount !== null && (
@@ -290,7 +300,8 @@ export default function SettingsBilling({
                                     )}
                                     {subscription.interval && (
                                         <span className="text-muted-foreground block text-xs font-normal">
-                                            {(subscription.interval_count ?? 1) > 1
+                                            {(subscription.interval_count ??
+                                                1) > 1
                                                 ? t('every :count :interval', {
                                                       count: String(
                                                           subscription.interval_count,
@@ -604,6 +615,9 @@ export default function SettingsBilling({
                                 <th className="text-muted-foreground pb-2 text-left font-medium">
                                     {t('Date')}
                                 </th>
+                                <th className="text-muted-foreground pb-2 text-left font-medium">
+                                    {t('Item')}
+                                </th>
                                 <th className="text-muted-foreground pb-2 text-right font-medium">
                                     {t('Amount')}
                                 </th>
@@ -625,6 +639,9 @@ export default function SettingsBilling({
                                             locale,
                                             longDate,
                                         )}
+                                    </td>
+                                    <td className="text-foreground py-3">
+                                        {payment.name ?? '—'}
                                     </td>
                                     <td className="text-foreground py-3 text-right tabular-nums">
                                         {formatMoney(
