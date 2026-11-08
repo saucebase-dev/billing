@@ -5,9 +5,11 @@ namespace Modules\Billing\Services;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Modules\Billing\Contracts\BillingOwner;
+use Modules\Billing\Enums\PaymentStatus;
 use Modules\Billing\Enums\PlanAction;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\PurchaseRefusal;
+use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
 
 /**
@@ -37,7 +39,7 @@ class PlanActions
         }
 
         return array_map(fn (array $byId): array => array_map(
-            fn (PlanAction $action): PlanAction => in_array($action, [PlanAction::Buy, PlanAction::Trial, PlanAction::Change], true) ? PlanAction::OwnerOnly : $action,
+            fn (PlanAction $action): PlanAction => in_array($action, [PlanAction::Buy, PlanAction::BuyAgain, PlanAction::Trial, PlanAction::Change], true) ? PlanAction::OwnerOnly : $action,
             $byId,
         ), $actions);
     }
@@ -53,6 +55,7 @@ class PlanActions
         // Once per page, not once per price, and only if a trial is on offer: it is two queries.
         $hasTrialed = $plans->contains(fn (Product $plan) => $plan->trial_days > 0)
             && ($owner?->billingAccount()?->hasTrialed() ?? false);
+        $boughtOneOffs = $this->boughtOneOffs($owner, $plans);
 
         foreach ($plans as $plan) {
             if ($plan->kind === PlanKind::Free) {
@@ -69,7 +72,12 @@ class PlanActions
                 // A trial is still a purchase; only the button reads differently,
                 // so eligibility stays out of it.
                 $priceActions[$price->id] = $action
-                    ?? ($refusal === null && $plan->trial_days > 0 && ! $hasTrialed ? PlanAction::Trial : $this->priceAction($refusal));
+                    ?? match (true) {
+                        $refusal !== null => $this->priceAction($refusal),
+                        $plan->trial_days > 0 && ! $hasTrialed => PlanAction::Trial,
+                        in_array($plan->id, $boughtOneOffs, true) => PlanAction::BuyAgain,
+                        default => PlanAction::Buy,
+                    };
             }
 
             if ($plan->prices->isEmpty()) {
@@ -78,6 +86,32 @@ class PlanActions
         }
 
         return ['priceActions' => $priceActions, 'productActions' => $productActions];
+    }
+
+    /**
+     * The one-offs on this page the owner holds a payment for, refunds aside. One query.
+     *
+     * @param  Collection<int, Product>  $plans
+     * @return list<int>
+     */
+    private function boughtOneOffs(?BillingOwner $owner, Collection $plans): array
+    {
+        $oneOffs = $plans->filter(fn (Product $plan) => $plan->kind === PlanKind::OneOff);
+        $account = $oneOffs->isEmpty() ? null : $owner?->billingAccount();
+
+        if ($account === null) {
+            return [];
+        }
+
+        // Through every price the plan ever had: a page shows only active ones, and a
+        // purchase under a replaced price is still a purchase.
+        return Price::query()
+            ->whereIn('product_id', $oneOffs->pluck('id'))
+            ->whereIn('id', $account->payments()->where('status', PaymentStatus::Succeeded)->select('price_id'))
+            ->distinct()
+            ->pluck('product_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
     }
 
     private function priceAction(?PurchaseRefusal $refusal): PlanAction

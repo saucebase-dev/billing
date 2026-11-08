@@ -30,7 +30,10 @@ const ctaClass = computed(() =>
 );
 
 const startsCheckout = computed(
-    () => props.action === 'buy' || props.action === 'trial',
+    () =>
+        props.action === 'buy' ||
+        props.action === 'buy_again' ||
+        props.action === 'trial',
 );
 
 const enabled = computed(
@@ -246,6 +249,9 @@ watch(priceKey, () => {
             }}</template>
             <template v-else-if="action === 'owner_only'">{{
                 $t('Ask an owner')
+            }}</template>
+            <template v-else-if="action === 'buy_again'">{{
+                $t('Buy again')
             }}</template>
             <template v-else-if="action === 'trial'">{{
                 $t('Start :days-day free trial', {

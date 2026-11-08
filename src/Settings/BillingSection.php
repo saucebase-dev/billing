@@ -148,9 +148,11 @@ class BillingSection extends SettingsSection
                 ->whereIn('status', [PaymentStatus::Succeeded, PaymentStatus::Refunded])
                 ->latest('id')
                 ->limit(20)
+                ->with('price.plan')
                 ->get()
                 ->map(fn (Payment $payment) => [
                     'id' => $payment->id,
+                    'name' => $payment->price?->plan?->name,
                     'amount' => $payment->amount,
                     'currency' => $payment->currency->value,
                     'status' => $payment->status->value,

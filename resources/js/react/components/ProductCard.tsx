@@ -47,7 +47,8 @@ export default function ProductCard({
         ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
         : 'text-foreground ring-border hover:bg-foreground/10 ring-1 ring-inset';
 
-    const startsCheckout = action === 'buy' || action === 'trial';
+    const startsCheckout =
+        action === 'buy' || action === 'buy_again' || action === 'trial';
     const enabled =
         startsCheckout || action === 'signup' || action === 'owner_only';
 
@@ -72,10 +73,12 @@ export default function ProductCard({
         }
 
         if (startsCheckout && price) {
-            const auth = page.props.auth as {
-                user?: unknown;
-                modal_enabled?: boolean;
-            } | undefined;
+            const auth = page.props.auth as
+                | {
+                      user?: unknown;
+                      modal_enabled?: boolean;
+                  }
+                | undefined;
 
             if (!auth?.user && auth?.modal_enabled) {
                 setIsStartingCheckout(true);
@@ -110,6 +113,7 @@ export default function ProductCard({
         later: t('Available when your current plan ends'),
         unavailable: t('Not available'),
         owner_only: t('Ask an owner'),
+        buy_again: t('Buy again'),
         trial: t('Start :days-day free trial', {
             days: String(product.trial_days ?? 0),
         }),
