@@ -57,8 +57,12 @@ class PlanKindExplainedTest extends TestCase
         Subscription::factory()->create(['price_id' => Price::factory()->for($plan)->create()->id]);
 
         Livewire::test(EditProduct::class, ['record' => $plan->getKey()])
-            ->assertSee('Fixed: this plan has been sold.')
-            ->assertSee(PlanKind::Subscription->description());
+            ->assertSee(PlanKind::Subscription->description())
+            ->fillForm(['kind' => PlanKind::OneOff])
+            ->call('save');
+
+        // Fixed once sold: the disabled field never saves.
+        $this->assertSame(PlanKind::Subscription, $plan->fresh()->kind);
     }
 
     #[DataProvider('kinds')]

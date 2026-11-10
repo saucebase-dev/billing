@@ -3,11 +3,14 @@
 namespace Modules\Billing\Tests\Feature;
 
 use App\Models\User;
+use Filament\Widgets\StatsOverviewWidget\Stat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Exceptions;
 use Livewire\Livewire;
 use Modules\Billing\Filament\Pages\BillingDashboard;
+use Modules\Billing\Filament\Resources\Products\ProductResource;
+use Modules\Billing\Filament\Resources\Subscriptions\SubscriptionResource;
 use Modules\Billing\Filament\Widgets\BillingAttentionWidget;
 use Modules\Billing\Filament\Widgets\BillingHealthWidget;
 use Modules\Billing\Filament\Widgets\BillingSaasStatsWidget;
@@ -63,25 +66,26 @@ class DashboardWidgetsTest extends TestCase
         Payment::factory()->create(['amount' => 3000, 'amount_refunded' => 0, 'created_at' => '2026-11-05']);
         Payment::factory()->create(['amount' => 1000, 'amount_refunded' => 0, 'created_at' => '2026-10-28']);
 
-        Livewire::test(BillingSaasStatsWidget::class, self::WEEK)
-            ->assertSee(['Revenue', '+200% vs previous period', 'MRR', 'New subscriptions']);
+        Livewire::test(BillingSaasStatsWidget::class, self::WEEK)->assertSee('+200%');
+        $this->assertCount(3, $this->stats(BillingSaasStatsWidget::class));
         Exceptions::assertNothingReported();
     }
 
     /** A new install has no plans: one pointer to set billing up, not a row of zeros. */
     public function test_without_plans_the_headline_says_how_to_start(): void
     {
-        Livewire::test(BillingSaasStatsWidget::class, self::WEEK)
-            ->assertSee('Set up billing')
-            ->assertDontSee('MRR');
+        $stats = $this->stats(BillingSaasStatsWidget::class);
+
+        $this->assertCount(1, $stats);
+        $this->assertSame(ProductResource::getUrl('create'), $stats[0]->getUrl());
     }
 
     public function test_the_health_cards(): void
     {
         Subscription::factory()->create();
 
-        Livewire::test(BillingHealthWidget::class, self::WEEK)
-            ->assertSee(['Active subscriptions', 'Churn', 'ARPU', 'Checkout conversion', 'Refunds', 'Failed payments']);
+        Livewire::test(BillingHealthWidget::class, self::WEEK)->assertOk();
+        $this->assertCount(6, $this->stats(BillingHealthWidget::class));
         Exceptions::assertNothingReported();
     }
 
@@ -108,7 +112,8 @@ class DashboardWidgetsTest extends TestCase
         Payment::factory()->failed()->create();
 
         $this->assertTrue(BillingAttentionWidget::canView());
-        Livewire::test(BillingAttentionWidget::class)->assertSee(['Past due subscriptions', 'Failed payments']);
+        Livewire::test(BillingAttentionWidget::class)->assertOk();
+        $this->assertSame([1, 1], array_map(fn ($stat) => $stat->getValue(), $this->stats(BillingAttentionWidget::class)));
     }
 
     /** A zero isn't something to attend to. */
@@ -116,8 +121,17 @@ class DashboardWidgetsTest extends TestCase
     {
         Subscription::factory()->pastDue()->create();
 
-        Livewire::test(BillingAttentionWidget::class)
-            ->assertSee('Past due subscriptions')
-            ->assertDontSee('Failed payments');
+        $stats = $this->stats(BillingAttentionWidget::class);
+
+        $this->assertCount(1, $stats);
+        $this->assertSame(SubscriptionResource::getUrl('index'), $stats[0]->getUrl());
+    }
+
+    /** @return array<int, Stat> The cards, read without their translated labels. */
+    private function stats(string $widget): array
+    {
+        $instance = tap(new $widget, fn ($w) => $w->pageFilters = self::WEEK['pageFilters']);
+
+        return (fn () => $this->getStats())->call($instance);
     }
 }

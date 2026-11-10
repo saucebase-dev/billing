@@ -241,7 +241,7 @@ export default function SettingsBilling({
 
                     <p className="text-muted-foreground border-border border-t pt-4 text-sm">
                         {plan.paid_at && (
-                            <>
+                            <span data-testid="lifetime-plan-paid-at">
                                 {t('Bought on :date', {
                                     date: formatDate(
                                         plan.paid_at,
@@ -250,7 +250,7 @@ export default function SettingsBilling({
                                     ),
                                 })}{' '}
                                 &middot;{' '}
-                            </>
+                            </span>
                         )}
                         {t('Yours for good, no renewals.')}
                     </p>
@@ -268,6 +268,7 @@ export default function SettingsBilling({
                             <div className="space-y-1">
                                 <p
                                     data-testid="plan-kind"
+                                    data-interval={subscription.interval}
                                     className="text-muted-foreground text-xs font-medium tracking-wide uppercase"
                                 >
                                     {subscription.interval

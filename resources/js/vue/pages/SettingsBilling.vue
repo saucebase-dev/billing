@@ -194,14 +194,14 @@ function resumeSubscription() {
             <p
                 class="text-muted-foreground border-border border-t pt-4 text-sm"
             >
-                <template v-if="plan.paid_at">
+                <span v-if="plan.paid_at" data-testid="lifetime-plan-paid-at">
                     {{
                         $t('Bought on :date', {
                             date: formatDate(plan.paid_at, language, longDate),
                         })
                     }}
                     &middot;
-                </template>
+                </span>
                 {{ $t('Yours for good, no renewals.') }}
             </p>
         </Card>
@@ -214,6 +214,7 @@ function resumeSubscription() {
                         <div class="space-y-1">
                             <p
                                 data-testid="plan-kind"
+                                :data-interval="subscription.interval"
                                 class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
                             >
                                 {{
