@@ -181,7 +181,7 @@ Everything else the merchant decides — provider, currency, checkout redirect, 
 
 The install seeder, `DatabaseSeeder`, only creates the `manage billing` permission (granted to nobody), which every billing admin page and resource checks in `canAccess()` (Customers, Products, Subscriptions, the Billing dashboard and Billing settings) and every billing widget in `canView()`, since the stats widget also sits on the main dashboard. `access admin panel` alone only opens the panel; `admin` passes every check. Plans are not seeded: a real install defines its own in the admin panel.
 
-Everything else the module seeds is demo content, run by `modules:seed --state=showcase` through `ShowcaseBillingDatabaseSeeder`, which calls one `Demo*Seeder` per kind of content, in dependency order:
+Everything else the module seeds is demo content, run by `modules:seed --state=showcase` through `ShowcaseBillingDatabaseSeeder`, which calls one `Showcase*Seeder` per kind of content, in dependency order:
 
 | Seeder | What it makes |
 | --- | --- |
@@ -189,7 +189,7 @@ Everything else the module seeds is demo content, run by `modules:seed --state=s
 | `ShowcaseCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
 | `ShowcaseSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
 
-Keep the `Demo` prefix on each: it is what marks the data as the demo site's rather than an install's.
+Keep the `Showcase` prefix on each: it marks the data as the showcase state's rather than an install's.
 
 `ShowcaseBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this every paid plan on the demo's pricing page says *Not available*. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `ShowcaseProductSeeder`: the runner draws a task line around each seeder and swallows its output.
 
