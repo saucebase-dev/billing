@@ -25,10 +25,10 @@ use Modules\Billing\Models\Subscription;
  * enough abandoned checkouts to keep the conversion rate short of a suspicious
  * 100%.
  *
- * Runs after DemoCustomerSeeder and DemoProductSeeder, and does nothing without
+ * Runs after ShowcaseCustomerSeeder and ShowcaseProductSeeder, and does nothing without
  * them.
  */
-class DemoSubscriptionSeeder extends Seeder
+class ShowcaseSubscriptionSeeder extends Seeder
 {
     /** Every seventeenth of those behind on payment ran out of time entirely. */
     private const SUSPENDED_EVERY = 17;
@@ -68,7 +68,7 @@ class DemoSubscriptionSeeder extends Seeder
 
     /**
      * The paid plans, cheapest first. Looked up by plan and interval rather than by
-     * Stripe price ID, so the demo account's IDs live only in DemoProductSeeder.
+     * Stripe price ID, so the demo account's IDs live only in ShowcaseProductSeeder.
      *
      * @return list<Price>
      */
