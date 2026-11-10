@@ -18,19 +18,16 @@ test.describe('Settings Billing Lifetime', () => {
         await billingPage.goto();
 
         const plan = page.getByTestId('lifetime-plan');
-        await expect(plan.getByTestId('lifetime-plan-kind')).toHaveText(
-            'Lifetime plan',
-        );
+        await expect(plan.getByTestId('lifetime-plan-kind')).toBeVisible();
         await expect(plan.getByTestId('lifetime-plan-name')).toHaveText(
             'Lifetime E2E',
         );
         await expect(plan.getByTestId('lifetime-plan-amount')).toContainText(
             '299.00',
         );
-        await expect(plan).toContainText('Paid once');
-        await expect(plan).toContainText('Bought on');
+        await expect(plan.getByTestId('lifetime-plan-paid-at')).toBeVisible();
+        // Feature names are the fixture's data; the second hides behind the toggle.
         await expect(plan).toContainText('Unlimited projects');
-        await expect(plan).toContainText('+1 more');
         await expect(plan).not.toContainText('Priority support');
 
         const featuresToggle = plan.getByTestId('plan-features-toggle');

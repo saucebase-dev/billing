@@ -71,7 +71,9 @@ test.describe.parallel('Pricing page', () => {
         ).toHaveAttribute('data-action', 'buy');
     });
 
-    test('opens signup over pricing when a guest picks a free plan', async ({ page }) => {
+    test('opens signup over pricing when a guest picks a free plan', async ({
+        page,
+    }) => {
         await page.goto('/pricing');
         await page
             .getByTestId('product-card-starter')
@@ -81,7 +83,9 @@ test.describe.parallel('Pricing page', () => {
         await expect(page.getByTestId('register-modal')).toBeVisible();
     });
 
-    test('opens signup over pricing when a guest picks a paid plan', async ({ page }) => {
+    test('opens signup over pricing when a guest picks a paid plan', async ({
+        page,
+    }) => {
         await page.goto('/pricing');
 
         await page
