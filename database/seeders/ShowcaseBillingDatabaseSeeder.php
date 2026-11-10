@@ -10,13 +10,13 @@ use Modules\Billing\Services\PaymentGatewayManager;
 use Spatie\Permission\Models\Role;
 
 /**
- * Sample billing content for the demo site, run by `modules:seed --demo`.
+ * Sample billing content for the demo site, run by `modules:seed --state=showcase`.
  *
  * None of it is install data: a real app defines its own plans. The plans are
  * created locally and pushed to the provider when its keys are present, which
  * is what makes the demo site's checkout work.
  */
-class DemoBillingDatabaseSeeder extends Seeder
+class ShowcaseBillingDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
@@ -29,9 +29,9 @@ class DemoBillingDatabaseSeeder extends Seeder
         $staff->syncRoles('billing admin');
 
         $this->call([
-            DemoProductSeeder::class,
-            DemoCustomerSeeder::class,
-            DemoSubscriptionSeeder::class,
+            ShowcaseProductSeeder::class,
+            ShowcaseCustomerSeeder::class,
+            ShowcaseSubscriptionSeeder::class,
         ]);
 
         $this->pushToProvider();
@@ -70,7 +70,7 @@ class DemoBillingDatabaseSeeder extends Seeder
         $prices = 0;
 
         try {
-            foreach (Product::whereIn('slug', DemoProductSeeder::SLUGS)->get() as $product) {
+            foreach (Product::whereIn('slug', ShowcaseProductSeeder::SLUGS)->get() as $product) {
                 $report = $push->run($product);
                 $products += $report->products;
                 $prices += $report->prices;

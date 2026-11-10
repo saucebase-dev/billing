@@ -181,21 +181,21 @@ Everything else the merchant decides — provider, currency, checkout redirect, 
 
 The install seeder, `DatabaseSeeder`, only creates the `manage billing` permission (granted to nobody), which every billing admin page and resource checks in `canAccess()` (Customers, Products, Subscriptions, the Billing dashboard and Billing settings) and every billing widget in `canView()`, since the stats widget also sits on the main dashboard. `access admin panel` alone only opens the panel; `admin` passes every check. Plans are not seeded: a real install defines its own in the admin panel.
 
-Everything else the module seeds is demo content, run by `modules:seed --demo` through `DemoBillingDatabaseSeeder`, which calls one `Demo*Seeder` per kind of content, in dependency order:
+Everything else the module seeds is demo content, run by `modules:seed --state=showcase` through `ShowcaseBillingDatabaseSeeder`, which calls one `Demo*Seeder` per kind of content, in dependency order:
 
 | Seeder | What it makes |
 | --- | --- |
-| `DemoProductSeeder` | Five plans for a made-up developer tool, each with a kind and entitlements — Free, Pro (highlighted), Team, Lifetime (replaces Pro) and Enterprise (no price, `cta_url` to sales) — chosen so the pricing page shows every option it reads. No provider IDs. A real install defines its own. |
-| `DemoCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
-| `DemoSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
+| `ShowcaseProductSeeder` | Five plans for a made-up developer tool, each with a kind and entitlements — Free, Pro (highlighted), Team, Lifetime (replaces Pro) and Enterprise (no price, `cta_url` to sales) — chosen so the pricing page shows every option it reads. No provider IDs. A real install defines its own. |
+| `ShowcaseCustomerSeeder` | 48 users, customers and cards, signing up on a rising curve over the last twelve months. |
+| `ShowcaseSubscriptionSeeder` | A subscription per customer, one payment and invoice per billing period since signup, plus abandoned checkouts. |
 
 Keep the `Demo` prefix on each: it is what marks the data as the demo site's rather than an install's.
 
-`DemoBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this every paid plan on the demo's pricing page says *Not available*. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `DemoProductSeeder`: the runner draws a task line around each seeder and swallows its output.
+`ShowcaseBillingDatabaseSeeder` runs `CatalogPush` after the three, and it is the only step that leaves the database. The seeded plans have no provider IDs, and a plan the provider does not know is not `purchasable()` — so without this every paid plan on the demo's pricing page says *Not available*. It is skipped under `runningUnitTests()` (the suite boots with the developer's own `.env`) and when the provider has no keys, and a provider that is unreachable warns rather than failing the seed. Put it here rather than inside `ShowcaseProductSeeder`: the runner draws a task line around each seeder and swallows its output.
 
-Two properties hold the demo data together, and a new seeder should keep both. It is **deterministic** — the customer names come from a fixed faker seed, and everything else from the customer's index — and it is **idempotent**, keyed on slugs, users and `*_demo_*` IDs, so reseeding updates rather than duplicates. Customers carry no provider ID: checkout creates a real one the first time a demo account buys. `DemoSeederTest` covers the second.
+Two properties hold the demo data together, and a new seeder should keep both. It is **deterministic** — the customer names come from a fixed faker seed, and everything else from the customer's index — and it is **idempotent**, keyed on slugs, users and `*_demo_*` IDs, so reseeding updates rather than duplicates. Customers carry no provider ID: checkout creates a real one the first time a demo account buys. `ShowcaseSeederTest` covers the second.
 
-Signup dates drive the whole dashboard: `DemoCustomerSeeder::SIGNUPS_PER_MONTH` is the growth curve the revenue and subscription charts draw, and `DemoSubscriptionSeeder` bills forward from each signup date to today.
+Signup dates drive the whole dashboard: `ShowcaseCustomerSeeder::SIGNUPS_PER_MONTH` is the growth curve the revenue and subscription charts draw, and `ShowcaseSubscriptionSeeder` bills forward from each signup date to today.
 
 Nothing in the test suites depends on the demo plans. `BillingTestHelper::createSubscriberFixtures()` creates the "Pro" product and its price itself, which is what the e2e specs assert against.
 
