@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Database\Seeders\DatabaseSeeder;
 use Modules\Billing\Database\Seeders\ShowcaseBillingDatabaseSeeder;
 use Modules\Billing\Database\Seeders\ShowcaseProductSeeder;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
@@ -31,6 +32,17 @@ class ShowcaseSeederTest extends TestCase
         $this->assertGreaterThan(0, Invoice::count());
         $this->assertGreaterThan(0, Subscription::where('status', SubscriptionStatus::Active)->count());
         $this->assertGreaterThan(0, Subscription::where('status', SubscriptionStatus::Cancelled)->count());
+    }
+
+    /** An app has one free plan: a template's own stays, and the showcase adds the rest. */
+    public function test_the_showcase_keeps_a_free_plan_the_app_already_has(): void
+    {
+        $ownFree = Product::factory()->create(['slug' => 'uptime-free', 'kind' => PlanKind::Free]);
+
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
+
+        $this->assertSame([$ownFree->id], Product::where('kind', PlanKind::Free)->pluck('id')->all());
+        $this->assertTrue(Product::where('slug', 'pro')->exists());
     }
 
     /** Re-running the demo seeder must not double the data. */
