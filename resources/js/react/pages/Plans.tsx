@@ -20,11 +20,11 @@ export default function Plans({
             >
                 <div className="mx-auto max-w-4xl text-center">
                     <h2 className="text-foreground mt-2 text-4xl font-semibold tracking-tight sm:text-5xl">
-                        {t('Pricing that ships with your app')}
+                        {t('Choose your plan')}
                     </h2>
                     <p className="text-foreground/70 mx-auto mt-6 max-w-2xl text-lg">
                         {t(
-                            "Every plan here runs on the Billing module against Stripe's sandbox. Try the checkout: you won't be charged.",
+                            'Start free and upgrade when you need more. Cancel anytime.',
                         )}
                     </p>
                 </div>
