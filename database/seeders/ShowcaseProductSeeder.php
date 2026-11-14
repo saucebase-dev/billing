@@ -35,6 +35,11 @@ class ShowcaseProductSeeder extends Seeder
     public function run(): void
     {
         foreach ($this->plans() as $order => $plan) {
+            // An app has one free plan. One it already has (a template's own) stays.
+            if ($plan['kind'] === PlanKind::Free && Product::where('kind', PlanKind::Free)->where('slug', '!=', $plan['slug'])->exists()) {
+                continue;
+            }
+
             $product = Product::updateOrCreate(
                 ['slug' => $plan['slug']],
                 [
