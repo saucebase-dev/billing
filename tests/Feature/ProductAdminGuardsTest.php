@@ -78,6 +78,23 @@ class ProductAdminGuardsTest extends TestCase
         $this->assertModelExists($price);
     }
 
+    /** A new row's key is a UUID, and one starting with the price's id is not that price. */
+    public function test_a_new_row_whose_key_starts_with_the_price_id_does_not_keep_it(): void
+    {
+        $product = Product::factory()->create(['provider_product_id' => null]);
+        $price = Price::factory()->create(['product_id' => $product->id, 'provider_price_id' => null]);
+
+        $page = Livewire::test(EditProduct::class, ['record' => $product->getKey()]);
+        $row = $page->get('data.prices')["record-{$price->id}"];
+
+        $price->forceFill(['provider' => 'stripe', 'provider_price_id' => 'price_pushed'])->save();
+
+        $page->set('data.prices', ["{$price->id}abcdef-0000-4000-8000-000000000000" => $row])->call('save');
+
+        $this->assertModelExists($price);
+        $this->assertSame(1, $product->prices()->count());
+    }
+
     public function test_a_gateway_managed_price_keeps_its_amount(): void
     {
         $product = Product::factory()->create([
