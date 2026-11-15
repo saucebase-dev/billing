@@ -194,14 +194,14 @@ function resumeSubscription() {
             <p
                 class="text-muted-foreground border-border border-t pt-4 text-sm"
             >
-                <template v-if="plan.paid_at">
+                <span v-if="plan.paid_at" data-testid="lifetime-plan-paid-at">
                     {{
                         $t('Bought on :date', {
                             date: formatDate(plan.paid_at, language, longDate),
                         })
                     }}
                     &middot;
-                </template>
+                </span>
                 {{ $t('Yours for good, no renewals.') }}
             </p>
         </Card>
@@ -214,6 +214,7 @@ function resumeSubscription() {
                         <div class="space-y-1">
                             <p
                                 data-testid="plan-kind"
+                                :data-interval="subscription.interval"
                                 class="text-muted-foreground text-xs font-medium tracking-wide uppercase"
                             >
                                 {{
@@ -592,7 +593,10 @@ function resumeSubscription() {
 
                 <!-- Otherwise, the way out; a subscription a lifetime plan
                      replaces is already ending -->
-                <DangerZone v-else-if="!subscription.cancelled_at" :show-header="false">
+                <DangerZone
+                    v-else-if="!subscription.cancelled_at"
+                    :show-header="false"
+                >
                     <div class="space-y-1">
                         <h3 class="font-medium">{{ $t('Cancellation') }}</h3>
                         <p class="text-muted-foreground text-sm">
@@ -647,6 +651,11 @@ function resumeSubscription() {
                             {{ $t('Date') }}
                         </th>
                         <th
+                            class="text-muted-foreground pb-2 text-left font-medium"
+                        >
+                            {{ $t('Item') }}
+                        </th>
+                        <th
                             class="text-muted-foreground pb-2 text-right font-medium"
                         >
                             {{ $t('Amount') }}
@@ -669,6 +678,9 @@ function resumeSubscription() {
                             {{
                                 formatDate(payment.paid_at, language, longDate)
                             }}
+                        </td>
+                        <td class="text-foreground py-3">
+                            {{ payment.name ?? '—' }}
                         </td>
                         <td
                             class="text-foreground py-3 text-right tabular-nums"

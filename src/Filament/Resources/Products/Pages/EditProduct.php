@@ -6,6 +6,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -50,6 +51,31 @@ class EditProduct extends EditRecord
         Product::whereKey($record->getKey())->lockForUpdate()->first();
 
         return parent::handleRecordUpdate($record, $data);
+    }
+
+    /**
+     * The form hides delete on a provider's price, but one pushed after the form opened
+     * still shows it. Stop before the repeater deletes it and the model's guard throws.
+     */
+    protected function beforeSave(): void
+    {
+        $kept = collect($this->data['prices'] ?? [])->keys()->map(fn ($key) => (int) str_replace('record-', '', (string) $key));
+
+        $removed = $this->getRecord()->prices()
+            ->whereNotNull('provider_price_id')
+            ->whereNotIn('id', $kept)
+            ->exists();
+
+        if ($removed) {
+            Notification::make()
+                ->title(__('A price is managed by the provider'))
+                ->body(__('Archive it there and sync. The form has been reloaded.'))
+                ->danger()
+                ->send();
+
+            $this->fillForm();
+            $this->halt();
+        }
     }
 
     /**

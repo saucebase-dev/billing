@@ -17,9 +17,9 @@ use Modules\Billing\Models\PaymentMethod;
  *
  * Signup dates run back over the last year on a rising curve, which is what gives
  * the revenue and subscription charts a shape worth looking at. They are laid out
- * here, in one place, because DemoSubscriptionSeeder bills from them.
+ * here, in one place, because ShowcaseSubscriptionSeeder bills from them.
  */
-class DemoCustomerSeeder extends Seeder
+class ShowcaseCustomerSeeder extends Seeder
 {
     /**
      * How many customers signed up each month, oldest month first. Twelve entries,

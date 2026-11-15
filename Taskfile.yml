@@ -21,9 +21,9 @@ tasks:
 
     # ── Database ──────────────────────────────────────────────────
 
-    db:seed:demo:
+    db:seed:showcase:
         desc: Seed the Billing module with sample customers, subscriptions and payments
-        cmd: '{{.APP}} php artisan modules:seed --module=billing --demo'
+        cmd: '{{.APP}} php artisan modules:seed --module=billing --state=showcase'
 
     # ── Code Generation ────────────────────────────────────────────
 

@@ -353,7 +353,8 @@ class StripeGateway implements PaymentGatewayInterface
     {
         return $this->call('create a product', fn () => $this->stripe->products->create(array_filter([
             'name' => $product->name,
-            'description' => $product->description ? strip_tags($product->description) : null,
+            // An emptied editor leaves `<p></p>`; Stripe rejects an empty string.
+            'description' => trim(strip_tags((string) $product->description)) ?: null,
             'active' => $product->is_active,
             'metadata' => ['slug' => $product->slug],
         ], fn ($value) => $value !== null))->id);

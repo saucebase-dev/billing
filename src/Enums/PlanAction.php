@@ -11,6 +11,9 @@ enum PlanAction: string
     /** Checkout, paid from the start. */
     case Buy = 'buy';
 
+    /** Checkout for a one-off the owner already bought: another call, renewed updates. */
+    case BuyAgain = 'buy_again';
+
     /** Checkout with the plan's free trial. */
     case Trial = 'trial';
 

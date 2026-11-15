@@ -4,8 +4,9 @@ namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Database\Seeders\DatabaseSeeder;
-use Modules\Billing\Database\Seeders\DemoBillingDatabaseSeeder;
-use Modules\Billing\Database\Seeders\DemoProductSeeder;
+use Modules\Billing\Database\Seeders\ShowcaseBillingDatabaseSeeder;
+use Modules\Billing\Database\Seeders\ShowcaseProductSeeder;
+use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Enums\SubscriptionStatus;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
@@ -14,7 +15,7 @@ use Modules\Billing\Models\Product;
 use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
 
-class DemoSeederTest extends TestCase
+class ShowcaseSeederTest extends TestCase
 {
     use RefreshDatabase;
 
@@ -24,7 +25,7 @@ class DemoSeederTest extends TestCase
      */
     public function test_the_demo_seeder_fills_every_dashboard_widget(): void
     {
-        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
 
         $this->assertGreaterThan(0, Customer::count());
         $this->assertGreaterThan(0, Payment::count());
@@ -33,13 +34,24 @@ class DemoSeederTest extends TestCase
         $this->assertGreaterThan(0, Subscription::where('status', SubscriptionStatus::Cancelled)->count());
     }
 
+    /** An app has one free plan: a template's own stays, and the showcase adds the rest. */
+    public function test_the_showcase_keeps_a_free_plan_the_app_already_has(): void
+    {
+        $ownFree = Product::factory()->create(['slug' => 'uptime-free', 'kind' => PlanKind::Free]);
+
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
+
+        $this->assertSame([$ownFree->id], Product::where('kind', PlanKind::Free)->pluck('id')->all());
+        $this->assertTrue(Product::where('slug', 'pro')->exists());
+    }
+
     /** Re-running the demo seeder must not double the data. */
     public function test_seeding_twice_leaves_the_same_data(): void
     {
-        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
         $first = [Customer::count(), Subscription::count(), Payment::count()];
 
-        $this->seed([DatabaseSeeder::class, DemoBillingDatabaseSeeder::class]);
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
 
         $this->assertSame($first, [Customer::count(), Subscription::count(), Payment::count()]);
     }
@@ -47,7 +59,7 @@ class DemoSeederTest extends TestCase
     /** Pro's trial shows the feature: fewer API requests, no custom domains. */
     public function test_the_pro_trial_is_narrower_than_pro(): void
     {
-        $this->seed(DemoProductSeeder::class);
+        $this->seed(ShowcaseProductSeeder::class);
 
         $trial = Product::where('slug', 'pro')->sole()->entitlements(trial: true);
 

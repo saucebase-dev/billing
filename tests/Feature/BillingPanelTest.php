@@ -123,6 +123,17 @@ class BillingPanelTest extends TestCase
         $this->assertSame('refunded', $payments[0]['status']);
     }
 
+    /** A row says what was bought, even once the plan is archived. */
+    public function test_a_one_time_payment_names_what_was_bought(): void
+    {
+        $price = Price::factory()->oneTime()->create();
+        $price->product->update(['name' => 'Onboarding call']);
+        $price->product->delete();
+        Payment::factory()->create(['customer_id' => $this->customer->id, 'price_id' => $price->id]);
+
+        $this->assertSame('Onboarding call', $this->props()['payments'][0]['name']);
+    }
+
     public function test_a_subscription_lifetime_replaces_says_so_once_its_end_is_scheduled(): void
     {
         $this->subscribeToPro(['cancelled_at' => now(), 'ends_at' => now()->addWeek()]);

@@ -170,7 +170,7 @@ Run `npm run build` afterwards.
 ## Demo data
 
 ```bash
-php artisan modules:seed --module=billing --demo
+php artisan modules:seed --module=billing --state=showcase
 ```
 
 Adds sample plans (pushed to Stripe when your keys are set), sample customers, and a staff account (`billing@saucebase.dev`) that only sees billing in the admin. All use the `DEMO_PASSWORD` from `.env`.
