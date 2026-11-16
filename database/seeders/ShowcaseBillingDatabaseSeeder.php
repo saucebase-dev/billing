@@ -7,6 +7,7 @@ use Illuminate\Database\Seeder;
 use Modules\Billing\Models\Product;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
+use Saucebase\Core\Attributes\DemoAccount;
 use Spatie\Permission\Models\Role;
 
 /**
@@ -16,6 +17,7 @@ use Spatie\Permission\Models\Role;
  * created locally and pushed to the provider when its keys are present, which
  * is what makes the demo site's checkout work.
  */
+#[DemoAccount('billing@saucebase.dev', 'staff: the billing admin')]
 class ShowcaseBillingDatabaseSeeder extends Seeder
 {
     public function run(): void
