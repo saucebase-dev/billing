@@ -13,6 +13,7 @@ class CheckoutSessionData extends Data implements WebhookEventData
      *                             not yet settled checkouts are not.
      * @param  ?string  $paymentMethodReference  Anything the gateway resolves to a
      *                                           payment method through `resolvePaymentMethod()`.
+     * @param  ?string  $providerInvoiceId  A subscription's first invoice; its payment events name it too.
      */
     public function __construct(
         public string $sessionId,
@@ -22,5 +23,6 @@ class CheckoutSessionData extends Data implements WebhookEventData
         public ?string $paymentMethodReference,
         public Currency $currency,
         public int $amount,
+        public ?string $providerInvoiceId = null,
     ) {}
 }

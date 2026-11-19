@@ -4,6 +4,7 @@ import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
+    pickInterval,
 } from './intervals';
 
 describe('intervals', () => {
@@ -35,5 +36,20 @@ describe('intervals', () => {
         expect(normalizeInterval('quarter')).toBe('quarter');
         expect(getIntervalDisplay('quarter')).toBe('/quarter');
         expect(getIntervalLabel('quarter')).toBe('quarter');
+    });
+});
+
+describe('pickInterval', () => {
+    it('keeps the current interval while it is offered', () => {
+        expect(pickInterval(['month', 'year'], 'year')).toBe('year');
+    });
+
+    /** Decided while rendering, so the server's first paint selects a toggle that has cards. */
+    it('falls back to the first offered interval', () => {
+        expect(pickInterval(['year', 'one_time'], 'month')).toBe('year');
+    });
+
+    it('keeps the current one when nothing is offered', () => {
+        expect(pickInterval([], 'month')).toBe('month');
     });
 });

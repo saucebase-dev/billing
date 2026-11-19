@@ -32,3 +32,13 @@ export function matchesInterval(
 export function getIntervalLabel(interval: string): string {
     return INTERVAL_CONFIG[interval]?.label || interval;
 }
+
+/**
+ * The toggle's interval: the current one while it is offered, else the first offered.
+ * Decided while rendering (not in an effect), so the server's first paint agrees.
+ */
+export function pickInterval(available: string[], current: string): string {
+    return available.length === 0 || available.includes(current)
+        ? current
+        : available[0];
+}
