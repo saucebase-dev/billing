@@ -15,5 +15,6 @@ class InvoicePaymentData extends Data implements WebhookEventData
         public ?string $paymentMethodReference,
         public Currency $currency,
         public int $amount,
+        public ?string $providerInvoiceId = null,
     ) {}
 }

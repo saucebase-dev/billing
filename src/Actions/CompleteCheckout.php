@@ -76,7 +76,8 @@ class CompleteCheckout
                     'subscription_id' => $subscription?->id,
                     'price_id' => $session->price_id,
                     'payment_method_id' => $paymentMethod?->id,
-                    'provider_payment_id' => $subscription ? null : $checkout->providerPaymentId,
+                    // A subscription's intent is not known yet: its invoice stands in until the invoice's payment event.
+                    'provider_payment_id' => $subscription ? $checkout->providerInvoiceId : $checkout->providerPaymentId,
                     'currency' => $checkout->currency,
                     'amount' => $checkout->amount,
                     'status' => PaymentStatus::Succeeded,

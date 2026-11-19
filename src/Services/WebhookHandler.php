@@ -342,18 +342,11 @@ class WebhookHandler
         }
 
         // The same invoice fails and later succeeds under one payment intent, and
-        // checkout completion records the first payment before its intent is known.
+        // checkout records the first payment under its invoice before the intent is known.
         $payment = Payment::where('provider', $webhook->provider)->where('provider_payment_id', $providerPaymentId)->first()
-            ?? ($subscription
-                // Recent only: a placeholder whose intent never arrived would
-                // otherwise be adopted by a later cycle's invoice, overwriting
-                // one period's payment history with the next one's.
-                ? Payment::where('subscription_id', $subscription->id)
-                    ->whereNull('provider_payment_id')
-                    ->where('created_at', '>=', now()->subMinutes(5))
-                    ->latest('id')
-                    ->first()
-                : null);
+            ?? ($attempt->providerInvoiceId === null ? null : Payment::where('provider', $webhook->provider)
+                ->where('provider_payment_id', $attempt->providerInvoiceId)
+                ->first());
 
         // A failure delivered after the success it preceded must not undo it.
         if ($payment?->status === PaymentStatus::Succeeded && $status === PaymentStatus::Failed) {
@@ -610,8 +603,9 @@ class WebhookHandler
             ],
         );
 
+        // Like every subscription write: a late invoice for an earlier period must not roll it back.
         if ($subscription && $paid->periodStartsAt && $paid->periodEndsAt) {
-            $subscription->update([
+            $this->applyIfCurrent($subscription, $webhook, [
                 'current_period_starts_at' => $paid->periodStartsAt,
                 'current_period_ends_at' => $paid->periodEndsAt,
             ]);

@@ -1,5 +1,5 @@
 import { useT } from '@saucebase/react/i18n';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 
 import type {
     PlanAction,
@@ -10,6 +10,7 @@ import {
     getIntervalLabel,
     matchesInterval,
     normalizeInterval,
+    pickInterval,
 } from '../../lib/intervals';
 
 import ProductCard from './ProductCard';
@@ -60,17 +61,10 @@ export default function ProductSection({
         );
     }, [products]);
 
-    const [billingInterval, setBillingInterval] = useState('month');
-
-    // Set default to first available interval when products change
-    useEffect(() => {
-        if (
-            availableIntervals.length > 0 &&
-            !availableIntervals.includes(billingInterval)
-        ) {
-            setBillingInterval(availableIntervals[0]);
-        }
-    }, [availableIntervals, billingInterval]);
+    const [chosenInterval, setChosenInterval] = useState('month');
+    // Derived while rendering, so the server's first paint selects an offered interval;
+    // an effect only ran in the browser, after a paint of the wrong (empty) toggle.
+    const billingInterval = pickInterval(availableIntervals, chosenInterval);
 
     const filteredProducts = useMemo(
         () =>
@@ -113,7 +107,7 @@ export default function ProductSection({
                         {availableIntervals.map((interval) => (
                             <button
                                 key={interval}
-                                onClick={() => setBillingInterval(interval)}
+                                onClick={() => setChosenInterval(interval)}
                                 className={`relative z-10 rounded-xl px-6 py-2 text-sm font-medium transition-all duration-200 ${
                                     billingInterval === interval
                                         ? 'bg-primary text-white'
