@@ -27,6 +27,7 @@ use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Price;
@@ -1179,6 +1180,47 @@ class WebhookHandlerTest extends TestCase
         $this->assertSame('2027-02-01', $subscription->fresh()->current_period_starts_at->toDateString());
         // The invoice itself is still recorded: it was paid.
         Event::assertDispatched(InvoicePaid::class);
+    }
+
+    /**
+     * An invoice does not stamp `last_event_at`, so two invoices both newer than the last
+     * subscription event pass that check. A delayed January invoice arriving after
+     * February's must still not move the period back.
+     */
+    public function test_a_delayed_invoice_after_a_newer_one_does_not_move_the_period_back(): void
+    {
+        Event::fake([InvoicePaid::class]);
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_delayed_inv']);
+        $subscription = Subscription::factory()->create([
+            'provider_subscription_id' => 'sub_delayed_inv',
+            'customer_id' => $customer->id,
+            'current_period_starts_at' => '2027-01-01 00:00:00',
+            'current_period_ends_at' => '2027-02-01 00:00:00',
+            'last_event_at' => '2026-12-01 00:00:00',
+        ]);
+        $invoice = fn (string $id, string $start, string $end, string $at) => StripeWebhook::make(
+            type: WebhookEventType::InvoicePaid,
+            provider: 'stripe',
+            providerEventId: "evt_{$id}",
+            payload: [
+                'id' => $id, 'customer' => 'cus_delayed_inv', 'subscription' => 'sub_delayed_inv',
+                'number' => $id, 'currency' => 'usd', 'subtotal' => 2900, 'tax' => 0, 'total' => 2900,
+                'lines' => ['data' => [['period' => ['start' => strtotime($start), 'end' => strtotime($end)]]]],
+            ],
+            occurredAt: CarbonImmutable::parse($at),
+        );
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            $invoice('in_feb', '2027-02-01', '2027-03-01', '2027-02-01 00:00:10'),
+            $invoice('in_jan', '2027-01-01', '2027-02-01', '2027-01-01 00:00:10'),
+        );
+
+        $this->billingService->handle('stripe', request());
+        $this->billingService->handle('stripe', request());
+
+        $this->assertSame('2027-02-01', $subscription->fresh()->current_period_starts_at->toDateString());
+        $this->assertSame('2027-03-01', $subscription->fresh()->current_period_ends_at->toDateString());
+        // The late invoice is still recorded: it was paid.
+        $this->assertTrue(Invoice::where('provider_invoice_id', 'in_jan')->exists());
     }
 
     public function test_webhook_invoice_paid_resolves_subscription_from_parent_field(): void

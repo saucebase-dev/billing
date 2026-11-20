@@ -90,7 +90,7 @@ On return, the provider sends the buyer to `settings.billing?checkout_session={o
    - `SubscriptionTrialWillEnd` → mirrors trial dates and fires `TrialEnding`
    - `PaymentMethodAttached` / `PaymentMethodDetached` → keeps cards added or removed in the provider's portal in step, and clears a subscription pointing at a removed one. Attaching never makes a card the default
    - `CustomerUpdated` → the default card follows `invoice_settings.default_payment_method`, cleared when the provider clears it
-   - `InvoicePaid` → creates/updates Invoice, syncs subscription period dates through `applyIfCurrent()` (a late invoice for an earlier period is skipped, and a Cancelled row is left alone; it does not stamp `last_event_at`)
+   - `InvoicePaid` → creates/updates Invoice, syncs subscription period dates through `applyIfCurrent()` (a late invoice for an earlier period is skipped, and a Cancelled row is left alone; it does not stamp `last_event_at`, so `periodForwardOnly` also skips one whose period ends before the stored one: a delayed January invoice after February's)
 
 ### Subscription Lifecycle
 
