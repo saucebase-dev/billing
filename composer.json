@@ -2,7 +2,7 @@
   "name": "saucebase/billing",
   "description": "Stripe billing for Saucebase: checkout, subscriptions, trials, a pricing page and invoices.",
   "type": "saucebase-module",
-  "version": "v3.5.0",
+  "version": "v3.6.0",
   "authors": [
     {
       "name": "Saucebase",
