@@ -90,7 +90,7 @@ On return, the provider sends the buyer to `settings.billing?checkout_session={o
    - `SubscriptionTrialWillEnd` → mirrors trial dates and fires `TrialEnding`
    - `PaymentMethodAttached` / `PaymentMethodDetached` → keeps cards added or removed in the provider's portal in step, and clears a subscription pointing at a removed one. Attaching never makes a card the default
    - `CustomerUpdated` → the default card follows `invoice_settings.default_payment_method`, cleared when the provider clears it
-   - `InvoicePaid` → creates/updates Invoice, syncs subscription period dates
+   - `InvoicePaid` → creates/updates Invoice, syncs subscription period dates through `applyIfCurrent()` (a late invoice for an earlier period is skipped, and a Cancelled row is left alone; it does not stamp `last_event_at`, so `periodForwardOnly` also skips one whose period ends before the stored one: a delayed January invoice after February's)
 
 ### Subscription Lifecycle
 
@@ -164,7 +164,7 @@ The **data contract is provider-neutral**: incoming webhooks, `retrieveSubscript
 It is **not** a drop-in for any provider yet: optional operations (portal, plan change) have no capability flags, payment identity across checkout/payment/refund is Stripe-shaped (an invoice ID stands in when there is no payment intent), and running two providers at once is sc-788. `NeutralGatewayTest` is the proof of the contract — a fake provider that speaks only the module's data.
 
 ### Payment Correlation
-Payments are matched by provider identity, never by time. `createPaymentFromWebhook()` looks for an existing row by `provider_payment_id` (so a failed invoice that later succeeds updates the same record), then for the subscription's checkout-created payment that has no intent yet. An invoice whose subscription does not exist locally throws, and the retry lands after `CheckoutCompleted` has created it.
+Payments are matched by provider identity, never by time. Checkout records a subscription's first payment under its invoice (`CheckoutSessionData::providerInvoiceId`, Stripe's session `invoice`), as the payment intent is not known yet. `createPaymentFromWebhook()` looks for an existing row by `provider_payment_id` (so a failed invoice that later succeeds updates the same record), then by the event's `providerInvoiceId`, and replaces checkout's stand-in with the intent. A gateway that names no invoice gets a second row for the first payment. An invoice whose subscription does not exist locally throws, and the retry lands after `CheckoutCompleted` has created it.
 
 ## ENV Variables
 
@@ -264,7 +264,7 @@ purpose allows it by pattern, e.g.
 - `Product::description` is rich-editor HTML, also imported from the provider, rendered with `v-html` on the pricing and checkout pages. It is cast with core's `SanitizedHtml` (`Str::sanitizeHtml()` on read, stored as written), so every read is safe markup (sc-1131)
 - `CheckoutSession` uses `uuid` as the route key (not `id`) — always resolve via UUID in URLs
 - Every `provider_*_id` is namespaced by a `provider` column (the gateway driver slug). Look rows up with both, never by the provider ID alone; uniqueness is `(provider, provider_x_id)`
-- `subscriptions.last_event_at` is when the last applied provider event happened. `SubscriptionUpdated`/`Deleted` skip events older than it, so a late delivery cannot roll state back
+- `subscriptions.last_event_at` is when the last applied provider event happened. `SubscriptionUpdated`/`Deleted`, `TrialWillEnd` and `InvoicePaid`'s period sync skip events older than it, so a late delivery cannot roll state back
 - Webhook signature verification happens inside `StripeGateway::verifyAndParseWebhook()` before deduplication — a bad signature throws `InvalidWebhookSignatureException`, which `WebhookController` answers with an empty 400. Any other exception is an empty 500 so Stripe retries; do not catch and acknowledge (see *Errors*)
 - Stripe API versions from 2025-03-31 keep `current_period_start/end` on the subscription **item**, not the subscription. `StripeEventMapper::subscription()` checks both; nothing else reads periods from Stripe
 - Webhook tests build deliveries with `Tests\Support\StripeWebhook::make()`, which runs Stripe-shaped fixtures through the real mapper — mapper + service integration, not Stripe end to end. It defaults a completed checkout to `payment_status: paid`, as Stripe always sends one

@@ -90,6 +90,16 @@ class StripeEventMapperTest extends TestCase
         $this->assertSame(500, $oneOff->amount);
     }
 
+    /** The first invoice ties checkout's payment to the invoice's own events. */
+    public function test_a_subscription_checkout_and_its_invoice_name_the_same_invoice(): void
+    {
+        $checkout = StripeEventMapper::checkoutSession(['id' => 'cs_1', 'subscription' => 'sub_1', 'invoice' => 'in_1', 'currency' => 'eur']);
+        $paid = StripeEventMapper::map(WebhookEventType::PaymentSucceeded, ['id' => 'in_1', 'payment_intent' => 'pi_1', 'currency' => 'eur']);
+
+        $this->assertSame('in_1', $checkout->providerInvoiceId);
+        $this->assertSame('in_1', $paid->providerInvoiceId);
+    }
+
     /** @return array<string, array{string, ?SubscriptionStatus}> */
     public static function statuses(): array
     {

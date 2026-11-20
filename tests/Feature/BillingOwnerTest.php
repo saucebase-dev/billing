@@ -80,7 +80,7 @@ class BillingOwnerTest extends TestCase
     }
 
     /** Resolves on every call, from the database: a removed member is out on their next request. */
-    private function billWorkspaces(): void
+    private function billTenants(): void
     {
         app(BillingOwners::class)->resolveUsing(function (User $user): ?TestWorkspace {
             $workspace = TestWorkspace::find($this->workspace->id);
@@ -161,7 +161,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_a_managers_checkout_bills_the_workspace_with_the_buyers_details(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $price = Price::factory()->create();
 
         $this->actingAs($this->manager)->post(route('billing.checkout.create'), ['price_id' => $price->id])
@@ -174,7 +174,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_members_get_the_workspaces_plan(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $this->subscribeWorkspace();
 
         $owner = app(BillingOwners::class)->for($this->member);
@@ -190,7 +190,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_a_member_who_cannot_manage_billing_changes_nothing(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $this->subscribeWorkspace();
         $session = $this->pendingSession();
 
@@ -209,7 +209,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_the_billing_panel_shows_for_a_manager(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $this->subscribeWorkspace();
 
         $this->actingAs($this->manager);
@@ -220,7 +220,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_a_removed_member_loses_the_plan_on_their_next_request(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $this->subscribeWorkspace();
         $this->assertTrue(app(BillingOwners::class)->for($this->member)?->canUseFeature('exports') ?? false);
 
@@ -244,7 +244,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_a_guest_still_starts_a_checkout_and_is_sent_to_register(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $price = Price::factory()->create();
 
         $response = $this->post(route('billing.checkout.create'), ['price_id' => $price->id]);
@@ -258,14 +258,14 @@ class BillingOwnerTest extends TestCase
     {
         $other = TestWorkspace::create(['name' => 'Other', 'billing_email' => 'b@other.test', 'members' => [(string) $this->manager->id => 'manager']]);
         $session = $this->pendingSession($other->billingCustomer()->create(['provider' => 'stripe'])->id);
-        $this->billWorkspaces();
+        $this->billTenants();
 
         $this->actingAs($this->manager)->post(route('billing.checkout.retry', $session))->assertForbidden();
     }
 
     public function test_the_return_fulfils_only_the_managed_owners_checkout(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $service = $this->mock(WebhookHandler::class);
         $service->shouldNotReceive('fulfillCheckoutIfNeeded');
 
@@ -278,7 +278,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_the_owner_sees_the_customer_it_just_got(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $workspace = app(BillingOwners::class)->managedBy($this->manager);
         $this->assertNull($workspace->billingAccount());
 
@@ -289,7 +289,7 @@ class BillingOwnerTest extends TestCase
 
     public function test_a_second_managers_checkout_keeps_the_billing_contact(): void
     {
-        $this->billWorkspaces();
+        $this->billTenants();
         $customer = $this->workspace->billingCustomer()->create(['provider' => 'stripe', 'provider_customer_id' => 'cus_ws', 'name' => 'Acme Ltd', 'email' => 'billing@acme.test']);
         $second = $this->createUser();
         $this->workspace->update(['members' => [...$this->workspace->members, (string) $second->id => 'manager']]);

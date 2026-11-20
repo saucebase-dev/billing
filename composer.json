@@ -10,7 +10,7 @@
     }
   ],
   "require": {
-    "saucebase/core": "^3.0",
+    "saucebase/core": "^3.1",
     "stripe/stripe-php": "^22.0"
   },
   "license": "MIT",
@@ -29,7 +29,7 @@
       ]
     },
     "branch-alias": {
-      "dev-dev": "3.5.x-dev"
+      "dev-dev": "3.x-dev"
     }
   },
   "autoload": {

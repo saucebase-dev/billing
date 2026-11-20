@@ -59,7 +59,10 @@ class EditProduct extends EditRecord
      */
     protected function beforeSave(): void
     {
-        $kept = collect($this->data['prices'] ?? [])->keys()->map(fn ($key) => (int) str_replace('record-', '', (string) $key));
+        // Saved rows are keyed `record-<id>`; a new row's UUID key may start with digits too.
+        $kept = collect($this->data['prices'] ?? [])->keys()
+            ->map(fn ($key) => preg_match('/^record-(\d+)$/', (string) $key, $match) ? (int) $match[1] : null)
+            ->filter();
 
         $removed = $this->getRecord()->prices()
             ->whereNotNull('provider_price_id')

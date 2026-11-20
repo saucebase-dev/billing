@@ -164,15 +164,20 @@ class WebhookHandler
      * cancelled subscription, so an older event or one arriving after
      * cancellation describes a state the subscription has moved past.
      *
+     * `$periodForwardOnly`: for an invoice, which does not stamp `last_event_at`, so two
+     * invoices newer than the last subscription event both pass that check. One whose
+     * period ends before the stored one is a late delivery and is skipped too.
+     *
      * @param  array<string, mixed>  $updates
      * @return Subscription|null The updated row, or null when the event was skipped.
      */
-    private function applyIfCurrent(Subscription $subscription, WebhookData $webhook, array $updates, ?SubscriptionStatus $status = null): ?Subscription
+    private function applyIfCurrent(Subscription $subscription, WebhookData $webhook, array $updates, ?SubscriptionStatus $status = null, bool $periodForwardOnly = false): ?Subscription
     {
-        return DB::transaction(function () use ($subscription, $webhook, $updates, $status) {
+        return DB::transaction(function () use ($subscription, $webhook, $updates, $status, $periodForwardOnly) {
             $current = Subscription::whereKey($subscription->id)->lockForUpdate()->firstOrFail();
 
-            $stale = $webhook->occurredAt && $current->last_event_at && $webhook->occurredAt->lt($current->last_event_at);
+            $stale = ($webhook->occurredAt && $current->last_event_at && $webhook->occurredAt->lt($current->last_event_at))
+                || ($periodForwardOnly && $current->current_period_ends_at && $updates['current_period_ends_at']->lt($current->current_period_ends_at));
 
             if ($stale || $current->status === SubscriptionStatus::Cancelled) {
                 Log::info('Ignoring stale subscription event', ['subscription_id' => $current->id]);
@@ -342,18 +347,11 @@ class WebhookHandler
         }
 
         // The same invoice fails and later succeeds under one payment intent, and
-        // checkout completion records the first payment before its intent is known.
+        // checkout records the first payment under its invoice before the intent is known.
         $payment = Payment::where('provider', $webhook->provider)->where('provider_payment_id', $providerPaymentId)->first()
-            ?? ($subscription
-                // Recent only: a placeholder whose intent never arrived would
-                // otherwise be adopted by a later cycle's invoice, overwriting
-                // one period's payment history with the next one's.
-                ? Payment::where('subscription_id', $subscription->id)
-                    ->whereNull('provider_payment_id')
-                    ->where('created_at', '>=', now()->subMinutes(5))
-                    ->latest('id')
-                    ->first()
-                : null);
+            ?? ($attempt->providerInvoiceId === null ? null : Payment::where('provider', $webhook->provider)
+                ->where('provider_payment_id', $attempt->providerInvoiceId)
+                ->first());
 
         // A failure delivered after the success it preceded must not undo it.
         if ($payment?->status === PaymentStatus::Succeeded && $status === PaymentStatus::Failed) {
@@ -610,11 +608,12 @@ class WebhookHandler
             ],
         );
 
+        // Like every subscription write: a late invoice for an earlier period must not roll it back.
         if ($subscription && $paid->periodStartsAt && $paid->periodEndsAt) {
-            $subscription->update([
+            $this->applyIfCurrent($subscription, $webhook, [
                 'current_period_starts_at' => $paid->periodStartsAt,
                 'current_period_ends_at' => $paid->periodEndsAt,
-            ]);
+            ], periodForwardOnly: true);
         }
 
         event(new InvoicePaid($invoice));

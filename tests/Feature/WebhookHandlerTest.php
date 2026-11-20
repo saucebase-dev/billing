@@ -27,6 +27,7 @@ use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Events\SubscriptionUpdated;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\PaymentMethod;
 use Modules\Billing\Models\Price;
@@ -624,6 +625,7 @@ class WebhookHandlerTest extends TestCase
             payload: [
                 'id' => 'cs_test_merge',
                 'subscription' => 'sub_test_merge',
+                'invoice' => 'in_test_merge',
                 'currency' => 'eur',
                 'amount_total' => 2900,
             ],
@@ -654,11 +656,12 @@ class WebhookHandlerTest extends TestCase
         $this->assertNotNull($subscription);
         $this->assertDatabaseCount('payments', 1);
 
-        // Payment created by checkout has no provider_payment_id
+        // Checkout knows the invoice, not yet its payment intent.
         $payment = Payment::where('subscription_id', $subscription->id)->first();
-        $this->assertNull($payment->provider_payment_id);
+        $this->assertSame('in_test_merge', $payment->provider_payment_id);
 
-        // Process invoice webhook
+        // A retry long after checkout still finds checkout's payment.
+        $this->travel(2)->hours();
         $this->billingService->handle('stripe', request());
 
         // Still only 1 payment — not duplicated
@@ -670,6 +673,29 @@ class WebhookHandlerTest extends TestCase
 
         // PaymentSucceeded dispatched only once (from checkout, not from invoice merge)
         Event::assertDispatchedTimes(PaymentSucceeded::class, 1);
+    }
+
+    /** Another invoice of the subscription is its own payment, however soon it arrives. */
+    public function test_another_invoice_does_not_take_over_the_checkout_payment(): void
+    {
+        $session = CheckoutSession::factory()->create(['provider_session_id' => 'cs_test_other']);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            StripeWebhook::make(type: WebhookEventType::CheckoutCompleted, provider: 'stripe', providerEventId: 'evt_other_checkout', payload: [
+                'id' => 'cs_test_other', 'subscription' => 'sub_test_other', 'invoice' => 'in_first', 'currency' => 'eur', 'amount_total' => 2900,
+            ]),
+            StripeWebhook::make(type: WebhookEventType::PaymentSucceeded, provider: 'stripe', providerEventId: 'evt_other_invoice', payload: [
+                'id' => 'in_second', 'customer' => $session->customer->provider_customer_id, 'subscription' => 'sub_test_other',
+                'payment_intent' => 'pi_second', 'currency' => 'eur', 'amount_paid' => 500,
+            ]),
+        );
+
+        $this->billingService->handle('stripe', request());
+        $this->billingService->handle('stripe', request());
+
+        $this->assertDatabaseCount('payments', 2);
+        $this->assertDatabaseHas('payments', ['provider_payment_id' => 'in_first', 'amount' => 2900]);
+        $this->assertDatabaseHas('payments', ['provider_payment_id' => 'pi_second', 'amount' => 500]);
     }
 
     public function test_webhook_subscription_updated_updates_status(): void
@@ -1119,6 +1145,82 @@ class WebhookHandlerTest extends TestCase
         $this->assertEquals($periodEnd, $subscription->current_period_ends_at->getTimestamp());
 
         Event::assertDispatched(InvoicePaid::class);
+    }
+
+    /**
+     * A late `invoice.paid` for last month must not roll the period back. Like every
+     * subscription write, it applies only while it is the newest thing known.
+     */
+    public function test_a_late_invoice_paid_does_not_move_the_period_back(): void
+    {
+        Event::fake([InvoicePaid::class]);
+        Customer::factory()->create(['provider_customer_id' => 'cus_late_inv']);
+        $subscription = Subscription::factory()->create([
+            'provider_subscription_id' => 'sub_late_inv',
+            'customer_id' => Customer::where('provider_customer_id', 'cus_late_inv')->value('id'),
+            'current_period_starts_at' => '2027-02-01 00:00:00',
+            'current_period_ends_at' => '2027-03-01 00:00:00',
+            'last_event_at' => '2027-02-01 00:00:05',
+        ]);
+
+        $this->gateway->method('verifyAndParseWebhook')->willReturn(StripeWebhook::make(
+            type: WebhookEventType::InvoicePaid,
+            provider: 'stripe',
+            providerEventId: 'evt_late_inv',
+            payload: [
+                'id' => 'in_late_inv', 'customer' => 'cus_late_inv', 'subscription' => 'sub_late_inv',
+                'number' => 'INV-JAN', 'currency' => 'usd', 'subtotal' => 2900, 'tax' => 0, 'total' => 2900,
+                'lines' => ['data' => [['period' => ['start' => strtotime('2027-01-01'), 'end' => strtotime('2027-02-01')]]]],
+            ],
+            occurredAt: CarbonImmutable::parse('2027-01-01 00:00:10'),
+        ));
+
+        $this->billingService->handle('stripe', request());
+
+        $this->assertSame('2027-02-01', $subscription->fresh()->current_period_starts_at->toDateString());
+        // The invoice itself is still recorded: it was paid.
+        Event::assertDispatched(InvoicePaid::class);
+    }
+
+    /**
+     * An invoice does not stamp `last_event_at`, so two invoices both newer than the last
+     * subscription event pass that check. A delayed January invoice arriving after
+     * February's must still not move the period back.
+     */
+    public function test_a_delayed_invoice_after_a_newer_one_does_not_move_the_period_back(): void
+    {
+        Event::fake([InvoicePaid::class]);
+        $customer = Customer::factory()->create(['provider_customer_id' => 'cus_delayed_inv']);
+        $subscription = Subscription::factory()->create([
+            'provider_subscription_id' => 'sub_delayed_inv',
+            'customer_id' => $customer->id,
+            'current_period_starts_at' => '2027-01-01 00:00:00',
+            'current_period_ends_at' => '2027-02-01 00:00:00',
+            'last_event_at' => '2026-12-01 00:00:00',
+        ]);
+        $invoice = fn (string $id, string $start, string $end, string $at) => StripeWebhook::make(
+            type: WebhookEventType::InvoicePaid,
+            provider: 'stripe',
+            providerEventId: "evt_{$id}",
+            payload: [
+                'id' => $id, 'customer' => 'cus_delayed_inv', 'subscription' => 'sub_delayed_inv',
+                'number' => $id, 'currency' => 'usd', 'subtotal' => 2900, 'tax' => 0, 'total' => 2900,
+                'lines' => ['data' => [['period' => ['start' => strtotime($start), 'end' => strtotime($end)]]]],
+            ],
+            occurredAt: CarbonImmutable::parse($at),
+        );
+        $this->gateway->method('verifyAndParseWebhook')->willReturnOnConsecutiveCalls(
+            $invoice('in_feb', '2027-02-01', '2027-03-01', '2027-02-01 00:00:10'),
+            $invoice('in_jan', '2027-01-01', '2027-02-01', '2027-01-01 00:00:10'),
+        );
+
+        $this->billingService->handle('stripe', request());
+        $this->billingService->handle('stripe', request());
+
+        $this->assertSame('2027-02-01', $subscription->fresh()->current_period_starts_at->toDateString());
+        $this->assertSame('2027-03-01', $subscription->fresh()->current_period_ends_at->toDateString());
+        // The late invoice is still recorded: it was paid.
+        $this->assertTrue(Invoice::where('provider_invoice_id', 'in_jan')->exists());
     }
 
     public function test_webhook_invoice_paid_resolves_subscription_from_parent_field(): void

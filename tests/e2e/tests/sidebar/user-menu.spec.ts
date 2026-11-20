@@ -16,16 +16,23 @@ test.describe.parallel('Sidebar user menu', () => {
         await expect(page.getByTestId('user-menu-plan')).toHaveText('Pro');
     });
 
-    test('falls back to the email when there is no plan to name', async ({
+    // A user with nothing bought is on the app's Free plan, if it has one (a template may
+    // ship one); with none, there is no plan to name and the menu falls back to the email.
+    test('names the Free plan, or the email when there is none', async ({
         page,
+        laravel,
         loginAs,
         credentials,
     }) => {
+        const [free] = await laravel.select(
+            "SELECT name FROM products WHERE kind = 'free' AND deleted_at IS NULL",
+        );
+
         await loginAs(credentials.user);
         await page.goto('/dashboard');
 
         await expect(page.getByTestId('user-menu-plan')).toHaveText(
-            credentials.user.email,
+            (free?.name as string | undefined) ?? credentials.user.email,
         );
     });
 });

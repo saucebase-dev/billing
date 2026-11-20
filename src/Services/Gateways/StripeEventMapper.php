@@ -77,6 +77,7 @@ class StripeEventMapper
             paymentMethodReference: $subscription ?? $paymentIntent,
             currency: self::currency($session),
             amount: (int) ($session['amount_total'] ?? 0),
+            providerInvoiceId: self::string($session, 'invoice'),
         );
     }
 
@@ -130,6 +131,7 @@ class StripeEventMapper
             paymentMethodReference: self::string($invoice, 'default_payment_method'),
             currency: self::currency($invoice),
             amount: (int) ($invoice[$amountKey] ?? 0),
+            providerInvoiceId: (string) $invoice['id'],
         );
     }
 

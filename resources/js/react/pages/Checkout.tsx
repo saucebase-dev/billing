@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Field, FieldLabel } from '@/components/ui/field';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useForm, usePage } from '@inertiajs/react';
 import type { CheckoutSession } from '@modules/billing/resources/js/types';
@@ -29,7 +29,8 @@ export default function Checkout({
     const price = session.price;
     const product = price.product;
 
-    const { data, setData, post, processing } = useForm({
+    // Errors under their fields, with the ids and test ids Vue's InputField gives them.
+    const { data, setData, post, processing, errors } = useForm({
         email: user?.email ?? '',
         coupon: '',
     });
@@ -130,6 +131,10 @@ export default function Checkout({
                             id="coupon"
                             name="coupon"
                             data-testid="checkout-coupon"
+                            aria-invalid={errors.coupon ? true : undefined}
+                            aria-describedby={
+                                errors.coupon ? 'coupon-error' : undefined
+                            }
                             type="text"
                             placeholder={t('Enter your code')}
                             value={data.coupon}
@@ -137,6 +142,12 @@ export default function Checkout({
                                 setData('coupon', event.target.value)
                             }
                         />
+                        <FieldError
+                            id="coupon-error"
+                            data-testid="checkout-coupon-error"
+                        >
+                            {errors.coupon}
+                        </FieldError>
                     </Field>
                 )}
             </div>
@@ -214,6 +225,10 @@ export default function Checkout({
                                 id="email"
                                 name="email"
                                 data-testid="checkout-email"
+                                aria-invalid={errors.email ? true : undefined}
+                                aria-describedby={
+                                    errors.email ? 'email-error' : undefined
+                                }
                                 type="email"
                                 placeholder={t('Enter your email')}
                                 autoComplete="email"
@@ -223,6 +238,12 @@ export default function Checkout({
                                     setData('email', event.target.value)
                                 }
                             />
+                            <FieldError
+                                id="email-error"
+                                data-testid="checkout-email-error"
+                            >
+                                {errors.email}
+                            </FieldError>
                         </Field>
 
                         <p className="text-foreground/50 text-xs">
