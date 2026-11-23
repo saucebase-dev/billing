@@ -38,6 +38,7 @@ use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\WebhookHandler;
+use Modules\Billing\Settings\BillingSettings;
 use Modules\Billing\Tests\Support\Traits\BillsTheUser;
 use Saucebase\Core\Settings\SettingsSection;
 use Spatie\LaravelData\Optional;
@@ -232,6 +233,17 @@ class NeutralGatewayTest extends TestCase
             ->assertRedirect(route('home', ['checkout' => 'success', 'settings' => 'billing']).'#settings/billing');
 
         $this->assertSame(CheckoutSessionStatus::Completed, $session->fresh()->status);
+    }
+
+    /** An app that sells something to install sends the buyer to it, not to their invoices. */
+    public function test_the_returning_buyer_lands_on_the_section_the_merchant_chose(): void
+    {
+        app(BillingSettings::class)->fill(['after_checkout_section' => 'modules'])->save();
+        $session = $this->openCheckout('fcs_1');
+        $this->gateway->checkouts['fcs_1'] = $this->completed('fcs_1');
+
+        $this->actingAs($this->user)->get(route('settings.billing', ['checkout_session' => $session->uuid]))
+            ->assertRedirect(route('home', ['checkout' => 'success', 'settings' => 'modules']).'#settings/modules');
     }
 
     /** An unguessable ID is not permission: only the buyer's own return fulfils. */

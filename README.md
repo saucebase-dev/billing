@@ -115,6 +115,10 @@ The page reads stored data and never calls Stripe. Each completed checkout count
 
 Stripe has the final word. If it has used up or expired the code before the page caught up, checkout opens at the regular price and says so above the pay button.
 
+## After a purchase
+
+A buyer coming back from the payment page lands on the Billing section of their settings, with a confirmation. An app that sells something to install can send them there instead: in the admin panel, under **Settings → Billing → Checkout**, choose the section in **After a purchase, open** (Packages, for the Packages module). An install or a template sets it with `--set=billing.after_checkout_section=modules`. The confirmation shows on whichever section opens.
+
 ## Show plans on the homepage (optional)
 
 The plans live at `/pricing`. To also list them on the homepage, use core's `home::content.after` slot. Paths below are relative to the module's `resources/js/`. A flat install keeps one stack there; a checkout with both keeps them in `vue/` and `react/`, so use the folder of the stack you run.

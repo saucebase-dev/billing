@@ -9,6 +9,7 @@ use Illuminate\Support\Str;
 use Modules\Billing\Actions\FulfillCheckout;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Services\BillingOwners;
+use Modules\Billing\Settings\BillingSettings;
 use Saucebase\Core\Settings\SettingsSection;
 
 class SettingsBillingController
@@ -16,14 +17,15 @@ class SettingsBillingController
     public function __construct(private BillingOwners $owners) {}
 
     /**
-     * Land the visitor on the billing section of the settings modal.
+     * Land the visitor on the billing section of the settings modal, or after a paid
+     * checkout on the section the merchant chose (`after_checkout_section`).
      *
      * The provider returns here with our `checkout_session` after checkout, so
      * the fulfilment still has to run server-side before the panel is shown.
      * The section itself lives behind the `#settings/billing` fragment, which
      * never reaches the server.
      */
-    public function show(Request $request, FulfillCheckout $fulfillCheckout): RedirectResponse
+    public function show(Request $request, FulfillCheckout $fulfillCheckout, BillingSettings $settings): RedirectResponse
     {
         $session = $this->ownCheckout($request->query('checkout_session'), $request->user());
         $paid = $session && $fulfillCheckout->handle($session);
@@ -31,9 +33,11 @@ class SettingsBillingController
         // A query parameter rather than a flash message: the panel is addressed by
         // a URL fragment the server never sees, so it is reached by a fresh visit
         // that would have dropped the flash. The panel clears it after toasting.
+        $section = $settings->after_checkout_section;
+
         return redirect()->to(
             $paid
-                ? route('home', ['checkout' => 'success', 'settings' => 'billing']).'#settings/billing'
+                ? route('home', ['checkout' => 'success', 'settings' => $section]).'#settings/'.$section
                 : SettingsSection::url('billing'),
         );
     }

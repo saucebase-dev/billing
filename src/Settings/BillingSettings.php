@@ -2,6 +2,7 @@
 
 namespace Modules\Billing\Settings;
 
+use Saucebase\Core\Settings\InstallSetting;
 use Spatie\LaravelSettings\Settings;
 
 class BillingSettings extends Settings
@@ -17,6 +18,13 @@ class BillingSettings extends Settings
      * module's own checkout page first.
      */
     public bool $redirect_to_gateway;
+
+    /**
+     * Slug of the settings section a buyer lands on after paying. Their invoices by
+     * default; an app selling something to install sends them to it (`modules`, for Packages).
+     */
+    #[InstallSetting('Which settings section opens after a purchase?', rules: ['alpha_dash'], hint: 'billing shows the invoices; modules the packages to install.')]
+    public string $after_checkout_section;
 
     /** Minutes of inactivity before a pending checkout is marked abandoned. */
     public int $checkout_abandon_after_minutes;

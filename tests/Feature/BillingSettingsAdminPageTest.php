@@ -45,6 +45,26 @@ class BillingSettingsAdminPageTest extends TestCase
         $this->assertSame(45, $settings->checkout_abandon_after_minutes);
     }
 
+    /** Billing by default; offered by name from the settings sections the app has. */
+    public function test_an_admin_chooses_the_section_a_buyer_lands_on_after_paying(): void
+    {
+        $this->actingAsAdmin();
+        $this->assertSame('billing', (new BillingSettings)->after_checkout_section);
+
+        Livewire::test(BillingSettingsPage::class)
+            ->assertFormFieldExists('after_checkout_section')
+            ->fillForm(['after_checkout_section' => 'profile'])
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        $this->assertSame('profile', (new BillingSettings)->after_checkout_section);
+
+        Livewire::test(BillingSettingsPage::class)
+            ->fillForm(['after_checkout_section' => 'no-such-section'])
+            ->call('save')
+            ->assertHasFormErrors(['after_checkout_section']);
+    }
+
     public function test_an_admin_sets_the_grace_period_and_the_trial_rule(): void
     {
         $this->actingAsAdmin();

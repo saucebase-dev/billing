@@ -8,9 +8,8 @@ import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { formatDate } from '@saucebase/core/lib/dates';
 import { router } from '@inertiajs/vue3';
 import { trans } from 'laravel-vue-i18n';
-import { toast } from 'vue-sonner';
 import { CreditCard, Loader2 } from '@lucide/vue';
-import { computed, onMounted, ref } from 'vue';
+import { computed, ref } from 'vue';
 import PlanFeatures from '../components/PlanFeatures.vue';
 import { getIntervalLabel } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
@@ -30,34 +29,6 @@ const props = defineProps<{
     invoices: Invoice[];
     billingPortalUrl: string;
 }>();
-
-/**
- * Congratulate whoever just came back from the payment page.
- *
- * The parameter is dropped from the URL straight away, so a refresh or a later
- * visit to this panel does not celebrate the same purchase again.
- */
-onMounted(() => {
-    const url = new URL(window.location.href);
-
-    if (url.searchParams.get('checkout') !== 'success') {
-        return;
-    }
-
-    toast.success(trans('You are all set!'), {
-        description: trans('Your subscription is active. Welcome aboard.'),
-    });
-
-    // Through the router, not history.replaceState: Inertia keeps its own copy of
-    // the URL and re-renders from it, so switching panel would toast again.
-    url.searchParams.delete('checkout');
-    url.searchParams.delete('settings');
-    router.replace({
-        url: url.toString(),
-        preserveState: true,
-        preserveScroll: true,
-    });
-});
 
 const isCancelling = ref(false);
 const isResuming = ref(false);
