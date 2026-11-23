@@ -117,6 +117,16 @@ class PromotionCheckoutTest extends TestCase
         $this->assertNull($this->sent[0]->coupon);
     }
 
+    /** Its code is unknown to the provider, or names somebody else's offer there. */
+    public function test_a_promotion_not_yet_at_the_provider_is_not_sent(): void
+    {
+        $this->promote(['provider_promotion_code_id' => null]);
+
+        $this->checkout();
+
+        $this->assertNull($this->sent[0]->coupon);
+    }
+
     /** The provider takes one code; one the buyer typed is the one they meant. */
     public function test_a_typed_code_wins(): void
     {

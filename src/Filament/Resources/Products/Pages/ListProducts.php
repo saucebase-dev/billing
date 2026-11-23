@@ -11,6 +11,7 @@ use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Filament\Resources\Products\ProductResource;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\CatalogSync;
 use Modules\Billing\Services\PaymentGatewayManager;
@@ -85,11 +86,13 @@ class ListProducts extends ListRecords
 
                     Notification::make()
                         ->title(__(':products products, :prices prices created and :features feature lists sent to :provider', ['products' => $report->products, 'prices' => $report->prices, 'features' => $report->features, 'provider' => ucfirst($provider)]))
+                        ->body($report->promotionWarnings === [] ? null : implode(' ', $report->promotionWarnings))
                         ->success()
                         ->send();
                 })
                 ->hidden(fn () => ! Product::whereNull('provider_product_id')->exists()
-                    && ! Price::whereNull('provider_price_id')->exists())
+                    && ! Price::whereNull('provider_price_id')->exists()
+                    && ! Promotion::whereNull('provider_promotion_code_id')->exists())
                 ->extraAttributes(['data-testid' => 'admin-products-push']),
             CreateAction::make(),
         ];

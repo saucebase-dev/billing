@@ -127,4 +127,15 @@ class PromotionAdminTest extends TestCase
             ->assertSee('LAUNCH')
             ->assertSee('$30.00');
     }
+
+    /** An amount off in euros takes nothing off a dollar price; the card would show the regular one. */
+    public function test_attaching_a_price_it_takes_nothing_off_warns(): void
+    {
+        $promotion = Promotion::factory()->create(['code' => 'FIRST50', 'amount_off' => 3000, 'currency' => 'EUR']);
+        $price = Price::factory()->create(['currency' => 'USD']);
+
+        Livewire::test(ManagePromotions::class)
+            ->callAction(TestAction::make('edit')->table($promotion), data: ['price_ids' => [$price->id]])
+            ->assertNotified(__('FIRST50 takes nothing off: :prices', ['prices' => $price->product->name.' (USD)']));
+    }
 }

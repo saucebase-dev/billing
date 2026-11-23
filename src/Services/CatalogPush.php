@@ -95,6 +95,15 @@ class CatalogPush
         foreach ($unpushed as $promotion) {
             $existing = $gateway->findPromotion($promotion->code);
 
+            // Codes are shared by everything on the account: one that makes
+            // another offer is not this promotion, and adopting it would show
+            // terms nobody wrote here. The code cannot be created twice either.
+            if ($existing && ! $promotion->sameTermsAs($existing)) {
+                $report->promotionWarnings[] = __(':code already exists at the provider with other terms; rename it here or change it there.', ['code' => $promotion->code]);
+
+                continue;
+            }
+
             if ($existing) {
                 $promotion->fillFromProvider($existing);
             }
@@ -104,6 +113,10 @@ class CatalogPush
                 'provider_promotion_code_id' => $existing->providerPromotionCodeId ?? $gateway->createPromotion($promotion),
             ])->save();
             $report->promotions++;
+
+            if ($warning = $promotion->untouchedPricesWarning()) {
+                $report->promotionWarnings[] = $warning;
+            }
         }
     }
 

@@ -86,6 +86,14 @@ class PromotionPricingTest extends TestCase
         $this->pricing()->where('products.0.prices.0.promotion', null);
     }
 
+    /** Not at the provider yet (or refused there as a conflict): its code could mean another offer. */
+    public function test_a_promotion_not_yet_at_the_provider_is_not_shown(): void
+    {
+        $this->promote(['provider_promotion_code_id' => null]);
+
+        $this->pricing()->where('products.0.prices.0.promotion', null);
+    }
+
     public function test_a_promotion_on_another_price_does_not_touch_this_one(): void
     {
         $this->promote();
