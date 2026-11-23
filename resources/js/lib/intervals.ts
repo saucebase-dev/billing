@@ -42,3 +42,32 @@ export function pickInterval(available: string[], current: string): string {
         ? current
         : available[0];
 }
+
+// Sort order: one_time, day, week, month, year
+const ORDER = ['one_time', 'day', 'week', 'month', 'year'];
+
+/**
+ * The intervals the toggle offers. None unless some plan is priced in more than one:
+ * the toggle switches the same plans between, say, monthly and yearly. With one price
+ * per plan it would only hide plans from each other, so they all show together.
+ */
+export function toggleIntervals(
+    products: { prices: { interval: string | null }[] }[],
+): string[] {
+    const perPlan = products.map(
+        (product) =>
+            new Set(
+                product.prices.map((price) =>
+                    normalizeInterval(price.interval),
+                ),
+            ),
+    );
+
+    if (!perPlan.some((intervals) => intervals.size > 1)) {
+        return [];
+    }
+
+    return Array.from(
+        new Set(perPlan.flatMap((intervals) => [...intervals])),
+    ).sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+}

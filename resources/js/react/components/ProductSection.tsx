@@ -9,14 +9,11 @@ import type {
 import {
     getIntervalLabel,
     matchesInterval,
-    normalizeInterval,
     pickInterval,
+    toggleIntervals,
 } from '../../lib/intervals';
 
 import ProductCard from './ProductCard';
-
-// Sort order: one_time, day, week, month, year
-const ORDER = ['one_time', 'day', 'week', 'month', 'year'];
 
 function getToggleLabel(interval: string): string {
     if (interval === 'one_time') return 'One-time';
@@ -47,19 +44,10 @@ export default function ProductSection({
             : (productActions[product.id] ?? 'unavailable');
     }
 
-    const availableIntervals = useMemo(() => {
-        const intervals = new Set<string>();
-
-        for (const product of products ?? []) {
-            for (const price of product.prices) {
-                intervals.add(normalizeInterval(price.interval));
-            }
-        }
-
-        return Array.from(intervals).sort(
-            (a, b) => ORDER.indexOf(a) - ORDER.indexOf(b),
-        );
-    }, [products]);
+    const availableIntervals = useMemo(
+        () => toggleIntervals(products ?? []),
+        [products],
+    );
 
     const [chosenInterval, setChosenInterval] = useState('month');
     // Derived while rendering, so the server's first paint selects an offered interval;
@@ -71,8 +59,11 @@ export default function ProductSection({
             (products ?? [])
                 .map((product) => ({
                     ...product,
-                    prices: product.prices.filter((price) =>
-                        matchesInterval(price.interval, billingInterval),
+                    // No toggle: one price per plan, shown as it is.
+                    prices: product.prices.filter(
+                        (price) =>
+                            availableIntervals.length === 0 ||
+                            matchesInterval(price.interval, billingInterval),
                     ),
                 }))
                 .filter(
@@ -81,7 +72,7 @@ export default function ProductSection({
                         (productActions[product.id] ?? 'unavailable') !==
                             'unavailable',
                 ),
-        [products, productActions, billingInterval],
+        [products, productActions, billingInterval, availableIntervals],
     );
 
     const columns =

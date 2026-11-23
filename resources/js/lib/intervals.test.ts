@@ -5,6 +5,7 @@ import {
     matchesInterval,
     normalizeInterval,
     pickInterval,
+    toggleIntervals,
 } from './intervals';
 
 describe('intervals', () => {
@@ -51,5 +52,24 @@ describe('pickInterval', () => {
 
     it('keeps the current one when nothing is offered', () => {
         expect(pickInterval([], 'month')).toBe('month');
+    });
+    it('offers a toggle only when a plan is priced in more than one interval', () => {
+        const plan = (...intervals: (string | null)[]) => ({
+            prices: intervals.map((interval) => ({ interval })),
+        });
+
+        // Monthly or yearly for the same plans, plus a lifetime: the toggle switches them.
+        expect(toggleIntervals([plan('year', 'monthly'), plan(null)])).toEqual([
+            'one_time',
+            'month',
+            'year',
+        ]);
+
+        // One price each (a subscription, or the same thing paid once): all fit on one screen.
+        expect(toggleIntervals([plan('year'), plan(null)])).toEqual([]);
+        expect(toggleIntervals([plan('month'), plan('month'), plan()])).toEqual(
+            [],
+        );
+        expect(toggleIntervals([])).toEqual([]);
     });
 });
