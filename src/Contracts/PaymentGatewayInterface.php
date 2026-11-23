@@ -8,6 +8,7 @@ use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Data\PaymentMethodData;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
@@ -101,4 +102,10 @@ interface PaymentGatewayInterface
      * provider's copy exists only so its own pricing pages can show it.
      */
     public function pushProductFeatures(Product $product): void;
+
+    /** An active promotion code by the code buyers type; null when the provider has none. */
+    public function findPromotion(string $code): ?PromotionData;
+
+    /** A promotion code as the provider has it now, active or not. */
+    public function retrievePromotion(string $providerPromotionCodeId): PromotionData;
 }

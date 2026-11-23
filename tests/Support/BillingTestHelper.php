@@ -19,6 +19,7 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\WebhookHandler;
@@ -136,6 +137,29 @@ class BillingTestHelper
                 'product_id' => $starter->id,
                 'currency' => Currency::default(),
                 'amount' => 900,
+                'billing_scheme' => BillingScheme::FlatRate,
+                'interval' => 'month',
+                'interval_count' => 1,
+                'is_active' => true,
+            ],
+        );
+
+        // A launch price: $10 off the first payment, 12 of 50 used.
+        $launch = Product::firstOrCreate(
+            ['slug' => 'launch'],
+            ['sku' => 'launch', 'name' => 'Launch', 'display_order' => 8, 'is_visible' => true, 'is_active' => true],
+        );
+        $promotion = Promotion::updateOrCreate(
+            ['provider' => 'stripe', 'provider_promotion_code_id' => 'promo_e2e_launch'],
+            ['code' => 'LAUNCH', 'amount_off' => 1000, 'currency' => Currency::default()->value, 'duration' => 'once', 'max_redemptions' => 50, 'times_redeemed' => 12, 'is_active' => true],
+        );
+        Price::updateOrCreate(
+            ['provider_price_id' => 'price_e2e_launch_monthly'],
+            [
+                'product_id' => $launch->id,
+                'promotion_id' => $promotion->id,
+                'currency' => Currency::default(),
+                'amount' => 2900,
                 'billing_scheme' => BillingScheme::FlatRate,
                 'interval' => 'month',
                 'interval_count' => 1,

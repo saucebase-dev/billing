@@ -681,6 +681,30 @@ function resumeSubscription() {
                         </td>
                         <td class="text-foreground py-3">
                             {{ payment.name ?? '—' }}
+                            <span
+                                v-if="payment.discount_amount > 0"
+                                data-testid="payment-discount"
+                                class="text-muted-foreground block text-xs"
+                            >
+                                {{
+                                    payment.promotion_code
+                                        ? $t('Saved :amount with :code', {
+                                              amount: formatMoney(
+                                                  payment.discount_amount,
+                                                  payment.currency,
+                                                  language,
+                                              ),
+                                              code: payment.promotion_code,
+                                          })
+                                        : $t('Saved :amount', {
+                                              amount: formatMoney(
+                                                  payment.discount_amount,
+                                                  payment.currency,
+                                                  language,
+                                              ),
+                                          })
+                                }}
+                            </span>
                         </td>
                         <td
                             class="text-foreground py-3 text-right tabular-nums"

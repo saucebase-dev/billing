@@ -14,6 +14,7 @@ use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Data\PaymentMethodData;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\InvoicePaymentData;
 use Modules\Billing\Data\Webhook\RefundData;
@@ -432,4 +433,14 @@ class FakeGateway implements PaymentGatewayInterface
     }
 
     public function pushProductFeatures(Product $product): void {}
+
+    public function findPromotion(string $code): ?PromotionData
+    {
+        return null;
+    }
+
+    public function retrievePromotion(string $providerPromotionCodeId): PromotionData
+    {
+        throw new \LogicException('not offered');
+    }
 }

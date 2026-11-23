@@ -13,6 +13,7 @@ use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
@@ -118,6 +119,12 @@ class StripeGateway implements PaymentGatewayInterface
             $params['allow_promotion_codes'] = true;
         }
 
+        // The buyer expected this code, from the pricing page or their own typing,
+        // and Stripe's page would show the regular price without a word.
+        if ($data->coupon && $promotionCode === null) {
+            $params['custom_text']['submit']['message'] = __('The promotion code :code is no longer available, so this is the regular price.', ['code' => $data->coupon]);
+        }
+
         $options = $data->idempotencyKey ? ['idempotency_key' => $data->idempotencyKey] : [];
 
         $session = $this->call('create a checkout session', fn () => $this->stripe->checkout->sessions->create($params, $options));
@@ -149,20 +156,16 @@ class StripeGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Turn a code somebody typed into the promotion code ID Stripe wants.
+     * Turn a code into the promotion code ID Stripe wants, if Stripe still honours it.
      *
-     * Returns null when the code is unknown or no longer active, which is why the
-     * caller falls back to letting Stripe ask: an expired code should not cost
-     * somebody their checkout.
+     * Returns null when the code is unknown, inactive, past its date or used up,
+     * which is why the caller falls back to letting Stripe ask: an exhausted code
+     * should not cost somebody their checkout.
      */
     private function resolvePromotionCode(string $code): ?string
     {
         try {
-            $matches = $this->call('look up a promotion code', fn () => $this->stripe->promotionCodes->all([
-                'code' => $code,
-                'active' => true,
-                'limit' => 1,
-            ]));
+            $promotion = $this->findPromotion($code);
         } catch (GatewayOperationFailedException $e) {
             // Reported, then the documented fallback: Stripe's page asks for the code.
             report($e);
@@ -170,7 +173,32 @@ class StripeGateway implements PaymentGatewayInterface
             return null;
         }
 
-        return $matches->data[0]->id ?? null;
+        $holds = $promotion?->active
+            && ($promotion->expiresAt === null || $promotion->expiresAt->isFuture())
+            && ($promotion->maxRedemptions === null || $promotion->timesRedeemed < $promotion->maxRedemptions);
+
+        return $holds ? $promotion->providerPromotionCodeId : null;
+    }
+
+    public function findPromotion(string $code): ?PromotionData
+    {
+        $matches = $this->call('look up a promotion code', fn () => $this->stripe->promotionCodes->all([
+            'code' => $code,
+            'active' => true,
+            'limit' => 1,
+            'expand' => ['data.promotion.coupon'],
+        ]));
+
+        return isset($matches->data[0]) ? StripeEventMapper::promotionCode($matches->data[0]->toArray()) : null;
+    }
+
+    public function retrievePromotion(string $providerPromotionCodeId): PromotionData
+    {
+        return StripeEventMapper::promotionCode($this->call(
+            'read a promotion code',
+            fn () => $this->stripe->promotionCodes->retrieve($providerPromotionCodeId, ['expand' => ['promotion.coupon']])->toArray(),
+            $providerPromotionCodeId,
+        ));
     }
 
     public function cancelSubscription(Subscription $subscription): ?\DateTimeInterface

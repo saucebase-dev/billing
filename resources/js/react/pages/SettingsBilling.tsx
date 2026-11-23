@@ -643,6 +643,32 @@ export default function SettingsBilling({
                                     </td>
                                     <td className="text-foreground py-3">
                                         {payment.name ?? '—'}
+                                        {payment.discount_amount > 0 && (
+                                            <span
+                                                data-testid="payment-discount"
+                                                className="text-muted-foreground block text-xs"
+                                            >
+                                                {payment.promotion_code
+                                                    ? t(
+                                                          'Saved :amount with :code',
+                                                          {
+                                                              amount: formatMoney(
+                                                                  payment.discount_amount,
+                                                                  payment.currency,
+                                                                  locale,
+                                                              ),
+                                                              code: payment.promotion_code,
+                                                          },
+                                                      )
+                                                    : t('Saved :amount', {
+                                                          amount: formatMoney(
+                                                              payment.discount_amount,
+                                                              payment.currency,
+                                                              locale,
+                                                          ),
+                                                      })}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="text-foreground py-3 text-right tabular-nums">
                                         {formatMoney(

@@ -23,6 +23,7 @@ A module for [Saucebase](https://github.com/saucebase-dev/saucebase), the AI-rea
 - **Plan kinds**: free, subscription, lifetime and one-off
 - **Entitlements**: each plan turns features on and sets limits your app checks
 - **Pricing page** at `/pricing`, built from your plans
+- **Promotions**: a launch or seasonal price on the pricing page, with what is left and until when, applied at checkout and ended on its own
 - **Billing settings**: current plan, invoices and saved card
 - **Catalogue sync** with Stripe, both ways
 - **Webhooks** that are safe to retry and handle events out of order
@@ -96,6 +97,19 @@ customer.updated
 Locally, forward them with `stripe listen --all-snapshot --forward-to localhost/billing/webhooks/stripe`.
 
 The rest is in the admin panel, under **Settings → Billing**: currency, checkout flow, grace period and trials.
+
+## Promotions
+
+Show a discount on the pricing page, such as "$149 for the first 50 buyers", and apply it at checkout without the buyer typing a code.
+
+1. In Stripe, create a coupon and a promotion code for it, with any cap (*Limit the number of times this code can be redeemed*), end date, *First-time order only* and product limits. Stripe enforces all of them.
+2. In the admin panel, under **Billing → Promotions**, add the code and tick the prices whose cards show it. Billing reads the discount, cap, end date and count from Stripe.
+
+A price shows one promotion. Its card strikes the regular price through, shows the promotional one, and says how long it lasts on a subscription (the coupon's duration: first payment, a number of months, or forever), how many are left and until when. Checkout sends the code. The payment records the discount and the code, in the admin and in the customer's payments.
+
+The page reads stored data and never calls Stripe. Each completed checkout counts one redemption, and `billing:sync-catalog` (daily, and the *Sync* button) sets the count back to Stripe's. Once the cap is reached or the date passes, the page shows the regular price again, with no deploy.
+
+Stripe has the final word. If it has used up or expired the code before the page caught up, checkout opens at the regular price and says so above the pay button.
 
 ## Show plans on the homepage (optional)
 

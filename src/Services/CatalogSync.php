@@ -5,8 +5,10 @@ namespace Modules\Billing\Services;
 use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CatalogSyncReport;
 use Modules\Billing\Enums\PlanKind;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 
 /**
  * Pull the provider's products and prices into the app. The provider owns what
@@ -56,7 +58,25 @@ class CatalogSync
             ->pluck('provider_price_id')
             ->all();
 
+        $this->refreshPromotions($provider);
+
         return $report;
+    }
+
+    /**
+     * Put every known promotion back in step with the provider: the webhook
+     * counts redemptions as they happen, this corrects any it missed.
+     */
+    private function refreshPromotions(string $provider): void
+    {
+        foreach (Promotion::where('provider', $provider)->get() as $promotion) {
+            try {
+                $promotion->fillFromProvider($this->manager->driver($provider)->retrievePromotion($promotion->provider_promotion_code_id))->save();
+            } catch (GatewayOperationFailedException $e) {
+                // One unreadable code (deleted at the provider) must not stop the rest.
+                report($e);
+            }
+        }
     }
 
     /** @return Product|null Null when the product was archived before this app ever saw it. */
