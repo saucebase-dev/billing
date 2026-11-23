@@ -70,7 +70,9 @@ class ShowcaseSeederTest extends TestCase
         $this->assertSame($promotion->id, $lifetime->promotion_id);
         $this->assertSame(19900, $promotion->discountedAmount($lifetime));
         $this->assertSame(50, $promotion->max_redemptions);
-        $this->assertTrue(Promotion::available()->whereKey($promotion->id)->exists());
+        // Shown once the push has made it real at the provider; tests never push.
+        $this->assertNull($promotion->provider_promotion_code_id);
+        $this->assertFalse(Promotion::available()->whereKey($promotion->id)->exists());
     }
 
     /** Pro's trial shows the feature: fewer API requests, no custom domains. */

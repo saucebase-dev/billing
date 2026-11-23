@@ -18,6 +18,10 @@ class PushCatalogCommand extends Command
 
         $this->components->info("{$report->products} products, {$report->prices} prices created and {$report->features} feature lists sent to {$manager->getDefaultDriver()}");
 
+        foreach ($report->promotionWarnings as $warning) {
+            $this->components->warn($warning);
+        }
+
         return self::SUCCESS;
     }
 }

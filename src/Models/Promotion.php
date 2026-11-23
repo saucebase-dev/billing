@@ -82,10 +82,16 @@ class Promotion extends Model
         ];
     }
 
-    /** Active at the provider, not past its date, and not used up as far as this app has counted. */
+    /**
+     * At the provider and active there, not past its date, and not used up as
+     * far as this app has counted. One not pushed yet, or refused by the push
+     * as a conflict, is never shown or sent: the provider may know its code as
+     * somebody else's offer.
+     */
     public function scopeAvailable(Builder $query): Builder
     {
-        return $query->where('is_active', true)
+        return $query->whereNotNull('provider_promotion_code_id')
+            ->where('is_active', true)
             ->where(fn (Builder $q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
             ->where(fn (Builder $q) => $q->whereNull('max_redemptions')->orWhereColumn('times_redeemed', '<', 'max_redemptions'));
     }
@@ -113,6 +119,36 @@ class Promotion extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Whether the provider's code makes the same offer as this one: discount,
+     * duration and cap. The end date may differ (a reseed moves it), and the
+     * provider's wins once adopted.
+     */
+    public function sameTermsAs(PromotionData $data): bool
+    {
+        return $this->percent_off == $data->percentOff
+            && $this->amount_off === $data->amountOff
+            && strcasecmp((string) $this->currency, (string) $data->currency) === 0
+            && $this->duration === $data->duration
+            && $this->duration_in_months === $data->durationInMonths
+            && $this->max_redemptions === $data->maxRedemptions;
+    }
+
+    /**
+     * Names the attached prices this takes nothing off (an amount off in another
+     * currency), whose cards would show the regular price. Null when none.
+     */
+    public function untouchedPricesWarning(): ?string
+    {
+        $untouched = $this->prices()->with('product')->get()
+            ->filter(fn (Price $price): bool => $this->discountedAmount($price) === null)
+            ->map(fn (Price $price): string => ($price->product->name ?? '?')." ({$price->currency->value})");
+
+        return $untouched->isEmpty()
+            ? null
+            : __(':code takes nothing off: :prices', ['code' => $this->code, 'prices' => $untouched->implode(', ')]);
     }
 
     /** The provider's terms, as the gateway read them. The local count follows the provider's. */

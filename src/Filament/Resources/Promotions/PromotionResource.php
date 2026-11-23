@@ -7,6 +7,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -105,6 +106,10 @@ class PromotionResource extends Resource
     {
         Price::where('promotion_id', $promotion->id)->whereNotIn('id', $priceIds)->update(['promotion_id' => null]);
         Price::whereIn('id', $priceIds)->update(['promotion_id' => $promotion->id]);
+
+        if ($warning = $promotion->untouchedPricesWarning()) {
+            Notification::make()->title($warning)->warning()->send();
+        }
     }
 
     public static function discountLabel(Promotion $promotion): string
