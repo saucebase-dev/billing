@@ -26,6 +26,7 @@ use Modules\Billing\Exceptions\ProviderErrorException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\SignatureVerificationException;
@@ -190,6 +191,29 @@ class StripeGateway implements PaymentGatewayInterface
         ]));
 
         return isset($matches->data[0]) ? StripeEventMapper::promotionCode($matches->data[0]->toArray()) : null;
+    }
+
+    public function createPromotion(Promotion $promotion): string
+    {
+        $products = $promotion->prices()->with('product')->get()
+            ->pluck('product.provider_product_id')->filter()->unique()->values()->all();
+
+        $coupon = $this->call('create a coupon', fn () => $this->stripe->coupons->create(array_filter([
+            'name' => $promotion->code,
+            'percent_off' => $promotion->percent_off,
+            'amount_off' => $promotion->percent_off === null ? $promotion->amount_off : null,
+            'currency' => $promotion->percent_off === null ? strtolower((string) $promotion->currency) : null,
+            'duration' => $promotion->duration,
+            'duration_in_months' => $promotion->duration === 'repeating' ? $promotion->duration_in_months : null,
+            'applies_to' => $products ? ['products' => $products] : null,
+        ], fn ($value) => $value !== null)));
+
+        return $this->call('create a promotion code', fn () => $this->stripe->promotionCodes->create(array_filter([
+            'code' => $promotion->code,
+            'promotion' => ['type' => 'coupon', 'coupon' => $coupon->id],
+            'max_redemptions' => $promotion->max_redemptions,
+            'expires_at' => $promotion->expires_at?->timestamp,
+        ], fn ($value) => $value !== null))->id);
     }
 
     public function retrievePromotion(string $providerPromotionCodeId): PromotionData

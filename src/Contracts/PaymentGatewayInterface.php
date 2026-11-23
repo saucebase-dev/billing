@@ -17,6 +17,7 @@ use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 
 interface PaymentGatewayInterface
@@ -105,6 +106,14 @@ interface PaymentGatewayInterface
 
     /** An active promotion code by the code buyers type; null when the provider has none. */
     public function findPromotion(string $code): ?PromotionData;
+
+    /**
+     * Create a promotion drafted here: its discount, limited to its prices'
+     * products, and its code with the cap and end date.
+     *
+     * @return string The promotion code's ID at the provider.
+     */
+    public function createPromotion(Promotion $promotion): string;
 
     /** A promotion code as the provider has it now, active or not. */
     public function retrievePromotion(string $providerPromotionCodeId): PromotionData;

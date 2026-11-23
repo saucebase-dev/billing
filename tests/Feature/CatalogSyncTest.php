@@ -334,4 +334,15 @@ class CatalogSyncTest extends TestCase
         Exceptions::assertReported(GatewayOperationFailedException::class);
         $this->assertSame(3, $promotion->fresh()->times_redeemed);
     }
+
+    /** Not at the provider yet: there is nothing to read back. */
+    public function test_a_local_only_promotion_is_left_alone(): void
+    {
+        $this->gateway->method('listCatalog')->willReturn([]);
+        Promotion::factory()->create(['provider_promotion_code_id' => null]);
+
+        app(CatalogSync::class)->run();
+
+        $this->expectNotToPerformAssertions();
+    }
 }

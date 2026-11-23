@@ -18,7 +18,8 @@ return new class extends Migration
             $table->id();
 
             $table->string('provider');
-            $table->string('provider_promotion_code_id');
+            // Null until pushed: a promotion drafted here (the demo's), like a price.
+            $table->string('provider_promotion_code_id')->nullable();
             $table->string('code');
 
             // One of the two, as the provider's coupon has it.

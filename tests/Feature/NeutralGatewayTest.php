@@ -34,6 +34,7 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Services\WebhookHandler;
@@ -437,6 +438,11 @@ class FakeGateway implements PaymentGatewayInterface
     public function findPromotion(string $code): ?PromotionData
     {
         return null;
+    }
+
+    public function createPromotion(Promotion $promotion): string
+    {
+        throw new \LogicException('not offered');
     }
 
     public function retrievePromotion(string $providerPromotionCodeId): PromotionData

@@ -9,4 +9,6 @@ class CatalogPushReport
     public int $prices = 0;
 
     public int $features = 0;
+
+    public int $promotions = 0;
 }

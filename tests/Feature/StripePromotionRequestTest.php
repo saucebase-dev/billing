@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Data\CheckoutData;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Services\Gateways\StripeGateway;
 use Stripe\ApiRequestor;
 use Stripe\HttpClient\ClientInterface;
@@ -194,5 +195,32 @@ class StripePromotionRequestTest extends TestCase
 
         $this->assertArrayNotHasKey('discounts', $sent);
         $this->assertStringContainsString('LAUNCH', $sent['custom_text']['submit']['message']);
+    }
+
+    public function test_a_promotion_is_created_as_a_coupon_and_its_code(): void
+    {
+        $promotion = Promotion::factory()->create([
+            'provider_promotion_code_id' => null, 'code' => 'LAUNCH', 'amount_off' => 1000, 'currency' => 'USD',
+            'duration' => 'once', 'max_redemptions' => 50, 'expires_at' => now()->addMonth(),
+        ]);
+        $price = Price::factory()->create(['promotion_id' => $promotion->id]);
+        $price->product->update(['provider_product_id' => 'prod_pro']);
+
+        $id = $this->gateway([
+            '/v1/coupons' => json_encode(['id' => 'co_new', 'object' => 'coupon']),
+            '/v1/promotion_codes' => json_encode(['id' => 'promo_new', 'object' => 'promotion_code']),
+        ])->createPromotion($promotion);
+
+        $this->assertSame('promo_new', $id);
+        [$coupon, $code] = $this->requests;
+        $this->assertSame('/v1/coupons', $coupon['path']);
+        $this->assertSame(1000, $coupon['params']['amount_off']);
+        $this->assertSame('usd', $coupon['params']['currency']);
+        $this->assertSame('once', $coupon['params']['duration']);
+        $this->assertSame(['prod_pro'], $coupon['params']['applies_to']['products']);
+        $this->assertSame('LAUNCH', $code['params']['code']);
+        $this->assertSame(['type' => 'coupon', 'coupon' => 'co_new'], $code['params']['promotion']);
+        $this->assertSame(50, $code['params']['max_redemptions']);
+        $this->assertSame($promotion->expires_at->timestamp, $code['params']['expires_at']);
     }
 }

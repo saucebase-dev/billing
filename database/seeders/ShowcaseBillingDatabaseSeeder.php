@@ -70,12 +70,14 @@ class ShowcaseBillingDatabaseSeeder extends Seeder
         $push = app(CatalogPush::class);
         $products = 0;
         $prices = 0;
+        $promotions = 0;
 
         try {
             foreach (Product::whereIn('slug', ShowcaseProductSeeder::SLUGS)->get() as $product) {
                 $report = $push->run($product);
                 $products += $report->products;
                 $prices += $report->prices;
+                $promotions += $report->promotions;
             }
         } catch (\Throwable $e) {
             $this->command->outputComponents()->warn("Billing: push failed ({$e->getMessage()}); run billing:push-catalog when the provider is reachable.");
@@ -83,6 +85,6 @@ class ShowcaseBillingDatabaseSeeder extends Seeder
             return;
         }
 
-        $this->command->outputComponents()->info("Billing: pushed {$products} products and {$prices} prices to the provider.");
+        $this->command->outputComponents()->info("Billing: pushed {$products} products, {$prices} prices and {$promotions} promotions to the provider.");
     }
 }

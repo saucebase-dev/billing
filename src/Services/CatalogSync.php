@@ -69,7 +69,7 @@ class CatalogSync
      */
     private function refreshPromotions(string $provider): void
     {
-        foreach (Promotion::where('provider', $provider)->get() as $promotion) {
+        foreach (Promotion::where('provider', $provider)->whereNotNull('provider_promotion_code_id')->get() as $promotion) {
             try {
                 $promotion->fillFromProvider($this->manager->driver($provider)->retrievePromotion($promotion->provider_promotion_code_id))->save();
             } catch (GatewayOperationFailedException $e) {

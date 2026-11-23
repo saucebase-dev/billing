@@ -19,7 +19,7 @@ use Modules\Billing\Data\PromotionData;
  *
  * @property int $id
  * @property string $provider
- * @property string $provider_promotion_code_id
+ * @property string|null $provider_promotion_code_id Null until `CatalogPush` creates it at the provider
  * @property string $code
  * @property float|null $percent_off
  * @property int|null $amount_off

@@ -105,6 +105,8 @@ Show a discount on the pricing page, such as "$149 for the first 50 buyers", and
 1. In Stripe, create a coupon and a promotion code for it, with any cap (*Limit the number of times this code can be redeemed*), end date, *First-time order only* and product limits. Stripe enforces all of them.
 2. In the admin panel, under **Billing → Promotions**, add the code and tick the prices whose cards show it. Billing reads the discount, cap, end date and count from Stripe.
 
+A promotion written in code or a seeder, with no Stripe ID yet, is created at Stripe by **Push new to Stripe** (`billing:push-catalog`), as plans are: a coupon limited to its prices' products, and the code with its cap and end date. A code Stripe already has is adopted instead.
+
 A price shows one promotion. Its card strikes the regular price through, shows the promotional one, and says how long it lasts on a subscription (the coupon's duration: first payment, a number of months, or forever), how many are left and until when. Checkout sends the code. The payment records the discount and the code, in the admin and in the customer's payments.
 
 The page reads stored data and never calls Stripe. Each completed checkout counts one redemption, and `billing:sync-catalog` (daily, and the *Sync* button) sets the count back to Stripe's. Once the cap is reached or the date passes, the page shows the regular price again, with no deploy.
@@ -187,7 +189,7 @@ Run `npm run build` afterwards.
 php artisan modules:seed --module=billing --state=showcase
 ```
 
-Adds sample plans (pushed to Stripe when your keys are set), sample customers, and a staff account (`billing@saucebase.dev`) that only sees billing in the admin. All use the `DEMO_PASSWORD` from `.env`.
+Adds sample plans and a launch promotion on Lifetime ($100 off for the first 50 buyers), pushed to Stripe when your keys are set, sample customers, and a staff account (`billing@saucebase.dev`) that only sees billing in the admin. All use the `DEMO_PASSWORD` from `.env`.
 
 ## License
 
