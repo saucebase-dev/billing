@@ -8,6 +8,8 @@ use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Modules\Billing\Enums\SubscriptionStatus;
+use Modules\Billing\Models\Customer;
+use Modules\Billing\Models\Payment;
 
 class CustomerInfolist
 {
@@ -102,6 +104,35 @@ class CustomerInfolist
                                     ->icon('heroicon-o-information-circle')
                                     ->color('gray')
                                     ->hidden(fn ($record) => $record->paymentMethods->isNotEmpty()),
+                            ])
+                            ->collapsible(),
+
+                        Section::make(__('Payments'))
+                            ->schema([
+                                RepeatableEntry::make('recent_payments')
+                                    ->hiddenLabel()
+                                    ->state(fn (Customer $record) => $record->payments()->latest('id')->limit(10)->get())
+                                    ->schema([
+                                        TextEntry::make('amount')
+                                            ->label(__('Amount'))
+                                            ->formatStateUsing(fn (int $state, Payment $record): string => $record->currency->formatAmount($state)),
+
+                                        TextEntry::make('discount_amount')
+                                            ->label(__('Discount'))
+                                            ->formatStateUsing(fn (int $state, Payment $record): string => $state > 0
+                                                ? $record->currency->formatAmount($state).($record->promotion_code ? " ({$record->promotion_code})" : '')
+                                                : '—'),
+
+                                        TextEntry::make('status')
+                                            ->label(__('Status'))
+                                            ->badge(),
+
+                                        TextEntry::make('created_at')
+                                            ->label(__('Date'))
+                                            ->dateTime(),
+                                    ])
+                                    ->columns(4)
+                                    ->hidden(fn (Customer $record) => $record->payments()->doesntExist()),
                             ])
                             ->collapsible(),
                     ])

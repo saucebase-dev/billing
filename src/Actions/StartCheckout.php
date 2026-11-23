@@ -120,6 +120,17 @@ class StartCheckout
             }
 
             if ($session->success_url === null) {
+                // A typed code is the one the buyer meant; otherwise the price's
+                // promotion, while it holds here. The provider still decides: a
+                // code it has used up checks out at the regular price.
+                // Only one that takes something off this price: an amount off in
+                // another currency shows the regular price, and the provider
+                // would refuse the checkout rather than charge it.
+                if ($coupon === null) {
+                    $promotion = $price->promotion()->available()->first();
+                    $coupon = $promotion?->discountedAmount($price) !== null ? $promotion->code : null;
+                }
+
                 $session->forceFill(['success_url' => $successUrl, 'cancel_url' => $cancelUrl, 'coupon' => $coupon]);
             }
 

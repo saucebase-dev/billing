@@ -20,6 +20,8 @@ use Modules\Billing\Enums\PaymentStatus;
  * @property Currency $currency
  * @property int $amount
  * @property int $amount_refunded
+ * @property int $discount_amount
+ * @property string|null $promotion_code
  * @property PaymentStatus $status
  * @property string|null $failure_code
  * @property string|null $failure_message
@@ -41,6 +43,8 @@ class Payment extends Model
         'currency',
         'amount',
         'amount_refunded',
+        'discount_amount',
+        'promotion_code',
         'status',
         'failure_code',
         'failure_message',
@@ -55,6 +59,7 @@ class Payment extends Model
         return [
             'amount' => 'integer',
             'amount_refunded' => 'integer',
+            'discount_amount' => 'integer',
             'currency' => Currency::class,
             'status' => PaymentStatus::class,
             'metadata' => 'array',

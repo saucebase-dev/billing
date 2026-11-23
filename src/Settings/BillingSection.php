@@ -157,6 +157,8 @@ class BillingSection extends SettingsSection
                     'currency' => $payment->currency->value,
                     'status' => $payment->status->value,
                     'paid_at' => $payment->created_at?->toISOString(),
+                    'discount_amount' => $payment->discount_amount,
+                    'promotion_code' => $payment->promotion_code,
                 ])
                 ->values(),
             'paymentMethod' => $defaultPaymentMethod ? [

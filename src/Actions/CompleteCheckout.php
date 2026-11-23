@@ -15,6 +15,7 @@ use Modules\Billing\Events\SubscriptionCreated;
 use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\CheckoutSession;
 use Modules\Billing\Models\Payment;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Modules\Billing\Services\PaymentGatewayManager;
 
@@ -51,6 +52,13 @@ class CompleteCheckout
 
             $session->update(['status' => CheckoutSessionStatus::Completed]);
 
+            // Counted under the session's lock, past the Completed check above,
+            // so the webhook, its retries and the return page count it once.
+            $promotion = $checkout->providerPromotionCodeId && $checkout->discountAmount > 0
+                ? Promotion::where('provider', $provider)->where('provider_promotion_code_id', $checkout->providerPromotionCodeId)->first()
+                : null;
+            $promotion?->increment('times_redeemed');
+
             $paymentMethod = $checkout->paymentMethodReference
                 ? $this->syncPaymentMethod->handle($customer, $checkout->paymentMethodReference, $provider)
                 : null;
@@ -80,6 +88,10 @@ class CompleteCheckout
                     'provider_payment_id' => $subscription ? $checkout->providerInvoiceId : $checkout->providerPaymentId,
                     'currency' => $checkout->currency,
                     'amount' => $checkout->amount,
+                    'discount_amount' => $checkout->discountAmount,
+                    // Known only for a promotion this app presents; a code typed
+                    // on the provider's page shows as the discount alone.
+                    'promotion_code' => $promotion?->code,
                     'status' => PaymentStatus::Succeeded,
                 ])
                 : null;
