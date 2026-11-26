@@ -135,6 +135,7 @@ function handleRetry() {
                     <InputField
                         v-else
                         name="coupon"
+                        :error="form.errors.coupon"
                         data-testid="checkout-coupon"
                         type="text"
                         :label="$t('Promotion code')"
@@ -205,6 +206,7 @@ function handleRetry() {
             >
                 <InputField
                     name="email"
+                    :error="form.errors.email"
                     data-testid="checkout-email"
                     type="email"
                     :label="$t('Email')"
