@@ -119,6 +119,9 @@ class StripeEventMapper
             timesRedeemed: $cap['used'],
             expiresAt: self::date($tighter($code['expires_at'] ?? null, $coupon['redeem_by'] ?? null)),
             active: ($code['active'] ?? false) === true && ($coupon['valid'] ?? true) === true,
+            restricted: ($code['restrictions']['first_time_transaction'] ?? false) === true
+                || isset($code['restrictions']['minimum_amount'])
+                || isset($code['customer']),
         );
     }
 

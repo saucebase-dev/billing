@@ -10,6 +10,8 @@ use Spatie\LaravelData\Data;
  * `expiresAt` are the tighter of the code's and its coupon's.
  *
  * @param  string  $duration  once, repeating or forever
+ * @param  bool  $restricted  The provider limits who may redeem it (first-time customers,
+ *                            a minimum amount, one customer): it decides at checkout
  */
 class PromotionData extends Data
 {
@@ -25,5 +27,6 @@ class PromotionData extends Data
         public int $timesRedeemed,
         public ?Carbon $expiresAt,
         public bool $active,
+        public bool $restricted = false,
     ) {}
 }

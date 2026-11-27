@@ -112,7 +112,8 @@ class StripeGateway implements PaymentGatewayInterface
 
         // Stripe rejects a session that both carries a discount and invites one,
         // so a resolved code wins and everyone else gets the field on Stripe's page.
-        $promotionCode = $data->coupon ? $this->resolvePromotionCode($data->coupon) : null;
+        $promotion = $data->coupon ? $this->resolvePromotionCode($data->coupon) : null;
+        $promotionCode = $promotion && ! $promotion->restricted ? $promotion->providerPromotionCodeId : null;
 
         if ($promotionCode !== null) {
             $params['discounts'] = [['promotion_code' => $promotionCode]];
@@ -121,9 +122,13 @@ class StripeGateway implements PaymentGatewayInterface
         }
 
         // The buyer expected this code, from the pricing page or their own typing,
-        // and Stripe's page would show the regular price without a word.
+        // and Stripe's page would show the regular price without a word. A restricted
+        // code is not pre-applied (Stripe refuses the session if it rules the buyer
+        // out), so the buyer types it there, where Stripe checks it.
         if ($data->coupon && $promotionCode === null) {
-            $params['custom_text']['submit']['message'] = __('The promotion code :code is no longer available, so this is the regular price.', ['code' => $data->coupon]);
+            $params['custom_text']['submit']['message'] = $promotion?->restricted
+                ? __('Have the promotion code :code? Enter it here to see if it applies.', ['code' => $data->coupon])
+                : __('The promotion code :code is no longer available, so this is the regular price.', ['code' => $data->coupon]);
         }
 
         $options = $data->idempotencyKey ? ['idempotency_key' => $data->idempotencyKey] : [];
@@ -163,7 +168,8 @@ class StripeGateway implements PaymentGatewayInterface
      * which is why the caller falls back to letting Stripe ask: an exhausted code
      * should not cost somebody their checkout.
      */
-    private function resolvePromotionCode(string $code): ?string
+    /** The code while it holds (active, not expired, not used up), else null. */
+    private function resolvePromotionCode(string $code): ?PromotionData
     {
         try {
             $promotion = $this->findPromotion($code);
@@ -178,7 +184,7 @@ class StripeGateway implements PaymentGatewayInterface
             && ($promotion->expiresAt === null || $promotion->expiresAt->isFuture())
             && ($promotion->maxRedemptions === null || $promotion->timesRedeemed < $promotion->maxRedemptions);
 
-        return $holds ? $promotion->providerPromotionCodeId : null;
+        return $holds ? $promotion : null;
     }
 
     public function findPromotion(string $code): ?PromotionData
