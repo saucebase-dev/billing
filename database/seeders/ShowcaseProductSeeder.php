@@ -7,6 +7,8 @@ use Modules\Billing\Enums\BillingScheme;
 use Modules\Billing\Enums\Currency;
 use Modules\Billing\Enums\PlanKind;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
+use Modules\Billing\Settings\BillingSettings;
 
 /**
  * The demo site's plans, for a made-up developer tool. Between them they use
@@ -75,6 +77,34 @@ class ShowcaseProductSeeder extends Seeder
                 );
             }
         }
+
+        $this->launchPromotion();
+    }
+
+    /**
+     * Lifetime at a launch price for the first 50 buyers, so the pricing page
+     * shows a promotion. Local until `CatalogPush` creates it at the provider;
+     * keyed on its code, and its terms set only once, so reseeding keeps the
+     * provider's ID and count.
+     */
+    private function launchPromotion(): void
+    {
+        $lifetime = Product::where('slug', 'lifetime')->first()?->prices()->first();
+
+        if (! $lifetime) {
+            return;
+        }
+
+        $promotion = Promotion::firstOrCreate(['code' => 'LAUNCH'], [
+            'provider' => app(BillingSettings::class)->gateway,
+            'amount_off' => 10000,
+            'currency' => Currency::default()->value,
+            'duration' => 'once',
+            'max_redemptions' => 50,
+            'expires_at' => now()->addDays(60),
+        ]);
+
+        $lifetime->update(['promotion_id' => $promotion->id]);
     }
 
     /**

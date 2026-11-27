@@ -6,6 +6,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Tests\TestCase;
 
@@ -32,5 +33,23 @@ class PushCatalogCommandTest extends TestCase
             ->assertSuccessful();
 
         $this->assertDatabaseHas('products', ['id' => $product->id, 'provider_product_id' => 'prod_new']);
+    }
+
+    public function test_it_prints_promotion_warnings(): void
+    {
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => null, 'code' => 'FIRST50', 'amount_off' => 3000, 'currency' => 'EUR']);
+        Price::factory()->create(['promotion_id' => $promotion->id, 'currency' => 'USD']);
+
+        $gateway = $this->createStub(PaymentGatewayInterface::class);
+        $gateway->method('createPromotion')->willReturn('promo_new');
+
+        $manager = $this->createStub(PaymentGatewayManager::class);
+        $manager->method('getDefaultDriver')->willReturn('stripe');
+        $manager->method('driver')->willReturn($gateway);
+        app()->instance(PaymentGatewayManager::class, $manager);
+
+        $this->artisan('billing:push-catalog')
+            ->expectsOutputToContain('FIRST50')
+            ->assertSuccessful();
     }
 }

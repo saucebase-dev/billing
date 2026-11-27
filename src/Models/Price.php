@@ -4,6 +4,7 @@ namespace Modules\Billing\Models;
 
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +15,7 @@ use Modules\Billing\Settings\BillingSettings;
 /**
  * @property int $id
  * @property int $product_id
+ * @property int|null $promotion_id
  * @property string $provider
  * @property string|null $provider_price_id
  * @property Currency $currency
@@ -25,6 +27,8 @@ use Modules\Billing\Settings\BillingSettings;
  * @property bool $is_active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read Promotion|null $promotion
+ * @property-read int|null $promotional_amount
  *
  * @method static Builder<static> purchasable()
  */
@@ -51,6 +55,7 @@ class Price extends Model
 
     protected $fillable = [
         'product_id',
+        'promotion_id',
         'provider',
         'provider_price_id',
         'currency',
@@ -61,6 +66,8 @@ class Price extends Model
         'metadata',
         'is_active',
     ];
+
+    protected $appends = ['promotional_amount'];
 
     /**
      * @return array<string, string>
@@ -100,6 +107,31 @@ class Price extends Model
         return $query->where('is_active', true)
             ->whereNotNull('provider_price_id')
             ->whereHas('product', fn (Builder $product) => $product->where('is_active', true));
+    }
+
+    /**
+     * What the buyer pays with the promotion, read from a loaded `promotion`
+     * only, so serialising a price never queries. Null without one, or when it
+     * takes nothing off this price.
+     *
+     * @return Attribute<int|null, never>
+     */
+    protected function promotionalAmount(): Attribute
+    {
+        return Attribute::get(fn (): ?int => $this->relationLoaded('promotion')
+            ? $this->promotion?->discountedAmount($this)
+            : null);
+    }
+
+    /**
+     * The promotion the pricing page shows and checkout applies. Load it with
+     * `available()` to get only one that still holds.
+     *
+     * @return BelongsTo<Promotion, $this>
+     */
+    public function promotion(): BelongsTo
+    {
+        return $this->belongsTo(Promotion::class);
     }
 
     /**

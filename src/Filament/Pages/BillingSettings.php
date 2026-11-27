@@ -13,6 +13,8 @@ use Modules\Billing\Enums\Currency;
 use Modules\Billing\Services\PaymentGatewayManager;
 use Modules\Billing\Settings\BillingSettings as Settings;
 use Saucebase\Core\Filament\Pages\SettingsPage;
+use Saucebase\Core\Settings\SectionRegistry;
+use Saucebase\Core\Settings\SettingsSection;
 
 class BillingSettings extends SettingsPage
 {
@@ -72,6 +74,22 @@ class BillingSettings extends SettingsPage
                         ->helperText(__('The provider asks for the email, billing address and promotion code itself. Turn this off to show the built-in checkout page first, which is worth doing only if you add fields the provider knows nothing about.'))
                         ->columnSpanFull()
                         ->extraAttributes(['data-testid' => 'admin-billing-redirect-to-gateway']),
+                    Select::make('after_checkout_section')
+                        ->label(__('After a purchase, open'))
+                        // The sections this app has, by name. The stored one stays listed even
+                        // when it does not apply to this request (a workspace's, in the admin).
+                        ->options(function (): array {
+                            $stored = app(Settings::class)->after_checkout_section;
+
+                            return app(SectionRegistry::class)->all()
+                                ->mapWithKeys(fn (SettingsSection $section): array => [$section->slug() => $section->title()])
+                                ->pipe(fn ($options) => $options->has($stored) ? $options : $options->put($stored, $stored))
+                                ->all();
+                        })
+                        ->helperText(__('The settings section a buyer lands on when they come back from the payment page. Their invoices by default; choose another if you sell something they install or set up next.'))
+                        ->required()
+                        ->columnSpanFull()
+                        ->extraAttributes(['data-testid' => 'admin-billing-after-checkout-section']),
                     TextInput::make('checkout_abandon_after_minutes')
                         ->label(__('Mark abandoned after'))
                         ->suffix(__('minutes'))

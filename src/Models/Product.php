@@ -166,7 +166,12 @@ class Product extends Model
     {
         return $query->where('is_active', true)
             ->where('is_visible', true)
-            ->with(['prices' => fn ($prices) => $prices->where('is_active', true)]);
+            ->with([
+                'prices' => fn ($prices) => $prices->where('is_active', true),
+                // Only a promotion that still holds: a spent or expired one loads as null.
+                // Larastan cannot see the related model through an eager-load closure.
+                'prices.promotion' => fn ($promotion) => $promotion->available(), // @phpstan-ignore method.notFound
+            ]);
     }
 
     /** What the plan grants; during a free trial, with `trial_entitlements` on top. */

@@ -9,7 +9,7 @@ import type {
 import {
     getIntervalLabel,
     matchesInterval,
-    normalizeInterval,
+    toggleIntervals,
 } from '../../lib/intervals';
 
 import ProductCard from './ProductCard.vue';
@@ -25,22 +25,9 @@ function planAction(product: Product): PlanAction {
         : (props.productActions[product.id] ?? 'unavailable');
 }
 
-const availableIntervals = computed(() => {
-    if (!props.products) return [];
-
-    const intervals = new Set<string>();
-    for (const product of props.products) {
-        for (const price of product.prices) {
-            intervals.add(normalizeInterval(price.interval));
-        }
-    }
-
-    // Sort order: one_time, day, week, month, year
-    const order = ['one_time', 'day', 'week', 'month', 'year'];
-    return Array.from(intervals).sort(
-        (a, b) => order.indexOf(a) - order.indexOf(b),
-    );
-});
+const availableIntervals = computed(() =>
+    toggleIntervals(props.products ?? []),
+);
 
 const billingInterval = ref<string>('month');
 
@@ -64,8 +51,11 @@ const filteredProducts = computed(() => {
     return props.products
         .map((product) => ({
             ...product,
-            prices: product.prices.filter((price) =>
-                matchesInterval(price.interval, billingInterval.value),
+            // No toggle: one price per plan, shown as it is.
+            prices: product.prices.filter(
+                (price) =>
+                    availableIntervals.value.length === 0 ||
+                    matchesInterval(price.interval, billingInterval.value),
             ),
         }))
         .filter(

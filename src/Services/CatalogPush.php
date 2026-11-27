@@ -7,6 +7,7 @@ use Modules\Billing\Data\CatalogProductData;
 use Modules\Billing\Data\CatalogPushReport;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 
 /**
  * Create at the provider what was drafted here first. Only rows with no
@@ -74,7 +75,49 @@ class CatalogPush
                 $report->prices++;
             });
 
+        // After the prices: a coupon is limited to its prices' products.
+        $this->pushPromotions($provider, $report, $only);
+
         return $report;
+    }
+
+    /**
+     * Create at the provider the promotions drafted here. One whose code the
+     * provider already has (pushed before a reset) is adopted, with its count.
+     */
+    private function pushPromotions(string $provider, CatalogPushReport $report, ?Product $only): void
+    {
+        $gateway = $this->manager->driver($provider);
+        $unpushed = Promotion::whereNull('provider_promotion_code_id')
+            ->when($only, fn ($query) => $query->whereHas('prices', fn ($prices) => $prices->where('product_id', $only->id)))
+            ->get();
+
+        foreach ($unpushed as $promotion) {
+            $existing = $gateway->findPromotion($promotion->code);
+
+            // Codes are shared by everything on the account: one that makes
+            // another offer is not this promotion, and adopting it would show
+            // terms nobody wrote here. The code cannot be created twice either.
+            if ($existing && ! $promotion->sameTermsAs($existing)) {
+                $report->promotionWarnings[] = __(':code already exists at the provider with other terms; rename it here or change it there.', ['code' => $promotion->code]);
+
+                continue;
+            }
+
+            if ($existing) {
+                $promotion->fillFromProvider($existing);
+            }
+
+            $promotion->fill([
+                'provider' => $provider,
+                'provider_promotion_code_id' => $existing->providerPromotionCodeId ?? $gateway->createPromotion($promotion),
+            ])->save();
+            $report->promotions++;
+
+            if ($warning = $promotion->untouchedPricesWarning()) {
+                $report->promotionWarnings[] = $warning;
+            }
+        }
     }
 
     /** Adopt the provider's active prices that match one here; the rest are created below. */

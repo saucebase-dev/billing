@@ -16,6 +16,7 @@ import { useAuth } from '@saucebase/vue/composables/useAuth';
 import { useLocalization } from '@saucebase/vue/composables/useLocalization';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
+import { promotionNotes } from '../../lib/promotion';
 
 const props = defineProps<{
     product: Product;
@@ -102,7 +103,22 @@ function formatPrice(amount: number | string, currency?: string): string {
     return formatMoney(amount, currency, language.value, { wholeUnits: true });
 }
 
-const priceKey = computed(() => props.price?.amount);
+// A promotion strikes the regular price through; otherwise the admin's own
+// `original_price` metadata does, as before.
+const promoted = computed(() => props.price?.promotional_amount != null);
+const struckPrice = computed(() =>
+    promoted.value
+        ? props.price?.amount
+        : props.price?.metadata?.original_price,
+);
+const payable = computed(() =>
+    promoted.value ? props.price!.promotional_amount! : props.price?.amount,
+);
+const notes = computed(() =>
+    props.price ? promotionNotes(props.price, language.value) : [],
+);
+
+const priceKey = computed(() => payable.value);
 const isAnimating = ref(false);
 
 watch(priceKey, () => {
@@ -154,21 +170,17 @@ watch(priceKey, () => {
 
         <!-- Price -->
         <div class="mt-2">
-            <!-- Original price + discount badge -->
+            <!-- Struck-through price + discount badge -->
             <div
-                v-if="price?.metadata?.original_price || price?.metadata?.badge"
+                v-if="struckPrice || price?.metadata?.badge"
                 class="mb-1 flex h-8 items-center gap-2"
             >
                 <span
-                    v-if="price?.metadata?.original_price"
+                    v-if="struckPrice"
+                    data-testid="price-struck"
                     class="text-foreground/50 text-2xl line-through"
                 >
-                    {{
-                        formatPrice(
-                            price.metadata.original_price,
-                            price.currency,
-                        )
-                    }}
+                    {{ formatPrice(struckPrice, price?.currency) }}
                 </span>
                 <span
                     v-if="price?.metadata?.badge"
@@ -185,9 +197,10 @@ watch(priceKey, () => {
             >
                 <template v-if="price">
                     <span
+                        data-testid="price-amount"
                         class="text-foreground text-5xl font-semibold tracking-tight"
                     >
-                        {{ formatPrice(price.amount, price.currency) }}
+                        {{ formatPrice(payable!, price.currency) }}
                     </span>
                     <span class="text-foreground/70 text-base">
                         {{ getIntervalDisplay(price.interval) }}
@@ -198,6 +211,15 @@ watch(priceKey, () => {
                 </span>
             </div>
         </div>
+
+        <!-- Promotion: how long, how many left, until when -->
+        <p
+            v-if="notes.length"
+            data-testid="promotion-notes"
+            class="mt-2 text-sm font-medium text-green-600 dark:text-green-400"
+        >
+            {{ notes.map(([key, params]) => $t(key, params)).join(' · ') }}
+        </p>
 
         <!-- Tagline from metadata -->
         <p

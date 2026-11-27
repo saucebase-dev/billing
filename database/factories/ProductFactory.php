@@ -21,10 +21,11 @@ class ProductFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->words(2, true).' Plan';
+        $words = fake()->unique()->words(2, true);
+        $name = $words.' Plan';
 
         return [
-            'sku' => strtoupper(Str::slug(fake()->unique()->word())),
+            'sku' => strtoupper(Str::slug($words)),
             'slug' => Str::slug($name),
             'name' => $name,
             'description' => fake()->sentence(12),

@@ -14,6 +14,7 @@ import type {
 } from '@modules/billing/resources/js/types';
 import { getIntervalDisplay } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
+import { promotionNotes } from '../../lib/promotion';
 
 export default function ProductCard({
     product,
@@ -33,6 +34,14 @@ export default function ProductCard({
         formatMoney(amount, currency, locale, { wholeUnits: true });
     const featured = !!product.metadata?.badge || product.is_highlighted;
     const [isAnimating, setIsAnimating] = useState(false);
+    // A promotion strikes the regular price through; otherwise the admin's own
+    // `original_price` metadata does, as before.
+    const promoted = price?.promotional_amount != null;
+    const struckPrice = promoted
+        ? price?.amount
+        : price?.metadata?.original_price;
+    const payable = promoted ? price!.promotional_amount! : price?.amount;
+    const notes = price ? promotionNotes(price, locale) : [];
 
     // The amount, not the price object: switching interval swaps the object on
     // every render, and only a changed figure is worth drawing attention to.
@@ -41,7 +50,7 @@ export default function ProductCard({
         const timer = setTimeout(() => setIsAnimating(false), 150);
 
         return () => clearTimeout(timer);
-    }, [price?.amount]);
+    }, [payable]);
 
     const ctaClasses = featured
         ? 'bg-primary hover:bg-primary/90 focus-visible:outline-primary text-white'
@@ -161,18 +170,18 @@ export default function ProductCard({
 
             {/* Price */}
             <div className="mt-2">
-                {/* Original price + discount badge */}
-                {price?.metadata?.original_price || price?.metadata?.badge ? (
+                {/* Struck-through price + discount badge */}
+                {struckPrice || price?.metadata?.badge ? (
                     <div className="mb-1 flex h-8 items-center gap-2">
-                        {price.metadata?.original_price && (
-                            <span className="text-foreground/50 text-2xl line-through">
-                                {formatPrice(
-                                    price.metadata.original_price,
-                                    price.currency,
-                                )}
+                        {struckPrice && (
+                            <span
+                                data-testid="price-struck"
+                                className="text-foreground/50 text-2xl line-through"
+                            >
+                                {formatPrice(struckPrice, price?.currency)}
                             </span>
                         )}
-                        {price.metadata?.badge && (
+                        {price?.metadata?.badge && (
                             <span className="text-sm font-medium text-green-600 dark:text-green-400">
                                 {price.metadata.badge}
                             </span>
@@ -190,8 +199,11 @@ export default function ProductCard({
                 >
                     {price ? (
                         <>
-                            <span className="text-foreground text-5xl font-semibold tracking-tight">
-                                {formatPrice(price.amount, price.currency)}
+                            <span
+                                data-testid="price-amount"
+                                className="text-foreground text-5xl font-semibold tracking-tight"
+                            >
+                                {formatPrice(payable!, price.currency)}
                             </span>
                             <span className="text-foreground/70 text-base">
                                 {getIntervalDisplay(price.interval)}
@@ -204,6 +216,16 @@ export default function ProductCard({
                     )}
                 </div>
             </div>
+
+            {/* Promotion: how long, how many left, until when */}
+            {notes.length > 0 && (
+                <p
+                    data-testid="promotion-notes"
+                    className="mt-2 text-sm font-medium text-green-600 dark:text-green-400"
+                >
+                    {notes.map(([key, params]) => t(key, params)).join(' · ')}
+                </p>
+            )}
 
             {/* Tagline from metadata */}
             {product.metadata?.tagline && (

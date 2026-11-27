@@ -40,6 +40,7 @@ class PushProductAction
 
                 Notification::make()
                     ->title(__(':products products, :prices prices created and :features feature lists sent to :provider', ['products' => $report->products, 'prices' => $report->prices, 'features' => $report->features, 'provider' => $provider]))
+                    ->body($report->promotionWarnings === [] ? null : implode(' ', $report->promotionWarnings))
                     ->success()
                     ->send();
             })

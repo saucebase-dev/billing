@@ -7,8 +7,7 @@ import { formatDate } from '@saucebase/core/lib/dates';
 import { useDialog } from '@saucebase/react/hooks/useDialog';
 import { useT, useTranslation } from '@saucebase/react/i18n';
 import { CreditCard, Loader2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
+import { useMemo, useState } from 'react';
 import { getIntervalLabel } from '../../lib/intervals';
 import { formatMoney } from '../../lib/money';
 import type {
@@ -125,35 +124,6 @@ export default function SettingsBilling({
             payments.some((payment) => payment.status === 'refunded'),
         [payments, lifetimePlans],
     );
-
-    /**
-     * Congratulate whoever just came back from the payment page.
-     *
-     * The parameter is dropped from the URL straight away, so a refresh or a
-     * later visit to this panel does not celebrate the same purchase again.
-     */
-    useEffect(() => {
-        const url = new URL(window.location.href);
-
-        if (url.searchParams.get('checkout') !== 'success') {
-            return;
-        }
-
-        toast.success(t('You are all set!'), {
-            description: t('Your subscription is active. Welcome aboard.'),
-        });
-
-        // Through the router, not history.replaceState: Inertia keeps its own
-        // copy of the URL and re-renders from it, so switching panel would
-        // toast again.
-        url.searchParams.delete('checkout');
-        url.searchParams.delete('settings');
-        router.replace({
-            url: url.toString(),
-            preserveState: true,
-            preserveScroll: true,
-        });
-    }, [t]);
 
     async function handleCancelSubscription() {
         const confirmed = await confirm({
@@ -643,6 +613,32 @@ export default function SettingsBilling({
                                     </td>
                                     <td className="text-foreground py-3">
                                         {payment.name ?? '—'}
+                                        {payment.discount_amount > 0 && (
+                                            <span
+                                                data-testid="payment-discount"
+                                                className="text-muted-foreground block text-xs"
+                                            >
+                                                {payment.promotion_code
+                                                    ? t(
+                                                          'Saved :amount with :code',
+                                                          {
+                                                              amount: formatMoney(
+                                                                  payment.discount_amount,
+                                                                  payment.currency,
+                                                                  locale,
+                                                              ),
+                                                              code: payment.promotion_code,
+                                                          },
+                                                      )
+                                                    : t('Saved :amount', {
+                                                          amount: formatMoney(
+                                                              payment.discount_amount,
+                                                              payment.currency,
+                                                              locale,
+                                                          ),
+                                                      })}
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="text-foreground py-3 text-right tabular-nums">
                                         {formatMoney(

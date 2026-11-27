@@ -12,6 +12,7 @@ use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Invoice;
 use Modules\Billing\Models\Payment;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Tests\TestCase;
 
@@ -54,6 +55,24 @@ class ShowcaseSeederTest extends TestCase
         $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
 
         $this->assertSame($first, [Customer::count(), Subscription::count(), Payment::count()]);
+    }
+
+    /** The demo pricing page shows a launch price: Lifetime, first 50 buyers. */
+    public function test_lifetime_carries_a_launch_promotion(): void
+    {
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
+        $this->seed([DatabaseSeeder::class, ShowcaseBillingDatabaseSeeder::class]);
+
+        $promotion = Promotion::sole();
+        $lifetime = Product::where('slug', 'lifetime')->sole()->prices()->sole();
+
+        $this->assertSame('LAUNCH', $promotion->code);
+        $this->assertSame($promotion->id, $lifetime->promotion_id);
+        $this->assertSame(19900, $promotion->discountedAmount($lifetime));
+        $this->assertSame(50, $promotion->max_redemptions);
+        // Shown once the push has made it real at the provider; tests never push.
+        $this->assertNull($promotion->provider_promotion_code_id);
+        $this->assertFalse(Promotion::available()->whereKey($promotion->id)->exists());
     }
 
     /** Pro's trial shows the feature: fewer API requests, no custom domains. */

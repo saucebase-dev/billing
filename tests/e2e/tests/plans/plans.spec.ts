@@ -42,6 +42,22 @@ test.describe.parallel('Pricing page', () => {
         expect(slugs.indexOf('starter')).toBeLessThan(slugs.indexOf('pro'));
     });
 
+    test('shows a promotion: regular price struck through, the launch price and what is left', async ({
+        page,
+    }) => {
+        await page.goto('/pricing');
+        const card = page.getByTestId('product-card-launch');
+
+        await expect(card.getByTestId('price-struck')).toHaveText(/29/);
+        await expect(card.getByTestId('price-amount')).toHaveText(/19/);
+        await expect(card.getByTestId('promotion-notes')).toContainText(
+            '38 of 50 left',
+        );
+        await expect(card.getByTestId('promotion-notes')).toContainText(
+            'First payment',
+        );
+    });
+
     test('marks the highlighted plan', async ({ page }) => {
         await page.goto('/pricing');
 

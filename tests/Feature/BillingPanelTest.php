@@ -134,6 +134,23 @@ class BillingPanelTest extends TestCase
         $this->assertSame('Onboarding call', $this->props()['payments'][0]['name']);
     }
 
+    /** A promotion's saving stays on the receipt. */
+    public function test_a_one_time_payment_shows_its_discount_and_code(): void
+    {
+        Payment::factory()->create([
+            'customer_id' => $this->customer->id,
+            'price_id' => Price::factory()->oneTime(),
+            'amount' => 14900,
+            'discount_amount' => 3000,
+            'promotion_code' => 'LAUNCH',
+        ]);
+
+        $payment = $this->props()['payments'][0];
+
+        $this->assertSame(3000, $payment['discount_amount']);
+        $this->assertSame('LAUNCH', $payment['promotion_code']);
+    }
+
     public function test_a_subscription_lifetime_replaces_says_so_once_its_end_is_scheduled(): void
     {
         $this->subscribeToPro(['cancelled_at' => now(), 'ends_at' => now()->addWeek()]);

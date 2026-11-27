@@ -3,6 +3,7 @@
 namespace Modules\Billing\Services\Gateways;
 
 use Carbon\Carbon;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\CustomerDefaultsData;
 use Modules\Billing\Data\Webhook\InvoiceData;
@@ -78,6 +79,49 @@ class StripeEventMapper
             currency: self::currency($session),
             amount: (int) ($session['amount_total'] ?? 0),
             providerInvoiceId: self::string($session, 'invoice'),
+            discountAmount: (int) ($session['total_details']['amount_discount'] ?? 0),
+            // One discount per session: billing sends one, Stripe's own field takes one.
+            providerPromotionCodeId: self::string($session['discounts'][0] ?? [], 'promotion_code'),
+        );
+    }
+
+    /**
+     * A promotion code with `promotion.coupon` expanded. A cap or end date may sit
+     * on the code or on its coupon, and the tighter one binds, the cap with its
+     * own count; the coupon's `valid` already folds in its own cap and date.
+     *
+     * @param  array<string, mixed>  $code
+     */
+    public static function promotionCode(array $code): PromotionData
+    {
+        $coupon = is_array($code['promotion']['coupon'] ?? null) ? $code['promotion']['coupon'] : [];
+        $tighter = fn (?int $a, ?int $b): ?int => $a === null || $b === null ? ($a ?? $b) : min($a, $b);
+        $currency = self::string($coupon, 'currency');
+
+        // The code counts its own redemptions, the coupon those of every code on
+        // it. Whichever cap leaves fewer is the one that binds, with its count.
+        $caps = array_filter([
+            ['max' => $code['max_redemptions'] ?? null, 'used' => (int) ($code['times_redeemed'] ?? 0)],
+            ['max' => $coupon['max_redemptions'] ?? null, 'used' => (int) ($coupon['times_redeemed'] ?? 0)],
+        ], fn (array $cap): bool => $cap['max'] !== null);
+        usort($caps, fn (array $a, array $b): int => ($a['max'] - $a['used']) <=> ($b['max'] - $b['used']));
+        $cap = $caps[0] ?? ['max' => null, 'used' => (int) ($code['times_redeemed'] ?? 0)];
+
+        return new PromotionData(
+            providerPromotionCodeId: (string) $code['id'],
+            code: (string) $code['code'],
+            percentOff: isset($coupon['percent_off']) ? (float) $coupon['percent_off'] : null,
+            amountOff: isset($coupon['amount_off']) ? (int) $coupon['amount_off'] : null,
+            currency: $currency ? strtoupper($currency) : null,
+            duration: (string) ($coupon['duration'] ?? 'once'),
+            durationInMonths: $coupon['duration_in_months'] ?? null,
+            maxRedemptions: $cap['max'],
+            timesRedeemed: $cap['used'],
+            expiresAt: self::date($tighter($code['expires_at'] ?? null, $coupon['redeem_by'] ?? null)),
+            active: ($code['active'] ?? false) === true && ($coupon['valid'] ?? true) === true,
+            restricted: ($code['restrictions']['first_time_transaction'] ?? false) === true
+                || isset($code['restrictions']['minimum_amount'])
+                || isset($code['customer']),
         );
     }
 

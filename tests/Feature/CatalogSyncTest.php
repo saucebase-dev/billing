@@ -3,12 +3,16 @@
 namespace Modules\Billing\Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Exceptions;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CatalogPriceData;
 use Modules\Billing\Data\CatalogProductData;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Enums\PlanKind;
+use Modules\Billing\Exceptions\GatewayOperationFailedException;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Services\CatalogSync;
 use Modules\Billing\Services\PaymentGatewayManager;
 use PHPUnit\Framework\MockObject\Stub;
@@ -289,5 +293,56 @@ class CatalogSyncTest extends TestCase
 
         $this->assertSame(1, $report->skipped);
         $this->assertDatabaseCount('products', 0);
+    }
+
+    /** The stored count is what the page shows; after a sync it is the provider's. */
+    public function test_a_known_promotion_takes_the_providers_count_and_terms(): void
+    {
+        $this->gateway->method('listCatalog')->willReturn([]);
+        $this->gateway->method('retrievePromotion')->willReturn(new PromotionData(
+            providerPromotionCodeId: 'promo_launch',
+            code: 'LAUNCH',
+            percentOff: null,
+            amountOff: 3000,
+            currency: 'USD',
+            duration: 'once',
+            durationInMonths: null,
+            maxRedemptions: 50,
+            timesRedeemed: 47,
+            expiresAt: null,
+            active: false,
+        ));
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => 'promo_launch', 'times_redeemed' => 45, 'is_active' => true]);
+
+        app(CatalogSync::class)->run();
+
+        $promotion->refresh();
+        $this->assertSame(47, $promotion->times_redeemed);
+        $this->assertFalse($promotion->is_active);
+    }
+
+    /** A code deleted at the provider must not stop the rest of the catalogue syncing. */
+    public function test_a_promotion_the_provider_cannot_read_is_reported_and_skipped(): void
+    {
+        Exceptions::fake();
+        $this->gateway->method('listCatalog')->willReturn([]);
+        $this->gateway->method('retrievePromotion')->willThrowException(new GatewayOperationFailedException('stripe', 'read a promotion code'));
+        $promotion = Promotion::factory()->create(['times_redeemed' => 3]);
+
+        app(CatalogSync::class)->run();
+
+        Exceptions::assertReported(GatewayOperationFailedException::class);
+        $this->assertSame(3, $promotion->fresh()->times_redeemed);
+    }
+
+    /** Not at the provider yet: there is nothing to read back. */
+    public function test_a_local_only_promotion_is_left_alone(): void
+    {
+        $this->gateway->method('listCatalog')->willReturn([]);
+        Promotion::factory()->create(['provider_promotion_code_id' => null]);
+
+        app(CatalogSync::class)->run();
+
+        $this->expectNotToPerformAssertions();
     }
 }

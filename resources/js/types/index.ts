@@ -12,6 +12,23 @@ export interface ProductMetadata {
     [key: string]: any;
 }
 
+/**
+ * A promotion that still holds, as the pricing page receives it (`Promotion`
+ * model). The provider enforces it; this is only what the card shows.
+ */
+export interface Promotion {
+    code: string;
+    percent_off: number | null;
+    amount_off: number | null;
+    currency: string | null;
+    duration: 'once' | 'repeating' | 'forever';
+    duration_in_months: number | null;
+    max_redemptions: number | null;
+    /** Null when there is no cap. */
+    remaining: number | null;
+    expires_at: string | null;
+}
+
 export interface Price {
     id: number;
     amount: number;
@@ -21,6 +38,10 @@ export interface Price {
     provider_price_id?: string;
     is_active?: boolean;
     metadata?: PriceMetadata;
+    /** Loaded on the pricing page only, and only while it holds. */
+    promotion?: Promotion | null;
+    /** What the buyer pays with the promotion; null when none applies. */
+    promotional_amount?: number | null;
 }
 
 /**
@@ -123,6 +144,8 @@ export interface OneTimePayment {
     currency: string;
     status: 'succeeded' | 'refunded';
     paid_at: string | null;
+    discount_amount: number;
+    promotion_code: string | null;
 }
 
 export interface Invoice {

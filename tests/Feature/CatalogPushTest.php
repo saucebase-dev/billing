@@ -6,8 +6,10 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Billing\Contracts\PaymentGatewayInterface;
 use Modules\Billing\Data\CatalogPriceData;
 use Modules\Billing\Data\CatalogProductData;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Services\CatalogPush;
 use Modules\Billing\Services\PaymentGatewayManager;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
@@ -150,5 +152,95 @@ class CatalogPushTest extends TestCase
         app(CatalogPush::class)->run();
 
         $this->assertSame('prod_new', $product->fresh()->provider_product_id);
+    }
+
+    /** A promotion drafted here (the demo's) is created at the provider once, with its prices' products. */
+    public function test_a_local_promotion_is_created_at_the_provider(): void
+    {
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => null, 'code' => 'LAUNCH']);
+        Price::factory()->create(['promotion_id' => $promotion->id]);
+
+        $this->gateway->method('findPromotion')->willReturn(null);
+        $this->gateway->expects($this->once())->method('createPromotion')
+            ->with($this->callback(fn (Promotion $given) => $given->is($promotion)))
+            ->willReturn('promo_new');
+
+        $report = app(CatalogPush::class)->run();
+
+        $this->assertSame(1, $report->promotions);
+        $this->assertSame('promo_new', $promotion->fresh()->provider_promotion_code_id);
+    }
+
+    /** Reseeding after a reset finds the code pushed last time instead of failing on a duplicate. */
+    public function test_a_code_the_provider_already_has_is_adopted(): void
+    {
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => null, 'code' => 'LAUNCH', 'amount_off' => 1000, 'currency' => 'USD', 'max_redemptions' => 50, 'times_redeemed' => 0]);
+
+        $this->gateway->expects($this->once())->method('findPromotion')->with('LAUNCH')->willReturn(new PromotionData(
+            providerPromotionCodeId: 'promo_old', code: 'LAUNCH', percentOff: null, amountOff: 1000, currency: 'USD',
+            duration: 'once', durationInMonths: null, maxRedemptions: 50, timesRedeemed: 3, expiresAt: null, active: true,
+        ));
+        $this->gateway->expects($this->never())->method('createPromotion');
+
+        app(CatalogPush::class)->run();
+
+        $this->assertSame('promo_old', $promotion->fresh()->provider_promotion_code_id);
+        $this->assertSame(3, $promotion->fresh()->times_redeemed);
+    }
+
+    /** Pushing one product pushes the promotion on its prices, and only that one. */
+    public function test_pushing_one_product_pushes_its_promotion(): void
+    {
+        $product = Product::factory()->create(['provider_product_id' => 'prod_lifetime']);
+        $mine = Promotion::factory()->create(['provider_promotion_code_id' => null]);
+        Price::factory()->create(['product_id' => $product->id, 'promotion_id' => $mine->id]);
+        $other = Promotion::factory()->create(['provider_promotion_code_id' => null]);
+        Price::factory()->create(['promotion_id' => $other->id]);
+
+        $this->gateway->method('findPromotion')->willReturn(null);
+        $this->gateway->expects($this->once())->method('createPromotion')->willReturn('promo_mine');
+
+        app(CatalogPush::class)->run($product);
+
+        $this->assertSame('promo_mine', $mine->fresh()->provider_promotion_code_id);
+        $this->assertNull($other->fresh()->provider_promotion_code_id);
+    }
+
+    /**
+     * Codes are shared across everything on one provider account: another
+     * app's LAUNCH must not quietly replace the terms written here.
+     */
+    public function test_a_provider_code_with_other_terms_is_not_adopted(): void
+    {
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => null, 'code' => 'LAUNCH', 'amount_off' => 3000, 'currency' => 'USD', 'max_redemptions' => 50]);
+
+        $this->gateway->method('findPromotion')->willReturn(new PromotionData(
+            providerPromotionCodeId: 'promo_theirs', code: 'LAUNCH', percentOff: null, amountOff: 10000, currency: 'EUR',
+            duration: 'once', durationInMonths: null, maxRedemptions: 50, timesRedeemed: 0, expiresAt: null, active: true,
+        ));
+        $this->gateway->expects($this->never())->method('createPromotion');
+
+        $report = app(CatalogPush::class)->run();
+
+        $promotion->refresh();
+        $this->assertNull($promotion->provider_promotion_code_id);
+        $this->assertSame(3000, $promotion->amount_off);
+        $this->assertSame(0, $report->promotions);
+        $this->assertStringContainsString('LAUNCH', $report->promotionWarnings[0]);
+    }
+
+    /** Pushed fine, but the card would show the regular price: say so. */
+    public function test_a_promotion_in_another_currency_than_its_price_is_warned_about(): void
+    {
+        $promotion = Promotion::factory()->create(['provider_promotion_code_id' => null, 'code' => 'FIRST50', 'amount_off' => 3000, 'currency' => 'EUR']);
+        Price::factory()->create(['promotion_id' => $promotion->id, 'currency' => 'USD']);
+
+        $this->gateway->method('findPromotion')->willReturn(null);
+        $this->gateway->method('createPromotion')->willReturn('promo_new');
+
+        $report = app(CatalogPush::class)->run();
+
+        $this->assertSame(1, $report->promotions);
+        $this->assertStringContainsString('FIRST50', $report->promotionWarnings[0]);
     }
 }

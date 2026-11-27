@@ -13,6 +13,7 @@ use Modules\Billing\Data\CheckoutResultData;
 use Modules\Billing\Data\CustomerData;
 use Modules\Billing\Data\PaymentMethodData;
 use Modules\Billing\Data\PaymentMethodDetails;
+use Modules\Billing\Data\PromotionData;
 use Modules\Billing\Data\Webhook\CheckoutSessionData;
 use Modules\Billing\Data\Webhook\SubscriptionStateData;
 use Modules\Billing\Data\WebhookData;
@@ -25,6 +26,7 @@ use Modules\Billing\Exceptions\ProviderErrorException;
 use Modules\Billing\Models\Customer;
 use Modules\Billing\Models\Price;
 use Modules\Billing\Models\Product;
+use Modules\Billing\Models\Promotion;
 use Modules\Billing\Models\Subscription;
 use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\SignatureVerificationException;
@@ -110,12 +112,23 @@ class StripeGateway implements PaymentGatewayInterface
 
         // Stripe rejects a session that both carries a discount and invites one,
         // so a resolved code wins and everyone else gets the field on Stripe's page.
-        $promotionCode = $data->coupon ? $this->resolvePromotionCode($data->coupon) : null;
+        $promotion = $data->coupon ? $this->resolvePromotionCode($data->coupon) : null;
+        $promotionCode = $promotion && ! $promotion->restricted ? $promotion->providerPromotionCodeId : null;
 
         if ($promotionCode !== null) {
             $params['discounts'] = [['promotion_code' => $promotionCode]];
         } else {
             $params['allow_promotion_codes'] = true;
+        }
+
+        // The buyer expected this code, from the pricing page or their own typing,
+        // and Stripe's page would show the regular price without a word. A restricted
+        // code is not pre-applied (Stripe refuses the session if it rules the buyer
+        // out), so the buyer types it there, where Stripe checks it.
+        if ($data->coupon && $promotionCode === null) {
+            $params['custom_text']['submit']['message'] = $promotion?->restricted
+                ? __('Have the promotion code :code? Enter it here to see if it applies.', ['code' => $data->coupon])
+                : __('The promotion code :code is no longer available, so this is the regular price.', ['code' => $data->coupon]);
         }
 
         $options = $data->idempotencyKey ? ['idempotency_key' => $data->idempotencyKey] : [];
@@ -149,20 +162,17 @@ class StripeGateway implements PaymentGatewayInterface
     }
 
     /**
-     * Turn a code somebody typed into the promotion code ID Stripe wants.
+     * Turn a code into the promotion code ID Stripe wants, if Stripe still honours it.
      *
-     * Returns null when the code is unknown or no longer active, which is why the
-     * caller falls back to letting Stripe ask: an expired code should not cost
-     * somebody their checkout.
+     * Returns null when the code is unknown, inactive, past its date or used up,
+     * which is why the caller falls back to letting Stripe ask: an exhausted code
+     * should not cost somebody their checkout.
      */
-    private function resolvePromotionCode(string $code): ?string
+    /** The code while it holds (active, not expired, not used up), else null. */
+    private function resolvePromotionCode(string $code): ?PromotionData
     {
         try {
-            $matches = $this->call('look up a promotion code', fn () => $this->stripe->promotionCodes->all([
-                'code' => $code,
-                'active' => true,
-                'limit' => 1,
-            ]));
+            $promotion = $this->findPromotion($code);
         } catch (GatewayOperationFailedException $e) {
             // Reported, then the documented fallback: Stripe's page asks for the code.
             report($e);
@@ -170,7 +180,55 @@ class StripeGateway implements PaymentGatewayInterface
             return null;
         }
 
-        return $matches->data[0]->id ?? null;
+        $holds = $promotion?->active
+            && ($promotion->expiresAt === null || $promotion->expiresAt->isFuture())
+            && ($promotion->maxRedemptions === null || $promotion->timesRedeemed < $promotion->maxRedemptions);
+
+        return $holds ? $promotion : null;
+    }
+
+    public function findPromotion(string $code): ?PromotionData
+    {
+        $matches = $this->call('look up a promotion code', fn () => $this->stripe->promotionCodes->all([
+            'code' => $code,
+            'active' => true,
+            'limit' => 1,
+            'expand' => ['data.promotion.coupon'],
+        ]));
+
+        return isset($matches->data[0]) ? StripeEventMapper::promotionCode($matches->data[0]->toArray()) : null;
+    }
+
+    public function createPromotion(Promotion $promotion): string
+    {
+        $products = $promotion->prices()->with('product')->get()
+            ->pluck('product.provider_product_id')->filter()->unique()->values()->all();
+
+        $coupon = $this->call('create a coupon', fn () => $this->stripe->coupons->create(array_filter([
+            'name' => $promotion->code,
+            'percent_off' => $promotion->percent_off,
+            'amount_off' => $promotion->percent_off === null ? $promotion->amount_off : null,
+            'currency' => $promotion->percent_off === null ? strtolower((string) $promotion->currency) : null,
+            'duration' => $promotion->duration,
+            'duration_in_months' => $promotion->duration === 'repeating' ? $promotion->duration_in_months : null,
+            'applies_to' => $products ? ['products' => $products] : null,
+        ], fn ($value) => $value !== null)));
+
+        return $this->call('create a promotion code', fn () => $this->stripe->promotionCodes->create(array_filter([
+            'code' => $promotion->code,
+            'promotion' => ['type' => 'coupon', 'coupon' => $coupon->id],
+            'max_redemptions' => $promotion->max_redemptions,
+            'expires_at' => $promotion->expires_at?->timestamp,
+        ], fn ($value) => $value !== null))->id);
+    }
+
+    public function retrievePromotion(string $providerPromotionCodeId): PromotionData
+    {
+        return StripeEventMapper::promotionCode($this->call(
+            'read a promotion code',
+            fn () => $this->stripe->promotionCodes->retrieve($providerPromotionCodeId, ['expand' => ['promotion.coupon']])->toArray(),
+            $providerPromotionCodeId,
+        ));
     }
 
     public function cancelSubscription(Subscription $subscription): ?\DateTimeInterface
