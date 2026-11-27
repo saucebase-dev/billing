@@ -189,6 +189,31 @@ class StripePromotionRequestTest extends TestCase
         $this->assertStringContainsString('LAUNCH', $sent['custom_text']['submit']['message']);
     }
 
+    /**
+     * Stripe refuses the whole session when a pre-applied code's restrictions rule the buyer
+     * out (first-time customers, a minimum amount, one customer). Such a code is never
+     * pre-applied: the buyer types it on Stripe's page, which checks whether it applies.
+     */
+    public function test_a_restricted_code_is_left_for_the_buyer_to_type_on_stripes_page(): void
+    {
+        foreach ([
+            ['first_time_transaction' => true, 'minimum_amount' => null, 'minimum_amount_currency' => null],
+            ['first_time_transaction' => false, 'minimum_amount' => 5000, 'minimum_amount_currency' => 'usd'],
+        ] as $restrictions) {
+            $this->requests = [];
+            $sent = $this->checkout([$this->code(['restrictions' => $restrictions])]);
+
+            $this->assertArrayNotHasKey('discounts', $sent);
+            $this->assertSame('true', $sent['allow_promotion_codes']);
+            $this->assertStringContainsString('LAUNCH', $sent['custom_text']['submit']['message']);
+            $this->assertStringNotContainsString('no longer available', $sent['custom_text']['submit']['message']);
+        }
+
+        $this->requests = [];
+        $sent = $this->checkout([$this->code(['customer' => 'cus_someone_else'])]);
+        $this->assertArrayNotHasKey('discounts', $sent);
+    }
+
     public function test_a_code_stripe_no_longer_has_says_so_too(): void
     {
         $sent = $this->checkout([]);
